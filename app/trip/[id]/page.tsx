@@ -26,17 +26,21 @@ export default function TripDetail() {
 
   const settlements = trip ? calculateSettlements(trip) : [];
 
-  // 1. transparent ledger logic
   type MemberDetail = {
     totalPaid: number;
     totalOwed: number;
     paidItems: { title: string; amount: number; isNegative?: boolean }[];
-    owedItems: { title: string; amount: number; detail?: string; extra?: number; isSettled?: boolean }[];
+    owedItems: { 
+      title: string; 
+      amount: number; 
+      subItems?: string[]; 
+      extra?: number; 
+      isSettled?: boolean;
+      originalAmount?: number;
+    }[];
   };
 
   const memberDetails: Record<string, MemberDetail> = {};
-  
-  // 2. unoptimized direct debts logic
   const directDebtsGraph: Record<string, Record<string, number>> = {};
 
   if (trip) {
@@ -47,48 +51,62 @@ export default function TripDetail() {
     });
 
     trip.expenses.forEach(exp => {
-      const payerId = Object.keys(exp.paidBy || {})[0];
       const expBalances: Record<string, number> = {};
       trip.members.forEach(m => expBalances[m.id] = 0);
 
-      // --- ledger processing ---
-      if (payerId && memberDetails[payerId]) {
-        memberDetails[payerId].totalPaid += exp.paidBy[payerId];
-        memberDetails[payerId].paidItems.push({ title: exp.title, amount: exp.paidBy[payerId] });
-      }
+      Object.entries(exp.paidBy || {}).forEach(([pId, pAmt]) => {
+        if (memberDetails[pId]) {
+          memberDetails[pId].totalPaid += pAmt;
+          memberDetails[pId].paidItems.push({ title: exp.title, amount: pAmt });
+        }
+      });
+
+      const primaryPayerId = Object.keys(exp.paidBy || {})[0];
 
       Object.entries(exp.owedBy || {}).forEach(([id, amt]) => {
         if (memberDetails[id] && amt > 0) {
           memberDetails[id].totalOwed += amt;
           const isSettled = exp.settledShares?.[id] || false;
           
+          let subItems: string[] = [];
+          let originalSum = 0;
+
+          if (exp.splitType === 'exact' && exp.items) {
+            const myItems = exp.items.filter(i => i.assignedTo.includes(id));
+            myItems.forEach(i => {
+              const share = i.assignedTo.length > 1 ? `(1/${i.assignedTo.length})` : '';
+              originalSum += (i.price / i.assignedTo.length);
+              subItems.push(`${i.name} ${share}`.trim());
+            });
+          }
+
           memberDetails[id].owedItems.push({
             title: exp.title,
             amount: amt,
-            detail: exp.descriptions?.[id],
+            subItems: subItems.length > 0 ? subItems : undefined,
             extra: exp.adjustments?.[id],
-            isSettled
+            isSettled,
+            originalAmount: originalSum > 0 ? originalSum : undefined
           });
 
-          if (isSettled && payerId) {
+          if (isSettled && primaryPayerId) {
             memberDetails[id].totalPaid += amt;
             memberDetails[id].paidItems.push({ title: `✓ settled ${exp.title} directly`, amount: amt });
-            if (memberDetails[payerId]) {
-              memberDetails[payerId].totalPaid -= amt;
-              memberDetails[payerId].paidItems.push({ title: `↓ received cash from ${getMemberName(id)} for ${exp.title}`, amount: -amt, isNegative: true });
+            if (memberDetails[primaryPayerId]) {
+              memberDetails[primaryPayerId].totalPaid -= amt;
+              memberDetails[primaryPayerId].paidItems.push({ title: `↓ received cash from ${getMemberName(id)} for ${exp.title}`, amount: -amt, isNegative: true });
             }
           }
         }
       });
 
-      // --- direct unoptimized debts processing ---
       Object.entries(exp.paidBy || {}).forEach(([id, amt]) => { expBalances[id] += amt; });
       Object.entries(exp.owedBy || {}).forEach(([id, amt]) => { expBalances[id] -= amt; });
 
       Object.entries(exp.settledShares || {}).forEach(([id, isSettled]) => {
-        if (isSettled && exp.owedBy[id] && payerId) {
+        if (isSettled && exp.owedBy[id] && primaryPayerId) {
           expBalances[id] += exp.owedBy[id];
-          expBalances[payerId] -= exp.owedBy[id];
+          expBalances[primaryPayerId] -= exp.owedBy[id];
         }
       });
 
@@ -100,9 +118,7 @@ export default function TripDetail() {
         const debtor = dAmts[d];
         const creditor = cAmts[c];
         const transfer = Math.min(debtor.amt, creditor.amt);
-        
         directDebtsGraph[debtor.id][creditor.id] += transfer;
-        
         debtor.amt -= transfer;
         creditor.amt -= transfer;
         if (debtor.amt < 0.01) d++;
@@ -180,7 +196,6 @@ export default function TripDetail() {
     <main className="flex min-h-screen flex-col items-center p-6 bg-gray-50">
       <div className="w-full max-w-md bg-white p-6 rounded-2xl shadow-sm border border-gray-100">
         
-        {/* header */}
         <div className="flex justify-between items-center mb-8">
           <button onClick={() => router.push('/')} className="text-sm text-gray-500 hover:text-black">← back</button>
           <div className="flex items-center gap-2">
@@ -190,7 +205,6 @@ export default function TripDetail() {
           <button onClick={handleShare} className="text-sm text-blue-500 font-medium hover:text-blue-700">share</button>
         </div>
 
-        {/* members section */}
         <section className="mb-8">
           <h2 className="text-sm font-medium text-gray-400 mb-3">members</h2>
           <div className="flex flex-wrap gap-2 mb-3">
@@ -212,7 +226,6 @@ export default function TripDetail() {
           )}
         </section>
 
-        {/* expenses section */}
         <section>
           <div className="flex justify-between items-center mb-4">
             <h2 className="text-sm font-medium text-gray-400">expenses</h2>
@@ -234,18 +247,24 @@ export default function TripDetail() {
               </div>
             ) : (
               trip.expenses.map(exp => {
-                const payerId = Object.keys(exp.paidBy)[0];
+                const payersEntries = Object.entries(exp.paidBy);
+                const isMultiPayer = payersEntries.length > 1;
+                
+                const payerDisplay = isMultiPayer
+                  ? payersEntries.map(([id, amt]) => `${getMemberName(id)} ${amt.toLocaleString()}`).join(', ')
+                  : getMemberName(payersEntries[0][0]);
+                
                 const isExpanded = expandedExpenseId === exp.id;
                 const involvedCount = Object.keys(exp.owedBy).length;
 
                 return (
                   <div key={exp.id} className="border border-gray-100 rounded-xl bg-gray-50 overflow-hidden transition-all">
                     <button onClick={() => setExpandedExpenseId(isExpanded ? null : exp.id)} className="w-full flex justify-between items-center p-3 text-left">
-                      <div>
-                        <p className="text-sm font-medium">{exp.title}</p>
-                        <p className="text-xs text-gray-500">paid by {getMemberName(payerId)}</p>
+                      <div className="flex-1 min-w-0 pr-4">
+                        <p className="text-sm font-medium truncate">{exp.title}</p>
+                        <p className="text-xs text-gray-500 truncate">paid by {payerDisplay}</p>
                       </div>
-                      <div className="text-right">
+                      <div className="text-right shrink-0">
                         <p className="text-sm font-medium">{exp.totalAmount.toLocaleString()}</p>
                         <p className="text-xs text-gray-400">
                           {exp.splitType === 'exact' ? 'itemized' : exp.splitType === 'adjustment' ? 'adjusted' : `split by ${involvedCount}`} • {isExpanded ? '↑' : '↓'}
@@ -256,25 +275,50 @@ export default function TripDetail() {
                     {isExpanded && (
                       <div className="p-3 border-t border-gray-100 bg-white">
                         <p className="text-xs text-gray-400 mb-3 font-medium">split details:</p>
-                        <div className="space-y-3 mb-4">
+                        <div className="space-y-4 mb-4">
                           {Object.entries(exp.owedBy).map(([memberId, amount]) => {
-                            const originalAmount = exp.exactAmounts?.[memberId];
-                            const description = exp.descriptions?.[memberId];
-                            const extra = exp.adjustments?.[memberId];
-                            const hasAdjustment = originalAmount !== undefined && Math.round(originalAmount) !== Math.round(amount);
-                            const isPayer = memberId === payerId;
+                            const isPayer = payersEntries.some(([id]) => id === memberId);
+                            const canMarkPaid = !isPayer && !trip.isReadOnly && !isMultiPayer;
+                            
                             const isSettled = exp.settledShares?.[memberId] || false;
+                            const extra = exp.adjustments?.[memberId];
+
+                            let consumedItems: string[] = [];
+                            let originalAmount: number | undefined = undefined;
+                            
+                            if (exp.splitType === 'exact' && exp.items) {
+                              originalAmount = 0;
+                              exp.items.forEach(item => {
+                                if (item.assignedTo.includes(memberId)) {
+                                  originalAmount! += item.price / item.assignedTo.length;
+                                  const shareBadge = item.assignedTo.length > 1 ? `(1/${item.assignedTo.length})` : '';
+                                  consumedItems.push(`${item.name} ${shareBadge}`.trim());
+                                }
+                              });
+                            }
+
+                            const hasAdjustment = originalAmount !== undefined && Math.round(originalAmount) !== Math.round(amount);
 
                             return (
                               <div key={memberId} className="flex justify-between text-xs items-start">
                                 <div className="flex flex-col">
                                   <span className={`font-medium ${isSettled ? 'text-gray-400' : 'text-gray-800'}`}>{getMemberName(memberId)}</span>
-                                  {description && <span className="text-gray-500 mt-0.5">{description}</span>}
+                                  
+                                  {consumedItems.length > 0 && (
+                                    <div className="flex flex-col mt-1 space-y-0.5">
+                                      {consumedItems.map((cItem, idx) => (
+                                        <span key={idx} className="text-[10px] text-gray-500 flex items-center gap-1.5">
+                                          <span className="w-1 h-1 bg-gray-300 rounded-full"></span> {cItem}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+
                                   {extra ? <span className="text-gray-400 mt-0.5">+ {extra.toLocaleString()} extra</span> : null}
                                 </div>
                                 <div className="flex flex-col items-end">
                                   <div className="flex items-center gap-2">
-                                    {(!isPayer && !trip.isReadOnly) ? (
+                                    {canMarkPaid ? (
                                       <button 
                                         onClick={(e) => {
                                           e.stopPropagation();
@@ -289,7 +333,7 @@ export default function TripDetail() {
                                     )}
                                     <span className={`font-medium ${isSettled ? 'text-gray-400 line-through' : ''}`}>{Math.round(amount).toLocaleString()}</span>
                                   </div>
-                                  {hasAdjustment && <span className="text-[10px] text-gray-400 line-through mt-0.5">{originalAmount.toLocaleString()}</span>}
+                                  {hasAdjustment && <span className="text-[10px] text-gray-400 line-through mt-0.5">{originalAmount!.toLocaleString()}</span>}
                                 </div>
                               </div>
                             );
@@ -311,7 +355,6 @@ export default function TripDetail() {
           </div>
         </section>
 
-        {/* transparent ledger */}
         {trip.expenses.length > 0 && (
           <section className="mt-8 pt-6 border-t border-gray-100">
             <h2 className="text-sm font-medium text-gray-400 mb-4">transparent ledger</h2>
@@ -348,11 +391,26 @@ export default function TripDetail() {
                       <span className="text-gray-400 mb-1">their consumption:</span>
                       {details.owedItems.length === 0 ? <span className="text-gray-300 italic">-</span> : details.owedItems.map((item, i) => (
                         <div key={i} className={`flex justify-between items-start ${item.isSettled ? 'text-gray-400 line-through' : 'text-gray-600'}`}>
-                          <div className="flex flex-col">
+                          <div className="flex flex-col flex-1 pr-2">
                             <span>{item.title} {item.isSettled ? '(paid)' : ''}</span>
-                            {(item.detail || item.extra) && <span className="text-[10px] mt-0.5">{item.detail} {item.extra ? `(+${item.extra.toLocaleString()})` : ''}</span>}
+                            
+                            {item.subItems && item.subItems.length > 0 && (
+                              <div className="mt-1 flex flex-col gap-0.5">
+                                {item.subItems.map((sub, idx) => (
+                                  <span key={idx} className="text-[10px] text-gray-400 leading-tight">↳ {sub}</span>
+                                ))}
+                              </div>
+                            )}
+
+                            {item.extra ? <span className="text-[10px] text-gray-400 mt-0.5">+ {item.extra.toLocaleString()} extra</span> : null}
                           </div>
-                          <span>{Math.round(item.amount).toLocaleString()}</span>
+                          
+                          <div className="flex flex-col items-end">
+                            <span>{Math.round(item.amount).toLocaleString()}</span>
+                            {item.originalAmount !== undefined && Math.round(item.originalAmount) !== Math.round(item.amount) && (
+                              <span className="text-[10px] text-gray-400 line-through mt-0.5">{Math.round(item.originalAmount).toLocaleString()}</span>
+                            )}
+                          </div>
                         </div>
                       ))}
                       <div className="flex justify-between font-medium pt-1 mt-1 border-t border-gray-50">
@@ -367,7 +425,6 @@ export default function TripDetail() {
           </section>
         )}
 
-        {/* unoptimized direct debts */}
         {unoptimizedDebts.length > 0 && settlements.length !== unoptimizedDebts.length && (
           <section className="mt-8 pt-6 border-t border-gray-100">
             <h2 className="text-sm font-medium text-gray-400 mb-1">direct debts (unoptimized)</h2>
@@ -389,7 +446,6 @@ export default function TripDetail() {
           </section>
         )}
 
-        {/* final optimized settlement section */}
         {settlements.length > 0 && (
           <section className="mt-8 pt-6 border-t border-gray-100">
             <h2 className="text-sm font-medium text-gray-400 mb-1">how to settle up</h2>

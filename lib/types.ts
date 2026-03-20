@@ -3,17 +3,24 @@ export interface Member {
   name: string;
 }
 
+export interface ExpenseItem {
+  id: string;
+  name: string;
+  price: number;
+  assignedTo: string[];
+}
+
 export interface Expense {
   id: string;
   title: string;
   totalAmount: number;
-  paidBy: Record<string, number>;
-  owedBy: Record<string, number>;
-  splitType: 'equal' | 'exact' | 'adjustment';
-  exactAmounts?: Record<string, number>;
-  descriptions?: Record<string, string>;
+  paidBy: Record<string, number>; 
+  owedBy: Record<string, number>; 
+  splitType: 'equal' | 'exact' | 'adjustment'; 
+  
+  items?: ExpenseItem[];
   adjustments?: Record<string, number>;
-  settledShares?: Record<string, boolean>;
+  settledShares?: Record<string, boolean>; 
 }
 
 export interface Trip {
