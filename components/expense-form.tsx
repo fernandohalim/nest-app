@@ -23,10 +23,22 @@ export default function ExpenseForm({ members, initialExpense, onSave, onCancel 
     return parseInt(formattedValue.replace(/,/g, ""), 10) || 0;
   };
 
+  // beautiful pastel colors for member assignment bubbles
+  const getMemberColor = (index: number) => {
+    const colors = [
+      'bg-blue-50 text-blue-700 border-blue-200 hover:border-blue-300',
+      'bg-emerald-50 text-emerald-700 border-emerald-200 hover:border-emerald-300',
+      'bg-purple-50 text-purple-700 border-purple-200 hover:border-purple-300',
+      'bg-amber-50 text-amber-700 border-amber-200 hover:border-amber-300',
+      'bg-rose-50 text-rose-700 border-rose-200 hover:border-rose-300',
+      'bg-cyan-50 text-cyan-700 border-cyan-200 hover:border-cyan-300',
+    ];
+    return colors[index % colors.length];
+  };
+
   const [title, setTitle] = useState(initialExpense?.title || "");
   const [amount, setAmount] = useState(initialExpense ? formatNumber(initialExpense.totalAmount) : ""); 
   
-  // --- NEW MULTI-PAYER STATE ---
   const [isMultiplePayers, setIsMultiplePayers] = useState(
     initialExpense ? Object.keys(initialExpense.paidBy).length > 1 : false
   );
@@ -96,7 +108,6 @@ export default function ExpenseForm({ members, initialExpense, onSave, onCancel 
     if (!title.trim()) return alert("please enter a title for the expense.");
     if (totalAmountNum <= 0) return alert("please enter a valid total amount.");
 
-    // --- process multiple payers ---
     let finalPaidBy: Record<string, number> = {};
     if (isMultiplePayers) {
       let sumPaid = 0;
@@ -249,9 +260,9 @@ export default function ExpenseForm({ members, initialExpense, onSave, onCancel 
       </div>
 
       <div className="bg-gray-100 p-1 rounded-lg flex gap-1">
-        <button type="button" onClick={() => setSplitType('equal')} className={`flex-1 py-1.5 text-[11px] rounded-md transition-colors ${splitType === 'equal' ? 'bg-white shadow-sm font-medium' : 'text-gray-500'}`}>equal</button>
-        <button type="button" onClick={() => setSplitType('exact')} className={`flex-1 py-1.5 text-[11px] rounded-md transition-colors ${splitType === 'exact' ? 'bg-white shadow-sm font-medium' : 'text-gray-500'}`}>itemized</button>
-        <button type="button" onClick={() => setSplitType('adjustment')} className={`flex-1 py-1.5 text-[11px] rounded-md transition-colors ${splitType === 'adjustment' ? 'bg-white shadow-sm font-medium' : 'text-gray-500'}`}>adjustments</button>
+        <button type="button" onClick={() => setSplitType('equal')} className={`flex-1 py-1.5 text-[11px] rounded-md transition-colors ${splitType === 'equal' ? 'bg-white shadow-sm font-medium' : 'text-gray-500'}`}>split equally</button>
+        <button type="button" onClick={() => setSplitType('exact')} className={`flex-1 py-1.5 text-[11px] rounded-md transition-colors ${splitType === 'exact' ? 'bg-white shadow-sm font-medium' : 'text-gray-500'}`}>by item</button>
+        <button type="button" onClick={() => setSplitType('adjustment')} className={`flex-1 py-1.5 text-[11px] rounded-md transition-colors ${splitType === 'adjustment' ? 'bg-white shadow-sm font-medium' : 'text-gray-500'}`}>custom amounts</button>
       </div>
 
       {(splitType === 'equal' || splitType === 'adjustment') && (
@@ -280,9 +291,22 @@ export default function ExpenseForm({ members, initialExpense, onSave, onCancel 
                 <button type="button" onClick={() => handleRemoveItem(item.id)} className="text-gray-400 hover:text-red-500 px-1 py-1">×</button>
               </div>
               <div className="flex flex-wrap gap-1.5">
-                {members.map(m => {
+                {members.map((m, mIdx) => {
                   const isAssigned = item.assignedTo.includes(m.id);
-                  return <button key={m.id} type="button" onClick={() => toggleItemMember(item.id, m.id)} className={`text-[10px] px-2.5 py-1.5 rounded-full border transition-colors ${isAssigned ? 'bg-black text-white border-black' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300'}`}>{m.name}</button>;
+                  const colorClass = isAssigned 
+                    ? getMemberColor(mIdx) 
+                    : 'bg-white text-gray-500 border-gray-200 hover:border-gray-300 hover:bg-gray-50';
+                  
+                  return (
+                    <button 
+                      key={m.id} 
+                      type="button" 
+                      onClick={() => toggleItemMember(item.id, m.id)} 
+                      className={`text-[10px] px-2.5 py-1.5 rounded-full border transition-colors font-medium ${colorClass}`}
+                    >
+                      {m.name}
+                    </button>
+                  );
                 })}
               </div>
             </div>

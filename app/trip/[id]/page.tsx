@@ -23,6 +23,9 @@ export default function TripDetail() {
   const [isAddingExpense, setIsAddingExpense] = useState(false);
   const [editingExpense, setEditingExpense] = useState<Expense | undefined>(undefined);
   const [expandedExpenseId, setExpandedExpenseId] = useState<string | null>(null);
+  
+  // hide the complex math by default
+  const [showLedger, setShowLedger] = useState(false);
 
   const settlements = trip ? calculateSettlements(trip) : [];
 
@@ -160,32 +163,28 @@ export default function TripDetail() {
   const handleShare = async () => {
     if (!trip) return;
     
-    // 1. compress the data into the long url
     const compressedData = LZString.compressToEncodedURIComponent(JSON.stringify(trip));
     const longUrl = `${window.location.origin}/share?d=${compressedData}`;
     
     try {
-      // 2. visually tell the user we are working on it (since the API takes a second)
       const btn = document.activeElement as HTMLButtonElement;
-      const originalText = btn.innerText;
-      if (btn) btn.innerText = "generating...";
+      const originalText = btn?.innerText;
+      if (btn && originalText) btn.innerText = "generating...";
 
-      // 3. silently ping tinyurl's free api
       const response = await fetch(`https://tinyurl.com/api-create.php?url=${encodeURIComponent(longUrl)}`);
       
       if (response.ok) {
         const shortUrl = await response.text();
         navigator.clipboard.writeText(shortUrl);
-        alert(`magic link copied! (${shortUrl})`);
+        alert(`magic link copied! paste it in whatsapp/line to share.`);
       } else {
         throw new Error("shortener failed");
       }
 
-      if (btn) btn.innerText = originalText;
+      if (btn && originalText) btn.innerText = originalText;
 
     } catch (err) {
       console.error(err);
-      // fallback: if you have no wifi or the api fails, copy the long one anyway
       navigator.clipboard.writeText(longUrl);
       alert("magic link copied! (fallback to long link)");
     }
@@ -381,78 +380,90 @@ export default function TripDetail() {
           </div>
         </section>
 
+        {/* hidden by default ledger and direct debts */}
         {trip.expenses.length > 0 && (
           <section className="mt-8 pt-6 border-t border-gray-100">
-            <h2 className="text-sm font-medium text-gray-400 mb-4">transparent ledger</h2>
-            <div className="space-y-4">
-              {trip.members.map(member => {
-                const details = memberDetails[member.id];
-                if (!details || (details.totalPaid === 0 && details.totalOwed === 0)) return null;
-                const net = Math.round(details.totalPaid - details.totalOwed);
-
-                return (
-                  <div key={member.id} className="p-4 border border-gray-200 rounded-xl bg-white flex flex-col gap-3 shadow-sm">
-                    <div className="flex justify-between items-center border-b border-gray-50 pb-3">
-                      <span className="font-medium text-sm">{member.name}</span>
-                      <span className={`text-xs font-medium px-2 py-1 rounded-md ${net > 0 ? 'bg-green-50 text-green-700' : net < 0 ? 'bg-red-50 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
-                        {net > 0 ? 'gets back ' : net < 0 ? 'owes ' : 'settled '}{Math.abs(net).toLocaleString()}
-                      </span>
-                    </div>
-
-                    <div className="flex flex-col gap-1 text-xs">
-                      <span className="text-gray-400 mb-1">payments made:</span>
-                      {details.paidItems.length === 0 ? <span className="text-gray-300 italic">-</span> : details.paidItems.map((item, i) => (
-                        <div key={i} className={`flex justify-between ${item.isNegative ? 'text-red-500' : 'text-gray-600'}`}>
-                          <span>{item.title}</span>
-                          <span>{Math.round(item.amount).toLocaleString()}</span>
-                        </div>
-                      ))}
-                      <div className="flex justify-between font-medium pt-1 mt-1 border-t border-gray-50">
-                        <span>total payments</span>
-                        <span>{Math.round(details.totalPaid).toLocaleString()}</span>
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col gap-1 text-xs mt-2 pt-3 border-t border-gray-50">
-                      <span className="text-gray-400 mb-1">their consumption:</span>
-                      {details.owedItems.length === 0 ? <span className="text-gray-300 italic">-</span> : details.owedItems.map((item, i) => (
-                        <div key={i} className={`flex justify-between items-start ${item.isSettled ? 'text-gray-400 line-through' : 'text-gray-600'}`}>
-                          <div className="flex flex-col flex-1 pr-2">
-                            <span>{item.title} {item.isSettled ? '(paid)' : ''}</span>
-                            
-                            {item.subItems && item.subItems.length > 0 && (
-                              <div className="mt-1 flex flex-col gap-0.5">
-                                {item.subItems.map((sub, idx) => (
-                                  <span key={idx} className="text-[10px] text-gray-400 leading-tight">↳ {sub}</span>
-                                ))}
-                              </div>
-                            )}
-
-                            {item.extra ? <span className="text-[10px] text-gray-400 mt-0.5">+ {item.extra.toLocaleString()} extra</span> : null}
-                          </div>
-                          
-                          <div className="flex flex-col items-end">
-                            <span>{Math.round(item.amount).toLocaleString()}</span>
-                            {item.originalAmount !== undefined && Math.round(item.originalAmount) !== Math.round(item.amount) && (
-                              <span className="text-[10px] text-gray-400 line-through mt-0.5">{Math.round(item.originalAmount).toLocaleString()}</span>
-                            )}
-                          </div>
-                        </div>
-                      ))}
-                      <div className="flex justify-between font-medium pt-1 mt-1 border-t border-gray-50">
-                        <span>total consumed</span>
-                        <span>{Math.round(details.totalOwed).toLocaleString()}</span>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-sm font-medium text-gray-400">transparent ledger</h2>
+              <button 
+                onClick={() => setShowLedger(!showLedger)}
+                className="text-[10px] px-3 py-1.5 rounded-md bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors font-medium"
+              >
+                {showLedger ? 'hide details' : 'show details'}
+              </button>
             </div>
+
+            {showLedger && (
+              <div className="space-y-4">
+                {trip.members.map(member => {
+                  const details = memberDetails[member.id];
+                  if (!details || (details.totalPaid === 0 && details.totalOwed === 0)) return null;
+                  const net = Math.round(details.totalPaid - details.totalOwed);
+
+                  return (
+                    <div key={member.id} className="p-4 border border-gray-200 rounded-xl bg-white flex flex-col gap-3 shadow-sm">
+                      <div className="flex justify-between items-center border-b border-gray-50 pb-3">
+                        <span className="font-medium text-sm">{member.name}</span>
+                        <span className={`text-xs font-medium px-2 py-1 rounded-md ${net > 0 ? 'bg-green-50 text-green-700' : net < 0 ? 'bg-red-50 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
+                          {net > 0 ? 'gets back ' : net < 0 ? 'owes ' : 'settled '}{Math.abs(net).toLocaleString()}
+                        </span>
+                      </div>
+
+                      <div className="flex flex-col gap-1 text-xs">
+                        <span className="text-gray-400 mb-1">payments made:</span>
+                        {details.paidItems.length === 0 ? <span className="text-gray-300 italic">-</span> : details.paidItems.map((item, i) => (
+                          <div key={i} className={`flex justify-between ${item.isNegative ? 'text-red-500' : 'text-gray-600'}`}>
+                            <span>{item.title}</span>
+                            <span>{Math.round(item.amount).toLocaleString()}</span>
+                          </div>
+                        ))}
+                        <div className="flex justify-between font-medium pt-1 mt-1 border-t border-gray-50">
+                          <span>total payments</span>
+                          <span>{Math.round(details.totalPaid).toLocaleString()}</span>
+                        </div>
+                      </div>
+
+                      <div className="flex flex-col gap-1 text-xs mt-2 pt-3 border-t border-gray-50">
+                        <span className="text-gray-400 mb-1">their consumption:</span>
+                        {details.owedItems.length === 0 ? <span className="text-gray-300 italic">-</span> : details.owedItems.map((item, i) => (
+                          <div key={i} className={`flex justify-between items-start ${item.isSettled ? 'text-gray-400 line-through' : 'text-gray-600'}`}>
+                            <div className="flex flex-col flex-1 pr-2">
+                              <span>{item.title} {item.isSettled ? '(paid)' : ''}</span>
+                              
+                              {item.subItems && item.subItems.length > 0 && (
+                                <div className="mt-1 flex flex-col gap-0.5">
+                                  {item.subItems.map((sub, idx) => (
+                                    <span key={idx} className="text-[10px] text-gray-400 leading-tight">↳ {sub}</span>
+                                  ))}
+                                </div>
+                              )}
+
+                              {item.extra ? <span className="text-[10px] text-gray-400 mt-0.5">+ {item.extra.toLocaleString()} extra</span> : null}
+                            </div>
+                            
+                            <div className="flex flex-col items-end">
+                              <span>{Math.round(item.amount).toLocaleString()}</span>
+                              {item.originalAmount !== undefined && Math.round(item.originalAmount) !== Math.round(item.amount) && (
+                                <span className="text-[10px] text-gray-400 line-through mt-0.5">{Math.round(item.originalAmount).toLocaleString()}</span>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                        <div className="flex justify-between font-medium pt-1 mt-1 border-t border-gray-50">
+                          <span>total consumed</span>
+                          <span>{Math.round(details.totalOwed).toLocaleString()}</span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
           </section>
         )}
 
-        {unoptimizedDebts.length > 0 && settlements.length !== unoptimizedDebts.length && (
-          <section className="mt-8 pt-6 border-t border-gray-100">
+        {unoptimizedDebts.length > 0 && settlements.length !== unoptimizedDebts.length && showLedger && (
+          <section className="mt-4 pt-6 border-t border-gray-100">
             <h2 className="text-sm font-medium text-gray-400 mb-1">direct debts (unoptimized)</h2>
             <p className="text-xs text-gray-500 mb-4">raw history of who owes who before the app simplifies the transfers.</p>
             <div className="space-y-2">
