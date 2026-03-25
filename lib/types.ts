@@ -21,6 +21,9 @@ export interface Expense {
   items?: ExpenseItem[];
   adjustments?: Record<string, number>;
   settledShares?: Record<string, boolean>; 
+
+  expenseDate: string;
+  createdAt: string;
 }
 
 export interface Trip {
@@ -31,4 +34,7 @@ export interface Trip {
   members: Member[];
   expenses: Expense[];
   isReadOnly?: boolean; 
+  createdAt: string;
+  owner_id?: string;
+  owner_name?: string;
 }

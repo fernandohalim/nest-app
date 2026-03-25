@@ -1,144 +1,151 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useTripStore } from "@/store/useTripStore";
 import { v4 as uuidv4 } from "uuid";
+import ProfileMenu from "@/components/profile-menu";
 
 export default function Home() {
-  const { trips, addTrip, deleteTrip, updateTrip } = useTripStore();
+  const router = useRouter();
 
-  // state for creating a new trip
-  const [isAdding, setIsAdding] = useState(false);
+  // grab the fetchTrips function and loading state from our new supabase store
+  const { trips, addTrip, fetchTrips, isLoading } = useTripStore();
+
   const [newTripName, setNewTripName] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
 
-  // state for editing an existing trip
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
+  // fetch all trips from the database when the app loads
+  useEffect(() => {
+    fetchTrips();
+  }, [fetchTrips]);
 
-  const handleCreateTrip = (e: React.FormEvent) => {
+  const handleCreateTrip = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newTripName.trim()) return;
 
-    addTrip({
-      id: uuidv4(),
+    const newTripId = uuidv4();
+    const newTrip = {
+      id: newTripId,
       name: newTripName.trim(),
-      date: new Date().toISOString(),
+      date: new Date().toISOString().split("T")[0], // defaults to today
       currency: "IDR",
       members: [],
       expenses: [],
-    });
+      createdAt: new Date().toISOString(),
+    };
+
+    // save to supabase
+    await addTrip(newTrip);
     setNewTripName("");
-    setIsAdding(false);
-  };
+    setIsCreating(false);
 
-  const handleDelete = (id: string, name: string) => {
-    if (confirm(`delete the trip "${name}"? this cannot be undone.`)) {
-      deleteTrip(id);
-    }
-  };
-
-  const handleStartEdit = (id: string, currentName: string) => {
-    setEditingId(id);
-    setEditName(currentName);
-  };
-
-  const handleSaveEdit = (id: string) => {
-    if (editName.trim()) {
-      updateTrip(id, { name: editName.trim() });
-    }
-    setEditingId(null);
+    // instantly navigate to the new trip room
+    router.push(`/trip/${newTripId}`);
   };
 
   return (
-    <main className="flex min-h-screen flex-col items-center p-6 gap-8 bg-gray-50">
-      
-      {/* header */}
-      <div className="text-center mt-12">
-        <h1 className="text-2xl font-medium tracking-tight">bills app</h1>
-        <p className="mt-2 text-sm text-gray-500">manage your shared expenses offline.</p>
-      </div>
+    <main className="flex min-h-screen flex-col items-center p-6 bg-gray-50">
+      <div className="w-full max-w-md">
+        {/* header */}
+        <div className="flex justify-between items-start mb-8 pt-4">
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight text-gray-900 mb-1">
+              bills app
+            </h1>
+            <p className="text-sm text-gray-500">
+              split expenses with friends, instantly.
+            </p>
+          </div>
+          <ProfileMenu />
+        </div>
 
-      <div className="w-full max-w-md flex flex-col gap-4">
-        
-        {/* add trip button / form */}
-        {!isAdding ? (
-          <button 
-            onClick={() => setIsAdding(true)}
-            className="w-full py-4 border border-dashed border-gray-300 rounded-xl text-gray-500 text-sm hover:border-black hover:text-black transition-colors"
+        {/* create new trip button/form */}
+        {!isCreating ? (
+          <button
+            onClick={() => setIsCreating(true)}
+            className="w-full bg-black text-white rounded-2xl p-4 flex items-center justify-center gap-2 font-medium shadow-sm hover:bg-gray-800 transition-colors mb-8"
           >
-            + create new trip
+            <span className="text-lg">+</span> start a new trip
           </button>
         ) : (
-          <form onSubmit={handleCreateTrip} className="flex gap-2 p-4 bg-white border border-gray-200 rounded-xl shadow-sm">
-            <input 
-              type="text" 
+          <form
+            onSubmit={handleCreateTrip}
+            className="bg-white p-5 rounded-2xl shadow-sm border border-gray-100 mb-8 flex flex-col gap-4"
+          >
+            <div className="flex justify-between items-center">
+              <h2 className="text-sm font-medium">name your trip</h2>
+              <button
+                type="button"
+                onClick={() => setIsCreating(false)}
+                className="text-gray-400 hover:text-black text-xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <input
+              type="text"
               autoFocus
-              value={newTripName} 
+              placeholder="e.g. bali 2026, friday dinner..."
+              value={newTripName}
               onChange={(e) => setNewTripName(e.target.value)}
-              placeholder="e.g. bali weekend..." 
-              className="flex-1 border-b border-gray-200 py-1 text-sm focus:outline-none focus:border-black bg-transparent"
+              className="w-full border-b border-gray-200 py-2 text-sm focus:outline-none focus:border-black bg-transparent"
             />
-            <button type="button" onClick={() => setIsAdding(false)} className="px-3 text-xs text-gray-500 hover:text-black">
-              cancel
-            </button>
-            <button type="submit" className="px-4 py-2 bg-black text-white rounded-lg text-xs font-medium">
-              save
+            <button
+              type="submit"
+              className="w-full bg-black text-white rounded-xl py-3 text-sm font-medium hover:bg-gray-800 transition-colors mt-2"
+            >
+              create & invite friends
             </button>
           </form>
         )}
 
-        {/* trip list */}
-        {trips.length === 0 && !isAdding ? (
-          <p className="text-center text-sm text-gray-400 mt-8">no trips yet. create one to begin.</p>
-        ) : (
-          <div className="flex flex-col gap-3 mt-4">
-            {trips.map((trip) => (
-              <div key={trip.id} className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm transition-all hover:shadow-md">
-                
-                {editingId === trip.id ? (
-                  // edit mode
-                  <div className="flex gap-2 items-center mb-3">
-                    <input 
-                      type="text" 
-                      autoFocus
-                      value={editName} 
-                      onChange={(e) => setEditName(e.target.value)}
-                      className="flex-1 border-b border-gray-200 py-1 text-sm font-medium focus:outline-none focus:border-black bg-transparent"
-                    />
-                    <button onClick={() => handleSaveEdit(trip.id)} className="text-xs px-3 py-1.5 bg-black text-white rounded-md">save</button>
-                    <button onClick={() => setEditingId(null)} className="text-xs px-2 text-gray-500">cancel</button>
-                  </div>
-                ) : (
-                  // view mode
-                  <div className="flex justify-between items-start mb-3">
-                    <div>
-                      <h3 className="font-medium">{trip.name}</h3>
-                      <p className="text-xs text-gray-500 mt-0.5">{trip.members.length} members • {trip.expenses.length} expenses</p>
-                    </div>
-                    <Link href={`/trip/${trip.id}`} className="text-xs bg-black text-white px-4 py-2 rounded-lg font-medium hover:bg-gray-800 transition-colors">
-                      open →
-                    </Link>
-                  </div>
-                )}
+        {/* trips list */}
+        <div>
+          <h2 className="text-xs font-medium text-gray-400 mb-4 uppercase tracking-wider">
+            your recent trips
+          </h2>
 
-                {/* card actions */}
-                {editingId !== trip.id && (
-                  <div className="flex gap-4 border-t border-gray-50 pt-3 mt-1">
-                    {!trip.isReadOnly && (
-                      <button onClick={() => handleStartEdit(trip.id, trip.name)} className="text-xs text-gray-500 hover:text-black transition-colors">
-                        edit name
-                      </button>
-                    )}
-                    <button onClick={() => handleDelete(trip.id, trip.name)} className="text-xs text-red-400 hover:text-red-600 transition-colors">
-                      delete trip
-                    </button>
+          {isLoading && trips.length === 0 ? (
+            <div className="text-center py-10">
+              <div className="w-6 h-6 border-2 border-black border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+              <p className="text-xs text-gray-500">syncing with cloud...</p>
+            </div>
+          ) : trips.length === 0 ? (
+            <div className="text-center py-12 bg-white rounded-2xl border border-dashed border-gray-200">
+              <p className="text-sm text-gray-400">
+                no trips yet. tap above to start!
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {trips.map((trip) => (
+                <button
+                  key={trip.id}
+                  onClick={() => router.push(`/trip/${trip.id}`)}
+                  className="w-full bg-white p-4 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md hover:border-gray-200 transition-all text-left flex justify-between items-center group"
+                >
+                  <div className="flex flex-col gap-1 pr-4 min-w-0">
+                    <h3 className="font-medium text-gray-900 truncate">
+                      {trip.name}
+                    </h3>
+                    <div className="flex items-center gap-2 text-xs text-gray-400">
+                      <span>
+                        {new Date(trip.createdAt).toLocaleDateString("en-US", {
+                          month: "short",
+                          day: "numeric",
+                        })}
+                      </span>
+                    </div>
                   </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+                  <div className="shrink-0 w-8 h-8 rounded-full bg-gray-50 border border-gray-100 flex items-center justify-center text-gray-400 group-hover:bg-black group-hover:text-white group-hover:border-black transition-colors">
+                    →
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </main>
   );

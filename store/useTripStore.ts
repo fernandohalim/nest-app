@@ -1,73 +1,267 @@
-import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
-import { Trip, Member, Expense } from '@/lib/types';
+import { create } from "zustand";
+import { supabase } from "@/lib/supabase";
+import { Trip, Expense, Member, ExpenseItem } from "@/lib/types";
+import { User } from "@supabase/supabase-js";
 
 interface TripStore {
+  user: User | null;
+  setUser: (user: User | null) => void;
   trips: Trip[];
-  addTrip: (trip: Trip) => void;
-  deleteTrip: (tripId: string) => void;
-  updateTrip: (tripId: string, data: Partial<Trip>) => void;
-  addMember: (tripId: string, member: Member) => void;
-  deleteMember: (tripId: string, memberId: string) => void;
-  addExpense: (tripId: string, expense: Expense) => void;
-  updateExpense: (tripId: string, expenseId: string, updatedExpense: Expense) => void;
-  deleteExpense: (tripId: string, expenseId: string) => void;
-  toggleExpenseSettled: (tripId: string, expenseId: string, memberId: string) => void; // added this
+  isLoading: boolean;
+  fetchTrips: () => Promise<void>;
+  fetchTrip: (tripId: string) => Promise<void>;
+  addTrip: (trip: Trip) => Promise<void>;
+  renameTrip: (tripId: string, newName: string) => Promise<void>;
+  deleteTrip: (tripId: string) => Promise<void>;
+  addMember: (tripId: string, member: Member) => Promise<void>;
+  deleteMember: (tripId: string, memberId: string) => Promise<void>;
+  addExpense: (tripId: string, expense: Expense) => Promise<void>;
+  updateExpense: (tripId: string, expenseId: string, expense: Expense) => Promise<void>;
+  deleteExpense: (tripId: string, expenseId: string) => Promise<void>;
+  toggleExpenseSettled: (tripId: string, expenseId: string, memberId: string) => Promise<void>;
+  subscribeToTrip: (tripId: string) => () => void;
 }
 
-export const useTripStore = create<TripStore>()(
-  persist(
-    (set) => ({
-      trips: [],
-      
-      addTrip: (trip) => set((state) => ({ trips: [...state.trips, trip] })),
-      deleteTrip: (tripId) => set((state) => ({ trips: state.trips.filter(t => t.id !== tripId) })),
-      updateTrip: (tripId, data) => set((state) => ({
-        trips: state.trips.map(trip => trip.id === tripId ? { ...trip, ...data } : trip)
-      })),
-      
-      addMember: (tripId, member) => set((state) => ({
-        trips: state.trips.map(trip => trip.id === tripId ? { ...trip, members: [...trip.members, member] } : trip)
-      })),
-      
-      deleteMember: (tripId, memberId) => set((state) => ({
-        trips: state.trips.map(trip => trip.id === tripId ? { ...trip, members: trip.members.filter(m => m.id !== memberId) } : trip)
-      })),
-      
-      addExpense: (tripId, expense) => set((state) => ({
-        trips: state.trips.map(trip => trip.id === tripId ? { ...trip, expenses: [...trip.expenses, expense] } : trip)
-      })),
-      
-      updateExpense: (tripId, expenseId, updatedExpense) => set((state) => ({
-        trips: state.trips.map(trip => trip.id === tripId ? { ...trip, expenses: trip.expenses.map(e => e.id === expenseId ? updatedExpense : e) } : trip)
-      })),
-      
-      deleteExpense: (tripId, expenseId) => set((state) => ({
-        trips: state.trips.map(trip => trip.id === tripId ? { ...trip, expenses: trip.expenses.filter(e => e.id !== expenseId) } : trip)
-      })),
+interface SupabaseExpenseRow {
+  id: string;
+  title: string;
+  total_amount: number;
+  paid_by: Record<string, number>;
+  owed_by: Record<string, number>;
+  split_type: 'equal' | 'exact' | 'adjustment';
+  items?: ExpenseItem[];
+  adjustments?: Record<string, number>;
+  settled_shares?: Record<string, boolean>;
+  expense_date: string;
+  created_at: string;
+}
 
-      // the new function to mark items as paid
-      toggleExpenseSettled: (tripId, expenseId, memberId) => set((state) => ({
-        trips: state.trips.map(trip => 
-          trip.id === tripId ? {
-            ...trip,
-            expenses: trip.expenses.map(exp => {
-              if (exp.id === expenseId) {
-                const currentSettled = exp.settledShares || {};
-                return {
-                  ...exp,
-                  settledShares: { ...currentSettled, [memberId]: !currentSettled[memberId] }
-                };
-              }
-              return exp;
-            })
-          } : trip
-        )
-      })),
-      
-    }),
-    {
-      name: 'bills-app-storage',
+interface SupabaseTripRow {
+  id: string;
+  name: string;
+  date: string;
+  currency: string;
+  created_at: string;
+  owner_id: string;
+  owner_name: string;
+}
+
+// helper to translate database snake_case to our typescript camelCase
+const mapExpense = (exp: SupabaseExpenseRow): Expense => ({
+  id: exp.id,
+  title: exp.title,
+  totalAmount: exp.total_amount,
+  paidBy: exp.paid_by,
+  owedBy: exp.owed_by,
+  splitType: exp.split_type,
+  items: exp.items,
+  adjustments: exp.adjustments,
+  settledShares: exp.settled_shares,
+  expenseDate: exp.expense_date,
+  createdAt: exp.created_at
+});
+
+export const useTripStore = create<TripStore>((set, get) => ({
+  user: null,
+  setUser: (user) => set({ user }),
+
+  trips: [],
+  isLoading: false,
+
+  fetchTrips: async () => {
+    const currentUser = get().user;
+    if (!currentUser) return; // stop if not logged in
+    
+    set({ isLoading: true });
+
+    // 1. fetch trips you created
+    const { data: ownedTrips } = await supabase
+      .from("trips")
+      .select("*")
+      .eq("owner_id", currentUser.id);
+
+    // 2. fetch trips your friends shared that you saved
+    const { data: linkedData } = await supabase
+      .from("user_trips")
+      .select("trips(*)")
+      .eq("user_id", currentUser.id);
+
+    // combine them into a map to remove duplicates
+    const allTripsMap = new Map<string, SupabaseTripRow>();
+
+    if (ownedTrips) {
+      ownedTrips.forEach(t => allTripsMap.set(t.id, t));
     }
-  )
-);
+
+    if (linkedData) {
+      const safeLinkedData = linkedData as unknown as { trips: SupabaseTripRow | SupabaseTripRow[] | null }[];
+      
+      safeLinkedData.forEach((link) => {
+        if (!link.trips) return;
+        
+        if (Array.isArray(link.trips)) {
+          link.trips.forEach(t => allTripsMap.set(t.id, t));
+        } else {
+          allTripsMap.set(link.trips.id, link.trips);
+        }
+      });
+    }
+
+    // sort the combined list by newest first
+    const combinedTrips = Array.from(allTripsMap.values()).sort(
+      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    );
+
+    const mappedTrips = combinedTrips.map(t => ({
+       id: t.id, name: t.name, date: t.date || "", currency: t.currency || "IDR", 
+       createdAt: t.created_at, owner_id: t.owner_id, owner_name: t.owner_name, members: [], expenses: []
+    }));
+
+    set({ trips: mappedTrips, isLoading: false });
+  },
+
+  fetchTrip: async (tripId: string) => {
+    set({ isLoading: true });
+    
+    // fetch everything in parallel for maximum speed
+    const [tripRes, membersRes, expensesRes] = await Promise.all([
+      supabase.from("trips").select("*").eq("id", tripId).single(),
+      supabase.from("members").select("*").eq("trip_id", tripId),
+      supabase.from("expenses").select("*").eq("trip_id", tripId).order("expense_date", { ascending: false }) // sorts newest first!
+    ]);
+
+    if (tripRes.error || !tripRes.data) {
+      set({ isLoading: false });
+      return;
+    }
+
+    const fullTrip: Trip = {
+        id: tripRes.data.id,
+        name: tripRes.data.name,
+        date: tripRes.data.date || "",
+        currency: tripRes.data.currency || "IDR",
+        createdAt: tripRes.data.created_at,
+        owner_id: tripRes.data.owner_id, // <-- add this
+        members: membersRes.data || [],
+        expenses: (expensesRes.data || []).map(mapExpense),
+      };
+
+    set((state) => {
+      const exists = state.trips.find(t => t.id === tripId);
+      if (exists) return { trips: state.trips.map(t => t.id === tripId ? fullTrip : t), isLoading: false };
+      return { trips: [...state.trips, fullTrip], isLoading: false };
+    });
+  },
+
+addTrip: async (trip) => {
+    const currentUser = get().user;
+    if (!currentUser) return;
+
+    set((state) => ({ trips: [trip, ...state.trips] }));
+    
+    const displayName = currentUser.user_metadata?.full_name || currentUser.email?.split('@')[0] || "someone";
+
+    await supabase.from("trips").insert({
+      id: trip.id, 
+      name: trip.name, 
+      date: trip.date, 
+      currency: trip.currency, 
+      created_at: trip.createdAt,
+      owner_id: currentUser.id,
+      owner_name: displayName
+    });
+  },
+
+  renameTrip: async (tripId, newName) => {
+    set((state) => ({ trips: state.trips.map(t => t.id === tripId ? { ...t, name: newName } : t) }));
+    await supabase.from("trips").update({ name: newName }).eq("id", tripId);
+  },
+
+  deleteTrip: async (tripId) => {
+    set((state) => ({ trips: state.trips.filter(t => t.id !== tripId) }));
+    await supabase.from("trips").delete().eq("id", tripId);
+  },
+
+  addMember: async (tripId, member) => {
+    set((state) => ({ trips: state.trips.map((t) => t.id === tripId ? { ...t, members: [...t.members, member] } : t) }));
+    await supabase.from("members").insert({ id: member.id, trip_id: tripId, name: member.name });
+  },
+
+  deleteMember: async (tripId, memberId) => {
+    set((state) => ({ trips: state.trips.map((t) => t.id === tripId ? { ...t, members: t.members.filter(m => m.id !== memberId) } : t) }));
+    await supabase.from("members").delete().eq("id", memberId);
+  },
+
+  addExpense: async (tripId, expense) => {
+    set((state) => ({
+      trips: state.trips.map((t) => {
+        if (t.id === tripId) {
+           const newExpenses = [expense, ...t.expenses].sort((a, b) => new Date(b.expenseDate).getTime() - new Date(a.expenseDate).getTime());
+           return { ...t, expenses: newExpenses };
+        }
+        return t;
+      })
+    }));
+    await supabase.from("expenses").insert({
+      id: expense.id, trip_id: tripId, title: expense.title, total_amount: expense.totalAmount, paid_by: expense.paidBy, owed_by: expense.owedBy,
+      split_type: expense.splitType, items: expense.items || null, adjustments: expense.adjustments || null, settled_shares: expense.settledShares || null,
+      expense_date: expense.expenseDate, created_at: expense.createdAt
+    });
+  },
+
+  updateExpense: async (tripId, expenseId, expense) => {
+    set((state) => ({
+      trips: state.trips.map((t) => {
+        if (t.id === tripId) {
+           const newExpenses = t.expenses.map(e => e.id === expenseId ? expense : e).sort((a, b) => new Date(b.expenseDate).getTime() - new Date(a.expenseDate).getTime());
+           return { ...t, expenses: newExpenses };
+        }
+        return t;
+      })
+    }));
+    await supabase.from("expenses").update({
+      title: expense.title, total_amount: expense.totalAmount, paid_by: expense.paidBy, owed_by: expense.owedBy,
+      split_type: expense.splitType, items: expense.items || null, adjustments: expense.adjustments || null, settled_shares: expense.settledShares || null,
+      expense_date: expense.expenseDate
+    }).eq("id", expenseId);
+  },
+
+  deleteExpense: async (tripId, expenseId) => {
+    set((state) => ({ trips: state.trips.map((t) => t.id === tripId ? { ...t, expenses: t.expenses.filter(e => e.id !== expenseId) } : t) }));
+    await supabase.from("expenses").delete().eq("id", expenseId);
+  },
+
+  toggleExpenseSettled: async (tripId, expenseId, memberId) => {
+    let updatedShares: Record<string, boolean> = {};
+    set((state) => ({
+      trips: state.trips.map((t) => {
+        if (t.id === tripId) {
+          return { ...t, expenses: t.expenses.map(e => {
+              if (e.id === expenseId) {
+                updatedShares = { ...e.settledShares, [memberId]: !(e.settledShares?.[memberId] || false) };
+                return { ...e, settledShares: updatedShares };
+              }
+              return e;
+            })
+          };
+        }
+        return t;
+      })
+    }));
+    await supabase.from("expenses").update({ settled_shares: updatedShares }).eq("id", expenseId);
+  },
+
+  // THE MAGIC REALTIME ENGINE
+  subscribeToTrip: (tripId: string) => {
+    const channel = supabase.channel(`trip-${tripId}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'expenses', filter: `trip_id=eq.${tripId}` }, () => {
+        get().fetchTrip(tripId); // quietly reload if someone else adds an expense
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'members', filter: `trip_id=eq.${tripId}` }, () => {
+        get().fetchTrip(tripId);
+      })
+      .subscribe();
+      
+    return () => { supabase.removeChannel(channel); };
+  }
+}));

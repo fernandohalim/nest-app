@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
+import AuthProvider from "@/components/auth-provider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -21,8 +22,14 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: "bills app — split expenses easily",
-  description: "a minimal, offline-first expense splitter for trips with friends.",
-  keywords: ["splitwise alternative", "bill splitter", "travel expenses", "offline app"],
+  description:
+    "a minimal, offline-first expense splitter for trips with friends.",
+  keywords: [
+    "splitwise alternative",
+    "bill splitter",
+    "travel expenses",
+    "offline app",
+  ],
   manifest: "/manifest.json",
   appleWebApp: {
     capable: true,
@@ -30,8 +37,8 @@ export const metadata: Metadata = {
     title: "bills app",
   },
   icons: {
-    icon: '/icon.svg',
-    apple: '/icon.svg',
+    icon: "/icon.svg",
+    apple: "/icon.svg",
   },
 };
 
@@ -46,7 +53,7 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">
-        {children}
+        <AuthProvider>{children}</AuthProvider>
         <script
           dangerouslySetInnerHTML={{
             __html: `
