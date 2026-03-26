@@ -248,22 +248,33 @@ export const useTripStore = create<TripStore>((set, get) => ({
 
   toggleExpenseSettled: async (tripId, expenseId, memberId) => {
     set({ isSyncing: true });
-    let updatedShares: Record<string, boolean> = {};
+    
+    const state = get();
+    const trip = state.trips.find(t => t.id === tripId);
+    const expense = trip?.expenses.find(e => e.id === expenseId);
+    
+    if (!expense) {
+      set({ isSyncing: false });
+      return;
+    }
+
+    const updatedShares = { 
+      ...expense.settledShares, 
+      [memberId]: !(expense.settledShares?.[memberId] || false) 
+    };
+
     set((state) => ({
       trips: state.trips.map((t) => {
         if (t.id === tripId) {
-          return { ...t, expenses: t.expenses.map(e => {
-              if (e.id === expenseId) {
-                updatedShares = { ...e.settledShares, [memberId]: !(e.settledShares?.[memberId] || false) };
-                return { ...e, settledShares: updatedShares };
-              }
-              return e;
-            })
+          return {
+            ...t,
+            expenses: t.expenses.map(e => e.id === expenseId ? { ...e, settledShares: updatedShares } : e)
           };
         }
         return t;
       })
     }));
+    
     await supabase.from("expenses").update({ settled_shares: updatedShares }).eq("id", expenseId);
     set({ isSyncing: false });
   },

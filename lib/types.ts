@@ -34,7 +34,6 @@ export interface Trip {
   currency: string;
   members: Member[];
   expenses: Expense[];
-  isReadOnly?: boolean; 
   createdAt: string;
   owner_id?: string;
   owner_name?: string;
