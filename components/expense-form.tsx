@@ -501,12 +501,10 @@ export default function ExpenseForm({
             {items.map((item) => (
               <div
                 key={item.id}
-                className="p-4 border-2 border-stone-100 rounded-3xl bg-white shadow-sm flex flex-col gap-4 relative group"
+                className="border-2 border-stone-100 rounded-3xl bg-white shadow-sm flex flex-col group overflow-hidden"
               >
-                <span className="absolute -top-3 -left-2 text-2xl drop-shadow-sm transition-transform group-hover:scale-110 group-hover:-rotate-12">
-                  📌
-                </span>
-                <div className="flex gap-3 items-center pl-6">
+                {/* Inputs Row - No extra padding, highly optimized widths */}
+                <div className="flex items-center w-full bg-stone-50 border-b-2 border-stone-100">
                   <input
                     type="text"
                     placeholder="what is it?"
@@ -514,7 +512,7 @@ export default function ExpenseForm({
                     onChange={(e) =>
                       handleItemChange(item.id, "name", e.target.value)
                     }
-                    className="flex-1 text-sm font-black bg-stone-50 border-2 border-stone-100 rounded-2xl px-4 py-3 focus:outline-none focus:border-emerald-400 focus:bg-white transition-all"
+                    className="flex-[6] min-w-0 text-sm font-black bg-transparent px-4 py-3 sm:py-4 focus:outline-none focus:bg-white transition-all border-r-2 border-stone-100"
                   />
                   <input
                     type="text"
@@ -524,17 +522,19 @@ export default function ExpenseForm({
                     onChange={(e) =>
                       handleItemChange(item.id, "price", e.target.value)
                     }
-                    className="w-24 text-sm font-black text-right bg-stone-50 border-2 border-stone-100 rounded-2xl px-4 py-3 focus:outline-none focus:border-emerald-400 focus:bg-white transition-all text-emerald-600"
+                    className="flex-[4] min-w-0 text-sm font-black text-right bg-transparent px-3 py-3 sm:py-4 focus:outline-none focus:bg-white transition-all text-emerald-600 border-r-2 border-stone-100"
                   />
                   <button
                     type="button"
                     onClick={() => handleRemoveItem(item.id)}
-                    className="w-10 h-10 flex items-center justify-center rounded-2xl bg-stone-50 text-stone-400 hover:bg-rose-500 hover:text-white active:scale-90 transition-all font-black text-lg"
+                    className="w-10 sm:w-12 shrink-0 flex items-center justify-center self-stretch bg-transparent text-stone-400 hover:bg-rose-500 hover:text-white transition-all font-black text-lg"
                   >
                     ×
                   </button>
                 </div>
-                <div className="flex flex-wrap gap-2 pl-6">
+
+                {/* member tag row - minimal padding to let it breathe without looking disconnected */}
+                <div className="flex flex-wrap gap-1.5 sm:gap-2 px-3 py-3 sm:px-4 sm:py-3 bg-white">
                   {members.map((m) => {
                     const isAssigned = item.assignedTo.includes(m.id);
                     return (
@@ -542,7 +542,11 @@ export default function ExpenseForm({
                         key={m.id}
                         type="button"
                         onClick={() => toggleItemMember(item.id, m.id)}
-                        className={`text-[11px] font-black px-4 py-2 rounded-full transition-all active:scale-90 ${isAssigned ? "bg-stone-800 text-white shadow-md shadow-stone-800/20 translate-y-[-2px]" : "bg-stone-50 text-stone-400 border-2 border-stone-100 hover:bg-stone-200"}`}
+                        className={`text-[10px] sm:text-[11px] font-black px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-full transition-all active:scale-90 ${
+                          isAssigned
+                            ? "bg-stone-800 text-white shadow-md shadow-stone-800/20 translate-y-[-1px]"
+                            : "bg-stone-50 text-stone-400 border-2 border-stone-100 hover:bg-stone-200"
+                        }`}
                       >
                         {m.name}
                       </button>
@@ -551,10 +555,11 @@ export default function ExpenseForm({
                 </div>
               </div>
             ))}
+
             <button
               type="button"
               onClick={handleAddItem}
-              className="w-full py-4 text-sm font-black text-stone-500 bg-stone-100 hover:bg-emerald-100 hover:text-emerald-700 rounded-[2rem] transition-all active:scale-95 border-2 border-dashed border-stone-300 hover:border-emerald-300"
+              className="w-full py-3.5 sm:py-4 text-sm font-black text-stone-500 bg-stone-100 hover:bg-emerald-100 hover:text-emerald-700 rounded-[2rem] transition-all active:scale-95 border-2 border-dashed border-stone-300 hover:border-emerald-300"
             >
               + add another item
             </button>
