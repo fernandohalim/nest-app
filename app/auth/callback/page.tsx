@@ -8,8 +8,8 @@ export default function AuthCallback() {
   const router = useRouter();
 
   useEffect(() => {
-    // supabase automatically processes the secure URL codes in the background.
-    // we just wait for the 'SIGNED_IN' event and route them to the dashboard!
+    // supabase automatically processes the secure url codes in the background.
+    // we just wait for the 'signed_in' event and route them to the dashboard!
     const { data: authListener } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if (event === "SIGNED_IN" || session) {
@@ -27,9 +27,15 @@ export default function AuthCallback() {
   }, [router]);
 
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center">
-      <div className="w-6 h-6 border-2 border-black border-t-transparent rounded-full animate-spin mb-4"></div>
-      <p className="text-sm text-gray-500">securing your session...</p>
+    <div className="min-h-screen bg-[#fdfbf7] flex flex-col items-center justify-center p-6 selection:bg-emerald-200 selection:text-emerald-900">
+      <div className="relative w-16 h-16 flex items-center justify-center mx-auto mb-6">
+        <div className="absolute inset-0 border-4 border-emerald-100 rounded-full"></div>
+        <div className="absolute inset-0 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+        <span className="text-xl animate-pulse">🔐</span>
+      </div>
+      <p className="text-sm text-stone-500 font-bold tracking-wide">
+        securing your nest...
+      </p>
     </div>
   );
 }

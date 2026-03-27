@@ -9,6 +9,7 @@ import ExpenseForm from "@/components/expense-form";
 import { calculateSettlements } from "@/lib/settlements";
 import { Expense } from "@/lib/types";
 import { supabase } from "@/lib/supabase";
+import CustomSelect from "@/components/custom-select";
 
 const getAvatarColor = (name: string) => {
   const colors = [
@@ -612,37 +613,33 @@ export default function TripDetail() {
 
           {trip.expenses.length > 0 && (
             <div className="flex gap-2 mb-5">
-              <select
+              <CustomSelect
                 value={filterCategory}
-                onChange={(e) => setFilterCategory(e.target.value)}
-                className="text-sm border-2 border-stone-100 shadow-sm bg-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 flex-1 font-bold text-stone-600 transition-all appearance-none cursor-pointer"
-              >
-                <option value="all">all categories</option>
-                {usedCategories.map((c) => (
-                  <option key={c} value={c}>
-                    {c}
-                  </option>
-                ))}
-              </select>
-              <select
+                onChange={(val) => setFilterCategory(val)}
+                options={[
+                  { value: "all", label: "all categories" },
+                  ...usedCategories.map((c) => ({ value: c, label: c })),
+                ]}
+                className="flex-1 min-w-0"
+              />
+              <CustomSelect
                 value={sortBy}
-                onChange={(e) =>
-                  setSortBy(
-                    e.target.value as "newest" | "amount_high" | "amount_low",
-                  )
+                onChange={(val) =>
+                  setSortBy(val as "newest" | "amount_high" | "amount_low")
                 }
-                className="text-sm border-2 border-stone-100 shadow-sm bg-white rounded-xl px-4 py-3 focus:outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 flex-1 font-bold text-stone-600 transition-all appearance-none cursor-pointer"
-              >
-                <option value="newest">latest first</option>
-                <option value="amount_high">highest $$</option>
-                <option value="amount_low">lowest $$</option>
-              </select>
+                options={[
+                  { value: "newest", label: "latest first" },
+                  { value: "amount_high", label: "highest $$" },
+                  { value: "amount_low", label: "lowest $$" },
+                ]}
+                className="flex-1 min-w-0"
+              />
             </div>
           )}
 
           <div className="space-y-4">
             {processedExpenses.length === 0 ? (
-              <div className="text-center py-16 bg-white rounded-[2rem] shadow-sm border-2 border-dashed border-stone-200">
+              <div className="text-center py-16 bg-white rounded-4xl shadow-sm border-2 border-dashed border-stone-200">
                 <div className="text-5xl mb-4 animate-bounce inline-block">
                   🍔
                 </div>
@@ -674,7 +671,7 @@ export default function TripDetail() {
                 return (
                   <div
                     key={exp.id}
-                    className="bg-white rounded-[1.5rem] shadow-sm border-2 border-stone-100 overflow-hidden group hover:border-emerald-200 hover:shadow-md transition-all duration-300"
+                    className="bg-white rounded-3xl shadow-sm border-2 border-stone-100 overflow-hidden group hover:border-emerald-200 hover:shadow-md transition-all duration-300"
                   >
                     <button
                       onClick={() =>

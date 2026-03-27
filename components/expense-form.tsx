@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Member, Expense, ExpenseItem } from "@/lib/types";
 import { v4 as uuidv4 } from "uuid";
 import { useAlertStore } from "@/store/useAlertStore";
+import CustomSelect from "./custom-select";
+import CustomDatePicker from "./custom-date-picker";
 
 interface ExpenseFormProps {
   members: Member[];
@@ -332,31 +334,26 @@ export default function ExpenseForm({
       {/* Meta details */}
       <div className="flex gap-3">
         <div className="flex-1 bg-white border-2 border-stone-100 rounded-2xl relative shadow-sm focus-within:border-emerald-400 focus-within:ring-4 focus-within:ring-emerald-100 transition-all">
-          <label className="absolute -top-2.5 left-3 bg-white px-1 text-[10px] font-black text-stone-400 uppercase tracking-widest">
+          <label className="absolute -top-2.5 left-3 bg-white px-1 text-[10px] font-black text-stone-400 uppercase tracking-widest z-10">
             date
           </label>
-          <input
-            type="date"
+          <CustomDatePicker
             value={expenseDate}
-            onChange={(e) => setExpenseDate(e.target.value)}
-            className="w-full bg-transparent border-none px-4 py-3.5 text-sm font-bold text-stone-700 focus:outline-none"
+            onChange={(val) => setExpenseDate(val)}
+            className="w-full"
           />
         </div>
+
         <div className="flex-1 bg-white border-2 border-stone-100 rounded-2xl relative shadow-sm focus-within:border-emerald-400 focus-within:ring-4 focus-within:ring-emerald-100 transition-all">
-          <label className="absolute -top-2.5 left-3 bg-white px-1 text-[10px] font-black text-stone-400 uppercase tracking-widest">
+          <label className="absolute -top-2.5 left-3 bg-white px-1 text-[10px] font-black text-stone-400 uppercase tracking-widest z-10">
             type
           </label>
-          <select
+          <CustomSelect
             value={category}
-            onChange={(e) => setCategory(e.target.value)}
-            className="w-full bg-transparent border-none px-4 py-3.5 text-sm font-bold text-stone-700 focus:outline-none appearance-none cursor-pointer"
-          >
-            {CATEGORIES.map((c) => (
-              <option key={c.value} value={c.value}>
-                {c.label}
-              </option>
-            ))}
-          </select>
+            onChange={(val) => setCategory(val)}
+            options={CATEGORIES}
+            className="w-full h-full"
+          />
         </div>
       </div>
 
@@ -376,17 +373,12 @@ export default function ExpenseForm({
         </div>
 
         {!isMultiplePayers ? (
-          <select
+          <CustomSelect
             value={payerId}
-            onChange={(e) => setPayerId(e.target.value)}
-            className="w-full bg-stone-50 border-2 border-stone-100 shadow-sm rounded-2xl py-3.5 px-5 text-sm font-bold text-stone-700 focus:outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 transition-all cursor-pointer appearance-none"
-          >
-            {members.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.name}
-              </option>
-            ))}
-          </select>
+            onChange={(val) => setPayerId(val)}
+            options={members.map((m) => ({ value: m.id, label: m.name }))}
+            className="w-full"
+          />
         ) : (
           <div className="space-y-3">
             {members.map((m) => (

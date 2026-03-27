@@ -1,11 +1,11 @@
 {
-  "name": "bills app",
-  "short_name": "bills",
-  "description": "offline bill splitter",
+  "name": "nest. — split expenses",
+  "short_name": "nest.",
+  "description": "split expenses, keep the peace 🌱",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#ffffff",
+  "background_color": "#fdfbf7",
+  "theme_color": "#059669",
   "icons": [
     {
       "src": "/icon-512.png",
