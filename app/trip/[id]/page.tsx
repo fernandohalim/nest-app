@@ -526,6 +526,13 @@ export default function TripDetail() {
             {trip.name}
           </h1>
 
+          <div className="text-xs font-bold text-emerald-100 mb-2 relative z-10 flex items-center gap-1.5">
+            <span>created by</span>
+            <span className="text-white bg-black/20 px-2 py-0.5 rounded-md backdrop-blur-sm shadow-inner">
+              {isOwner ? "you" : trip.owner_name || "the host"} 👑
+            </span>
+          </div>
+
           <div className="text-5xl font-black tracking-tighter relative z-10 my-2 drop-shadow-md">
             <span className="text-2xl text-emerald-200 align-top mr-1">rp</span>
             {totalTripCost.toLocaleString()}

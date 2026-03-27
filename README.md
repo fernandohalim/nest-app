@@ -1,36 +1,51 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+<div align="center">
+  <img src="public/icon-512.png" alt="nest logo" width="120" />
+  
+  <h1>🐣 nest.</h1>
+  <p><b>split expenses, keep the peace 🌱</b></p>
 
-## Getting Started
+  [Live Demo](https://nest-app.vercel.app) • [Report a Bug](https://github.com/fernandohalim/nest-app/issues)
+</div>
 
-First, run the development server:
+## 👋 what is nest?
+**nest.** is a beautifully bouncy expense splitter built for trips, shared tabs, and keeping friendships intact. no more spreadsheet math or arguing over who had the extra fries—just drop the expenses in the nest and let it figure out exactly who owes who.
+
+
+## ✨ features
+* 🍕 **exact line-item splitting:** split the tab equally, by custom adjustments, or exactly by who consumed what.
+* 🤝 **optimized settlements:** the transparent ledger calculates the absolute minimum number of transactions needed to settle up the whole group.
+* 📱 **bouncy & playful ui:** a highly interactive, custom-built interface that makes dealing with money actually feel fun.
+* 🔒 **secure & synced:** real-time cloud syncing backed by supabase authentication and row-level security.
+
+## 🛠️ tech stack
+this project was built with a modern, high-performance stack:
+* **framework:** [Next.js 16](https://nextjs.org/) (App Router)
+* **library:** [React 19](https://react.dev/)
+* **styling:** [TailwindCSS v4](https://tailwindcss.com/)
+* **database & auth:** [Supabase](https://supabase.com/)
+* **state management:** [Zustand](https://zustand-demo.pmnd.rs/)
+
+## 🚀 getting started
+
+to run this project locally, you'll need node.js installed and a supabase project set up.
 
 ```bash
+# clone the repository
+git clone [https://github.com/fernandohalim/nest-app.git](https://github.com/fernandohalim/nest-app.git)
+
+# jump into the directory
+cd nest-app
+
+# install the dependencies
+npm install
+
+# copy the env file and add your supabase keys
+cp .env.example .env.local
+
+# start the local development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## 📜 license
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+this project is licensed under the MIT License - see the **LICENSE** file for details.
