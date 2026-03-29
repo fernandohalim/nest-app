@@ -142,17 +142,34 @@ export default function ExpenseForm({
     );
   };
 
-  const toggleItemMember = (itemId: string, memberId: string) => {
+  const increaseItemMemberWeight = (itemId: string, memberId: string) => {
     setItems(
       items.map((item) => {
         if (item.id === itemId) {
-          const isAssigned = item.assignedTo.includes(memberId);
           return {
             ...item,
-            assignedTo: isAssigned
-              ? item.assignedTo.filter((id) => id !== memberId)
-              : [...item.assignedTo, memberId],
+            assignedTo: [...item.assignedTo, memberId],
           };
+        }
+        return item;
+      }),
+    );
+  };
+
+  const decreaseItemMemberWeight = (itemId: string, memberId: string) => {
+    setItems(
+      items.map((item) => {
+        if (item.id === itemId) {
+          // find the first occurrence of their ID and slice it out
+          const index = item.assignedTo.indexOf(memberId);
+          if (index > -1) {
+            const newAssignedTo = [...item.assignedTo];
+            newAssignedTo.splice(index, 1);
+            return {
+              ...item,
+              assignedTo: newAssignedTo,
+            };
+          }
         }
         return item;
       }),
@@ -563,17 +580,70 @@ export default function ExpenseForm({
                 {/* member tag row - minimal padding to let it breathe without looking disconnected */}
                 <div className="flex flex-wrap gap-1.5 sm:gap-2 px-3 py-3 sm:px-4 sm:py-3 bg-white">
                   {members.map((m) => {
-                    const isAssigned = item.assignedTo.includes(m.id);
+                    // count how many times this member is in the array
+                    const weight = item.assignedTo.filter(
+                      (id) => id === m.id,
+                    ).length;
+                    const isAssigned = weight > 0;
+
+                    if (isAssigned) {
+                      return (
+                        <div
+                          key={m.id}
+                          className="flex items-stretch bg-stone-800 text-white rounded-full shadow-md shadow-stone-800/20 -translate-y-px overflow-hidden transition-all"
+                        >
+                          {/* main button to increase weight */}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              increaseItemMemberWeight(item.id, m.id)
+                            }
+                            className="text-[10px] sm:text-[11px] font-black pl-3.5 sm:pl-4 pr-2 py-1.5 sm:py-2 transition-colors hover:bg-stone-700 active:bg-stone-600 flex items-center gap-1.5"
+                          >
+                            {m.name}
+                            {weight > 1 && (
+                              <span className="bg-emerald-500 text-white px-1.5 py-0.5 rounded-md text-[9px] font-black leading-none flex items-center">
+                                x{weight}
+                              </span>
+                            )}
+                          </button>
+
+                          {/* separator */}
+                          <div className="w-px bg-stone-600 my-1"></div>
+
+                          {/* minus button to decrease weight */}
+                          <button
+                            type="button"
+                            onClick={() =>
+                              decreaseItemMemberWeight(item.id, m.id)
+                            }
+                            className="px-2 hover:bg-rose-500 hover:text-white text-stone-300 transition-colors active:bg-rose-600 flex items-center justify-center"
+                          >
+                            <svg
+                              className="w-3 h-3"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={3}
+                                d="M20 12H4"
+                              />
+                            </svg>
+                          </button>
+                        </div>
+                      );
+                    }
+
+                    // unassigned default pill
                     return (
                       <button
                         key={m.id}
                         type="button"
-                        onClick={() => toggleItemMember(item.id, m.id)}
-                        className={`text-[10px] sm:text-[11px] font-black px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-full transition-all active:scale-90 ${
-                          isAssigned
-                            ? "bg-stone-800 text-white shadow-md shadow-stone-800/20 -translate-y-px"
-                            : "bg-stone-50 text-stone-400 border-2 border-stone-100 hover:bg-stone-200"
-                        }`}
+                        onClick={() => increaseItemMemberWeight(item.id, m.id)}
+                        className="text-[10px] sm:text-[11px] font-black px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-full transition-all active:scale-90 bg-stone-50 text-stone-400 border-2 border-stone-100 hover:bg-stone-200"
                       >
                         {m.name}
                       </button>

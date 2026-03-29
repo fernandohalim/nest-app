@@ -10,6 +10,7 @@ import { calculateSettlements } from "@/lib/settlements";
 import { Expense } from "@/lib/types";
 import { supabase } from "@/lib/supabase";
 import CustomSelect from "@/components/custom-select";
+import CameraScanner from "@/components/camera-scanner";
 
 const getAvatarColor = (name: string) => {
   const colors = [
@@ -29,7 +30,18 @@ const getAvatarColor = (name: string) => {
 
 const getInitials = (name: string) => name.substring(0, 2).toLowerCase();
 
+const timeAgo = (dateStr: string) => {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+};
+
 export default function TripDetail() {
+  const [showScanner, setShowScanner] = useState(false);
   const params = useParams();
   const router = useRouter();
   const tripId = params.id as string;
@@ -55,13 +67,18 @@ export default function TripDetail() {
   } = useTripStore();
 
   const trip = trips.find((t) => t.id === tripId);
+  const lastActive = new Date(
+    trip?.updatedAt || trip?.createdAt || Date.now(),
+  ).getTime();
+  const daysSinceActive = Math.floor(
+    (Date.now() - lastActive) / (1000 * 60 * 60 * 24),
+  );
+  const daysLeft = Math.max(0, 7 - daysSinceActive);
 
-  // 1. move isOwner UP here, so it's calculated before we use it
   const isOwner = Boolean(
     user?.id && trip?.owner_id && user.id === trip.owner_id,
   );
 
-  // 2. safely check trip?.is_collaborative (if trip is undefined, it defaults to false)
   const canEdit = isOwner || (trip?.is_collaborative ?? false);
 
   useEffect(() => {
@@ -356,8 +373,18 @@ export default function TripDetail() {
 
   const handleShare = () => {
     const url = `${window.location.origin}/trip/${tripId}`;
-    navigator.clipboard.writeText(url);
-    showAlert("link copied! send it to the group chat 📱", "copied! ✨");
+
+    // craft the perfect message template
+    const message = `hola! 👋 i created a trip for "${trip.name}" on nest to split our expenses.\n\ntap the link below to join the trip:\n${url}`;
+
+    // copy the whole message to clipboard
+    navigator.clipboard.writeText(message);
+
+    // update the alert to reflect the new behavior
+    showAlert(
+      "invite message copied! paste it in the group chat 📱",
+      "copied! ✨",
+    );
   };
 
   const handleAddMember = (e: React.FormEvent) => {
@@ -405,23 +432,16 @@ export default function TripDetail() {
     setEditingExpense(undefined);
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // 1. reset progress and trigger the laser overlay
+  const processReceiptFile = async (file: File) => {
     setScanProgress(0);
     setIsScanning(true);
 
-    // 2. start the smart simulated progress bar
     const progressInterval = setInterval(() => {
       setScanProgress((prev) => {
-        // cap the fake progress at 90% while we wait for gemini
         if (prev >= 90) return prev;
-        // randomly jump up by 5% to 20% to make it feel organic
         return prev + Math.floor(Math.random() * 15) + 5;
       });
-    }, 300); // ticks every 300ms
+    }, 300);
 
     try {
       const formData = new FormData();
@@ -466,7 +486,6 @@ export default function TripDetail() {
         category: data.category || "other",
       };
 
-      // 3. gemini is done! snap to 100% and wait half a second so the user sees it finish
       clearInterval(progressInterval);
       setScanProgress(100);
       await new Promise((resolve) => setTimeout(resolve, 500));
@@ -483,9 +502,17 @@ export default function TripDetail() {
     } finally {
       clearInterval(progressInterval);
       setIsScanning(false);
-      setTimeout(() => setScanProgress(0), 300); // silently reset back to 0
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      setTimeout(() => setScanProgress(0), 300);
     }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    await processReceiptFile(file);
+
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   const handleDeleteExpense = (expenseId: string) => {
@@ -618,6 +645,95 @@ export default function TripDetail() {
                 </svg>
               </button>
             )}
+          </div>
+        </div>
+
+        {/* fluid retention & status pill (high contrast version) */}
+        <div className="mb-4 z-10 relative">
+          <div
+            className={`flex items-center w-full px-5 sm:px-6 py-3.5 shadow-sm backdrop-blur-xl border rounded-full transition-colors duration-500 ${
+              trip.status === "finished"
+                ? "bg-emerald-50 border-emerald-200"
+                : daysLeft <= 2
+                  ? "bg-rose-50 border-rose-200"
+                  : "bg-white border-stone-200"
+            }`}
+          >
+            <div className="relative flex items-center justify-center shrink-0 mr-4">
+              {trip.status === "settled" ? (
+                <span className="relative z-10 text-lg">✨</span>
+              ) : daysLeft <= 2 ? (
+                <span className="relative z-10 text-lg animate-pulse">⚠️</span>
+              ) : (
+                <span className="relative z-10 text-lg">⏳</span>
+              )}
+            </div>
+
+            <div className="flex flex-col flex-1 min-w-0 justify-center pt-0.5">
+              <span
+                className={`text-[11px] font-black tracking-widest uppercase leading-none truncate ${
+                  trip.status === "finished"
+                    ? "text-emerald-800"
+                    : daysLeft <= 2
+                      ? "text-rose-800"
+                      : "text-stone-800"
+                }`}
+              >
+                {trip.status === "finished"
+                  ? "saved permanently"
+                  : `expires in ${daysLeft} day${daysLeft !== 1 ? "s" : ""}`}
+              </span>
+              <span
+                className={`text-[9px] font-bold mt-1 tracking-wider uppercase truncate ${
+                  trip.status === "finished"
+                    ? "text-emerald-600"
+                    : daysLeft <= 2
+                      ? "text-rose-600"
+                      : "text-stone-500"
+                }`}
+              >
+                {trip.status === "finished"
+                  ? "locked & secured"
+                  : `last active ${timeAgo(trip.updatedAt || trip.createdAt)}`}
+              </span>
+            </div>
+
+            <button
+              onClick={() => {
+                if (trip.status === "finished") {
+                  showAlert(
+                    "this trip is safely locked and stored permanently in the database. no cleanup robots will touch it! ✨",
+                    "trip secured 🔒",
+                  );
+                } else {
+                  showAlert(
+                    "mark this trip as 'settled' in the settings menu to save it permanently. otherwise, the database will automatically clean it up to save space!",
+                    "retention policy ⏳",
+                  );
+                }
+              }}
+              className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center transition-all active:scale-90 ${
+                trip.status === "finished"
+                  ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                  : daysLeft <= 2
+                    ? "bg-rose-100 text-rose-700 hover:bg-rose-200"
+                    : "bg-stone-100 text-stone-500 hover:bg-stone-200 hover:text-stone-800"
+              }`}
+            >
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2.5}
+                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+            </button>
           </div>
         </div>
 
@@ -1379,7 +1495,7 @@ export default function TripDetail() {
       {/* sleek modern floating action menu */}
       {!isAddingExpense && canEdit && trip.status !== "finished" && (
         <div className="fixed bottom-8 right-8 lg:bottom-12 lg:right-12 flex flex-col gap-3 z-40 items-end animate-in slide-in-from-bottom-8 duration-500">
-          {/* scan receipt pill */}
+          {/* ultra-premium scan receipt pill */}
           <button
             onClick={() => {
               if (trip.members.length === 0) {
@@ -1389,34 +1505,40 @@ export default function TripDetail() {
                 );
                 return;
               }
-              fileInputRef.current?.click();
+              setShowScanner(true);
             }}
             disabled={isScanning}
-            className="flex items-center gap-3 pl-5 pr-2 py-2 bg-white/90 backdrop-blur-md text-stone-600 border-2 border-stone-100 rounded-full shadow-lg hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 active:scale-95 transition-all duration-300 disabled:opacity-50 group"
+            className="group relative active:scale-95 transition-all duration-300 disabled:opacity-50 disabled:active:scale-100"
           >
-            <span className="text-xs font-black tracking-widest uppercase">
-              scan bill
-            </span>
-            <div className="w-10 h-10 rounded-full bg-stone-100 group-hover:bg-emerald-200 flex items-center justify-center transition-colors">
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2.5}
-                  d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
-                />
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2.5}
-                  d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
-                />
-              </svg>
+            {/* animated gradient border behind the button */}
+            <div className="absolute -inset-0.5 rounded-full bg-linear-to-r from-emerald-400 via-teal-300 to-emerald-500 opacity-70 group-hover:opacity-100 blur-sm transition-opacity duration-500"></div>
+
+            {/* the actual glass button */}
+            <div className="relative flex items-center gap-3 pl-6 pr-2 py-2 bg-white/90 backdrop-blur-xl rounded-full border border-white/50 shadow-[0_8px_16px_rgb(0,0,0,0.05)]">
+              <span className="text-xs font-black tracking-widest bg-linear-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent uppercase group-hover:from-emerald-500 group-hover:to-teal-500 transition-all">
+                scan receipt
+              </span>
+              <div className="w-10 h-10 rounded-full bg-linear-to-tr from-emerald-50 to-teal-50 shadow-inner flex items-center justify-center text-emerald-600 group-hover:rotate-12 group-hover:scale-110 transition-all duration-300">
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2.5}
+                    d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
+                  />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2.5}
+                    d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
+                </svg>
+              </div>
             </div>
           </button>
 
@@ -1615,6 +1737,25 @@ export default function TripDetail() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* custom camera scanner modal */}
+      {showScanner && (
+        <CameraScanner
+          onClose={() => setShowScanner(false)}
+          onUploadFallback={() => {
+            setShowScanner(false);
+            // wait 100ms for modal to fade out, then open native file picker
+            setTimeout(() => {
+              fileInputRef.current?.click();
+            }, 100);
+          }}
+          onCapture={(file) => {
+            setShowScanner(false);
+            // send the snapped photo directly to our new generic function!
+            processReceiptFile(file);
+          }}
+        />
       )}
     </main>
   );

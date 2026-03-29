@@ -14,13 +14,13 @@ export interface Expense {
   id: string;
   title: string;
   totalAmount: number;
-  paidBy: Record<string, number>; 
-  owedBy: Record<string, number>; 
-  splitType: 'equal' | 'exact' | 'adjustment'; 
-  
+  paidBy: Record<string, number>;
+  owedBy: Record<string, number>;
+  splitType: "equal" | "exact" | "adjustment";
+
   items?: ExpenseItem[];
   adjustments?: Record<string, number>;
-  settledShares?: Record<string, boolean>; 
+  settledShares?: Record<string, boolean>;
 
   expenseDate: string;
   createdAt: string;
@@ -35,6 +35,7 @@ export interface Trip {
   members: Member[];
   expenses: Expense[];
   createdAt: string;
+  updatedAt?: string;
   owner_id?: string;
   owner_name?: string;
   status?: string;

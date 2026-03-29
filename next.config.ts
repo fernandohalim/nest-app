@@ -8,6 +8,8 @@ const nextConfig: NextConfig = {
         hostname: "*.googleusercontent.com",
       },
     ],
-  },};
+  },
+  allowedDevOrigins: ["192.168.100.85"],
+};
 
 export default nextConfig;
