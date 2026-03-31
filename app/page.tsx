@@ -484,16 +484,14 @@ export default function Home() {
         </div>
 
         {/* NEW: Cozy Footer that opens About Modal */}
-        {trips.length > 0 && (
-          <div className="mt-12 mb-8 text-center animate-in fade-in duration-1000 delay-300 pb-16">
-            <button
-              onClick={() => setIsAboutOpen(true)}
-              className="text-[10px] font-black text-stone-400 uppercase tracking-widest hover:text-emerald-500 transition-colors active:scale-95 flex items-center justify-center gap-1.5 mx-auto bg-white/50 px-4 py-2 rounded-full border border-stone-100"
-            >
-              about?
-            </button>
-          </div>
-        )}
+        <div className="mt-12 mb-8 text-center animate-in fade-in duration-1000 delay-300 pb-16">
+          <button
+            onClick={() => setIsAboutOpen(true)}
+            className="text-[10px] font-black text-stone-400 uppercase tracking-widest hover:text-emerald-500 transition-colors active:scale-95 flex items-center justify-center gap-1.5 mx-auto bg-white/50 px-4 py-2 rounded-full border border-stone-100"
+          >
+            about?
+          </button>
+        </div>
 
         {/* sleek modern floating action pill */}
         {!isCreating && (
@@ -578,7 +576,7 @@ export default function Home() {
           </div>
         )}
 
-        {/* NEW: about the creator bottom sheet */}
+        {/* about the creator bottom sheet */}
         {isAboutOpen && (
           <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300">
             <div className="bg-[#fdfbf7] w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500 overflow-hidden relative pb-8 sm:pb-0">
@@ -719,7 +717,7 @@ export default function Home() {
 
                   {/* 4. LinkedIn */}
                   <a
-                    href="https://linkedin.com/in/fernando-halimm"
+                    href="https://linkedin.com/in/fernando-halim"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="w-full relative overflow-hidden flex items-center justify-between p-4 bg-white border-2 border-stone-100 rounded-2xl hover:border-blue-300 hover:shadow-md transition-all active:scale-[0.98] group"
