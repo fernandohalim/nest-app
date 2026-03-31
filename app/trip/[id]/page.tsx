@@ -239,12 +239,49 @@ export default function TripDetail() {
 
           if (exp.splitType === "exact" && exp.items) {
             const myItems = exp.items.filter((i) => i.assignedTo.includes(id));
+            let myBaseSum = 0;
+
             myItems.forEach((i) => {
               const share =
                 i.assignedTo.length > 1 ? `(1/${i.assignedTo.length})` : "";
-              originalSum += i.price / i.assignedTo.length;
-              subItems.push(`${i.name} ${share}`.trim());
+              const baseShare = i.price / i.assignedTo.length;
+              myBaseSum += baseShare;
+              originalSum += baseShare;
+
+              const priceStr = Math.round(baseShare).toLocaleString();
+              subItems.push(`${i.name} ${share} • ${priceStr}`.trim());
             });
+
+            const itemsSum = exp.items.reduce(
+              (acc, item) => acc + item.price,
+              0,
+            );
+            const difference = exp.totalAmount - itemsSum;
+
+            if (Math.abs(difference) > 0) {
+              const amountOwed = exp.owedBy[id] || 0;
+              const extra = exp.adjustments?.[id] || 0;
+              const diffShare = amountOwed - myBaseSum - extra;
+
+              if (Math.abs(diffShare) >= 0.5) {
+                const label = difference > 0 ? "tax & tip" : "global discount";
+                const sign = diffShare > 0 ? "+" : "";
+                subItems.push(
+                  `${label} • ${sign}${Math.round(diffShare).toLocaleString()}`,
+                );
+              }
+            }
+          } else if (exp.splitType === "adjustment") {
+            const extra = exp.adjustments?.[id] || 0;
+            if (extra > 0) {
+              const baseSplit = amt - extra;
+              subItems.push(
+                `debt after split • ${Math.round(baseSplit).toLocaleString()}`,
+              );
+              subItems.push(
+                `adjusted bill • +${Math.round(extra).toLocaleString()}`,
+              );
+            }
           }
 
           memberDetails[id].owedItems.push({
@@ -1254,62 +1291,183 @@ export default function TripDetail() {
                                 exp.settledShares?.[memberId] || false;
                               const extra = exp.adjustments?.[memberId];
 
+                              const memberBaseSum =
+                                exp.splitType === "exact" && exp.items
+                                  ? exp.items
+                                      .filter((i) =>
+                                        i.assignedTo.includes(memberId),
+                                      )
+                                      .reduce(
+                                        (acc, i) =>
+                                          acc + i.price / i.assignedTo.length,
+                                        0,
+                                      )
+                                  : 0;
+                              const memberDiffShare =
+                                amount - memberBaseSum - (extra || 0);
+
                               return (
                                 <div
                                   key={memberId}
-                                  className="flex justify-between items-center bg-white p-3.5 rounded-2xl shadow-sm border border-stone-100 hover:shadow-md transition-shadow"
+                                  className="flex flex-col bg-white p-3.5 sm:p-4 rounded-2xl shadow-sm border border-stone-100 hover:shadow-md transition-shadow"
                                 >
-                                  <div className="flex items-center gap-3">
-                                    <div
-                                      className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black border ${getAvatarColor(getMemberName(memberId))}`}
-                                    >
-                                      {getInitials(getMemberName(memberId))}
-                                    </div>
-                                    <div className="flex flex-col">
+                                  {/* 🔥 TOP ROW: Perfectly Centered Header 🔥 */}
+                                  <div className="flex justify-between items-center w-full">
+                                    {/* Left: Avatar & Name */}
+                                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                                      <div
+                                        className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-black border ${getAvatarColor(getMemberName(memberId))}`}
+                                      >
+                                        {getInitials(getMemberName(memberId))}
+                                      </div>
                                       <span
-                                        className={`text-sm font-extrabold ${isSettled ? "text-stone-400" : "text-stone-800"}`}
+                                        className={`text-sm sm:text-base font-extrabold truncate ${isSettled ? "text-stone-400" : "text-stone-800"}`}
                                       >
                                         {getMemberName(memberId)}
                                       </span>
-                                      {extra ? (
-                                        <span className="text-[10px] text-stone-400 font-bold tracking-wide">
-                                          +{extra.toLocaleString()} extra
+                                    </div>
+
+                                    {/* Right: Button & Total */}
+                                    <div className="flex items-center gap-3 shrink-0 pl-2">
+                                      {canMarkPaid ? (
+                                        <button
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            toggleExpenseSettled(
+                                              tripId,
+                                              exp.id,
+                                              memberId,
+                                            );
+                                          }}
+                                          className={`text-[11px] font-bold px-3 py-1.5 rounded-lg transition-colors ${
+                                            isSettled
+                                              ? "bg-emerald-50 text-emerald-600 hover:bg-rose-50 hover:text-rose-600"
+                                              : "bg-stone-100 text-stone-600 hover:bg-emerald-100 hover:text-emerald-700"
+                                          }`}
+                                        >
+                                          {isSettled ? "paid ✓" : "mark paid"}
+                                        </button>
+                                      ) : (
+                                        isSettled && (
+                                          <span className="text-[11px] font-bold px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg">
+                                            paid ✓
+                                          </span>
+                                        )
+                                      )}
+
+                                      <div className="flex flex-col items-end min-w-17.5 sm:min-w-21.25">
+                                        <span
+                                          className={`font-black text-lg leading-none ${isSettled ? "text-stone-300 line-through decoration-2" : "text-stone-800"}`}
+                                        >
+                                          {Math.round(amount).toLocaleString()}
                                         </span>
-                                      ) : null}
+                                      </div>
                                     </div>
                                   </div>
-                                  <div className="flex items-center gap-3">
-                                    {canMarkPaid ? (
-                                      <button
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          toggleExpenseSettled(
-                                            tripId,
-                                            exp.id,
-                                            memberId,
-                                          );
-                                        }}
-                                        className={`text-[11px] font-bold px-3 py-1.5 rounded-lg transition-colors ${
-                                          isSettled
-                                            ? "bg-emerald-50 text-emerald-600 hover:bg-rose-50 hover:text-rose-600"
-                                            : "bg-stone-100 text-stone-600 hover:bg-emerald-100 hover:text-emerald-700"
-                                        }`}
-                                      >
-                                        {isSettled ? "paid ✓" : "mark paid"}
-                                      </button>
-                                    ) : (
-                                      isSettled && (
-                                        <span className="text-[11px] font-bold px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg">
-                                          paid ✓
-                                        </span>
-                                      )
-                                    )}
-                                    <span
-                                      className={`font-black text-lg ${isSettled ? "text-stone-300 line-through decoration-2" : "text-stone-800"}`}
-                                    >
-                                      {Math.round(amount).toLocaleString()}
-                                    </span>
-                                  </div>
+
+                                  {/* 🔥 BOTTOM ROW: Indented Details 🔥 */}
+                                  {((exp.splitType === "exact" && exp.items) ||
+                                    extra) && (
+                                    <div className="pl-[44px] w-full flex flex-col gap-1 mt-2">
+                                      {exp.splitType === "exact" &&
+                                        exp.items && (
+                                          <>
+                                            {exp.items
+                                              .filter((i) =>
+                                                i.assignedTo.includes(memberId),
+                                              )
+                                              .map((i) => {
+                                                const baseShare =
+                                                  i.price / i.assignedTo.length;
+                                                return (
+                                                  <span
+                                                    key={i.id}
+                                                    className="text-[11px] font-bold text-stone-400 leading-tight flex justify-between gap-3"
+                                                  >
+                                                    <span className="truncate">
+                                                      ↳ {i.name}
+                                                    </span>
+                                                    <span className="shrink-0 text-stone-300">
+                                                      {Math.round(
+                                                        baseShare,
+                                                      ).toLocaleString()}
+                                                    </span>
+                                                  </span>
+                                                );
+                                              })}
+
+                                            {Math.abs(difference) > 0 &&
+                                              Math.abs(memberDiffShare) >=
+                                                0.5 && (
+                                                <span
+                                                  className={`text-[11px] font-bold leading-tight flex justify-between gap-3 ${difference > 0 ? "text-amber-500/80" : "text-emerald-500/80"}`}
+                                                >
+                                                  <span className="truncate">
+                                                    ↳{" "}
+                                                    {difference > 0
+                                                      ? "tax & tip"
+                                                      : "global discount"}
+                                                  </span>
+                                                  <span className="shrink-0">
+                                                    {memberDiffShare > 0
+                                                      ? "+"
+                                                      : ""}
+                                                    {Math.round(
+                                                      memberDiffShare,
+                                                    ).toLocaleString()}
+                                                  </span>
+                                                </span>
+                                              )}
+                                          </>
+                                        )}
+
+                                      {extra ? (
+                                        exp.splitType === "adjustment" ? (
+                                          <>
+                                            <span className="text-[11px] font-bold text-stone-400 leading-tight flex justify-between gap-3 mt-1">
+                                              <span className="truncate">
+                                                ↳ debt after split
+                                              </span>
+                                              <span className="shrink-0 text-stone-300">
+                                                {Math.round(
+                                                  amount - extra,
+                                                ).toLocaleString()}
+                                              </span>
+                                            </span>
+                                            <span className="text-[11px] font-bold text-amber-500/80 leading-tight flex justify-between gap-3">
+                                              <span className="truncate">
+                                                <span className="text-amber-400/50 mr-1.5">
+                                                  ↳
+                                                </span>
+                                                adjusted bill
+                                              </span>
+                                              <span className="shrink-0 text-amber-500">
+                                                +
+                                                {Math.round(
+                                                  extra,
+                                                ).toLocaleString()}
+                                              </span>
+                                            </span>
+                                          </>
+                                        ) : (
+                                          <span className="text-[11px] font-bold text-amber-500/80 leading-tight flex justify-between gap-3 mt-1">
+                                            <span className="truncate">
+                                              <span className="text-amber-400/50 mr-1.5">
+                                                ↳
+                                              </span>
+                                              extra adjustment
+                                            </span>
+                                            <span className="shrink-0 text-amber-500">
+                                              +
+                                              {Math.round(
+                                                extra,
+                                              ).toLocaleString()}
+                                            </span>
+                                          </span>
+                                        )
+                                      ) : null}
+                                    </div>
+                                  )}
                                 </div>
                               );
                             },
@@ -1529,55 +1687,88 @@ export default function TripDetail() {
                               <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">
                                 🍕 consumed
                               </span>
-                              <div className="flex flex-col gap-3.5">
+                              <div className="flex flex-col gap-4">
                                 {details.owedItems.map((item, idx) => (
                                   <div
                                     key={`owed-${idx}`}
-                                    className={`flex justify-between items-start gap-4 text-sm ${item.isSettled ? "opacity-60 grayscale" : ""}`}
+                                    className={`flex flex-col gap-1 text-sm w-full ${item.isSettled ? "opacity-60 grayscale" : ""}`}
                                   >
-                                    <div className="flex flex-col gap-1 flex-1">
+                                    {/* 🔥 TOP ROW: Title & Final Amount Aligned 🔥 */}
+                                    <div className="flex justify-between items-start gap-4 w-full">
                                       <span
                                         className={`font-bold text-stone-700 leading-tight ${item.isSettled ? "line-through decoration-stone-400 decoration-2" : ""}`}
                                       >
                                         {item.title}
                                       </span>
-                                      {item.subItems &&
-                                        item.subItems.length > 0 && (
-                                          <div className="flex flex-col mt-0.5">
-                                            {item.subItems.map((sub, sIdx) => (
-                                              <span
-                                                key={sIdx}
-                                                className="text-[11px] font-bold text-stone-400 flex gap-1.5 leading-tight"
-                                              >
-                                                <span className="text-stone-300">
-                                                  ↳
-                                                </span>{" "}
-                                                {sub}
-                                              </span>
-                                            ))}
-                                          </div>
+                                      <div className="flex flex-col items-end shrink-0 gap-1">
+                                        <span
+                                          className={`font-black ${item.isSettled ? "text-stone-400 line-through decoration-2" : "text-stone-800"}`}
+                                        >
+                                          {Math.round(
+                                            item.amount,
+                                          ).toLocaleString()}
+                                        </span>
+                                        {item.isSettled && (
+                                          <span className="text-[9px] font-black text-stone-400 uppercase tracking-widest mt-0.5">
+                                            settled ✓
+                                          </span>
                                         )}
-                                      {item.extra ? (
-                                        <span className="text-[10px] font-black text-amber-500 bg-amber-50 px-2 py-0.5 rounded-md self-start mt-1">
-                                          +{item.extra.toLocaleString()}{" "}
-                                          adjustment
-                                        </span>
-                                      ) : null}
+                                      </div>
                                     </div>
-                                    <div className="flex flex-col items-end shrink-0 gap-1">
-                                      <span
-                                        className={`font-black ${item.isSettled ? "text-stone-400 line-through decoration-2" : "text-stone-800"}`}
-                                      >
-                                        {Math.round(
-                                          item.amount,
-                                        ).toLocaleString()}
-                                      </span>
-                                      {item.isSettled && (
-                                        <span className="text-[9px] font-black text-stone-400 uppercase tracking-widest">
-                                          settled ✓
-                                        </span>
+
+                                    {/* 🔥 BOTTOM ROW: Sub Items perfectly justified 🔥 */}
+                                    {item.subItems &&
+                                      item.subItems.length > 0 && (
+                                        <div className="flex flex-col mt-0.5 w-full gap-1">
+                                          {item.subItems.map((sub, sIdx) => {
+                                            const [namePart, pricePart] =
+                                              sub.split(" • ");
+
+                                            let textColor = "text-stone-400";
+                                            let priceColor = "text-stone-300";
+                                            let arrowColor = "text-stone-300";
+
+                                            if (
+                                              namePart.includes(
+                                                "global discount",
+                                              )
+                                            ) {
+                                              textColor = "text-emerald-500/80";
+                                              priceColor = "text-emerald-500";
+                                              arrowColor =
+                                                "text-emerald-400/50";
+                                            } else if (
+                                              namePart.includes("tax & tip") ||
+                                              namePart.includes("adjusted bill")
+                                            ) {
+                                              textColor = "text-amber-500/80";
+                                              priceColor = "text-amber-500";
+                                              arrowColor = "text-amber-400/50";
+                                            }
+
+                                            return (
+                                              <div
+                                                key={sIdx}
+                                                className={`text-[11px] font-bold flex justify-between gap-3 leading-tight w-full ${textColor}`}
+                                              >
+                                                <span className="truncate flex items-center gap-1.5">
+                                                  <span className={arrowColor}>
+                                                    ↳
+                                                  </span>
+                                                  {namePart}
+                                                </span>
+                                                {pricePart && (
+                                                  <span
+                                                    className={`shrink-0 ${priceColor}`}
+                                                  >
+                                                    {pricePart}
+                                                  </span>
+                                                )}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
                                       )}
-                                    </div>
                                   </div>
                                 ))}
                               </div>
