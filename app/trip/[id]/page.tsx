@@ -438,6 +438,18 @@ export default function TripDetail() {
     price: number;
   }
 
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        const base64String = (reader.result as string).split(",")[1];
+        resolve(base64String);
+      };
+      reader.onerror = (error) => reject(error);
+    });
+  };
+
   const processReceiptFile = async (file: File) => {
     setScanProgress(0);
     setIsScanning(true);
@@ -450,16 +462,16 @@ export default function TripDetail() {
     }, 300);
 
     try {
-      const formData = new FormData();
-      formData.append("receipt", file);
+      const base64Data = await fileToBase64(file);
 
-      const res = await fetch("/api/scan-receipt", {
-        method: "POST",
-        body: formData,
+      const { data, error } = await supabase.functions.invoke("scan-receipt", {
+        body: {
+          imageBase64: base64Data,
+          mimeType: file.type,
+        },
       });
 
-      if (!res.ok) throw new Error("failed to scan");
-      const data = await res.json();
+      if (error || data?.error) throw new Error("failed to scan");
 
       const formattedItems: ExpenseItem[] = data.items.map(
         (item: RawReceiptItem) => ({
@@ -1717,17 +1729,6 @@ export default function TripDetail() {
       {/* sleek modern floating action menu */}
       {!isAddingExpense && canEdit && trip.status !== "finished" && (
         <div className="fixed bottom-8 right-8 lg:bottom-12 lg:right-12 flex flex-col gap-3 z-40 items-end animate-in slide-in-from-bottom-8 duration-500">
-          {/* NEW: Context hook for brand new trips! disappears after the first expense */}
-          {trip.expenses.length === 0 && (
-            <div className="animate-bounce mb-1 mr-2">
-              <div className="bg-stone-800 text-stone-200 text-[10px] font-black tracking-widest uppercase px-4 py-2.5 rounded-2xl shadow-xl relative border border-stone-700">
-                scan or add manual ✨
-                {/* little speech bubble tail pointing to the buttons */}
-                <div className="absolute -bottom-1.5 right-6 w-3 h-3 bg-stone-800 border-b border-r border-stone-700 rotate-45 rounded-sm"></div>
-              </div>
-            </div>
-          )}
-
           {/* ultra-premium scan receipt pill */}
           <button
             onClick={() => {
