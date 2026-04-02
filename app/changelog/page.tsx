@@ -5,6 +5,14 @@ import packageJson from "../../package.json";
 
 const releases = [
   {
+    version: "1.2.2",
+    date: "apr 2, 2026",
+    title: "small changes 😊",
+    badge: "patch",
+    badgeColor: "bg-teal-100 text-teal-700 border-teal-200",
+    features: ["fix info icon size inconsistency."],
+  },
+  {
     version: "1.2.1",
     date: "apr 2, 2026",
     title: "crew management & prompt fix 👥",
