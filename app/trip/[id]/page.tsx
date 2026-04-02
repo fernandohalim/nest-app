@@ -91,6 +91,11 @@ export default function TripDetail() {
     trip?.members.find((m) => m.id === id)?.name || "unknown";
 
   const [newMemberName, setNewMemberName] = useState("");
+
+  const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
+  const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
+  const [editMemberName, setEditMemberName] = useState("");
+
   const [isAddingExpense, setIsAddingExpense] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isScanning, setIsScanning] = useState(false);
@@ -439,6 +444,14 @@ export default function TripDetail() {
     }
     addMember(tripId, { id: uuidv4(), name: newMemberName.trim() });
     setNewMemberName("");
+  };
+
+  const handleRenameMember = async (memberId: string) => {
+    if (!editMemberName.trim()) return;
+    await useTripStore
+      .getState()
+      .updateMember(tripId, memberId, editMemberName.trim());
+    setEditingMemberId(null);
   };
 
   const handleRemoveMember = (memberId: string, memberName: string) => {
@@ -964,8 +977,8 @@ export default function TripDetail() {
 
         {/* cute crew section with colorful pills */}
         <section className="mb-10 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-100">
-          <div className="flex justify-between items-end mb-4 px-1">
-            <div className="flex items-center gap-2">
+          <div className="flex justify-between items-center mb-4 px-1">
+            <div className="flex items-center gap-3">
               <h2 className="text-xl font-extrabold text-stone-800">
                 members 🤘
               </h2>
@@ -994,54 +1007,51 @@ export default function TripDetail() {
               </button>
             </div>
 
-            <span className="text-sm font-bold text-stone-400 bg-stone-100 px-3 py-1 rounded-full shrink-0">
-              {trip.members.length}
-            </span>
-          </div>
-
-          <div className="flex flex-wrap gap-2 mb-3">
-            {trip.members.map((member) => {
-              const colorClass = getAvatarColor(member.name);
-              return (
-                <div
-                  key={member.id}
-                  className="pl-1.5 pr-3 py-1.5 bg-white border-2 border-stone-100 shadow-sm rounded-full text-sm font-bold flex items-center gap-2 hover:-translate-y-1 hover:shadow-md hover:border-stone-200 transition-all cursor-default"
-                >
-                  <div
-                    className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black border ${colorClass}`}
-                  >
-                    {getInitials(member.name)}
-                  </div>
-                  <span className="text-stone-700">{member.name}</span>
-                  {canEdit && trip.status !== "finished" && (
-                    <button
-                      onClick={() => handleRemoveMember(member.id, member.name)}
-                      className="w-6 h-6 flex items-center justify-center text-stone-300 hover:text-white hover:bg-rose-500 rounded-full transition-all active:scale-90 ml-1"
-                    >
-                      ×
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-
-          {canEdit && trip.status !== "finished" && (
-            <form onSubmit={handleAddMember} className="flex gap-2 mt-5">
-              <input
-                type="text"
-                value={newMemberName}
-                onChange={(e) => setNewMemberName(e.target.value)}
-                placeholder="type a name..."
-                className="flex-1 bg-white border-2 border-stone-100 shadow-sm rounded-2xl px-5 py-3.5 text-sm font-bold focus:outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 transition-all placeholder:font-medium placeholder:text-stone-300"
-              />
+            {canEdit && trip.status !== "finished" && (
               <button
-                type="submit"
-                className="px-6 py-3.5 bg-stone-900 text-white hover:bg-emerald-600 rounded-2xl text-sm font-bold transition-all shadow-md active:scale-95"
+                onClick={() => setIsMemberModalOpen(true)}
+                className="group flex items-center gap-2.5 text-xs font-bold px-3 py-1.5 sm:px-4 sm:py-2 bg-white border-2 border-stone-200 text-stone-600 rounded-xl hover:bg-stone-800 hover:text-white hover:border-stone-800 transition-all active:scale-95 shadow-sm"
               >
-                add +
+                {trip.members.length === 0 ? (
+                  <span>add member(s)</span>
+                ) : (
+                  <>
+                    {/* the integrated counter badge */}
+                    <span className="flex items-center justify-center bg-stone-100 text-stone-500 min-w-5.5 h-5.5 px-1.5 rounded-lg group-hover:bg-stone-700 group-hover:text-stone-300 transition-colors">
+                      {trip.members.length}
+                    </span>
+                    <span>edit member(s)</span>
+                  </>
+                )}
               </button>
-            </form>
+            )}
+          </div>
+
+          {trip.members.length === 0 ? (
+            <div className="p-6 border-2 border-dashed border-stone-200 rounded-3xl text-center bg-white/50">
+              <p className="text-sm font-bold text-stone-400">
+                no members yet! add some friends to start splitting.
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2 mb-3">
+              {trip.members.map((member) => {
+                const colorClass = getAvatarColor(member.name);
+                return (
+                  <div
+                    key={member.id}
+                    className="pl-1.5 pr-4 py-1.5 bg-white border-2 border-stone-100 shadow-sm rounded-full text-sm font-bold flex items-center gap-2 hover:-translate-y-1 hover:shadow-md hover:border-emerald-200 transition-all cursor-default group"
+                  >
+                    <div
+                      className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black border transition-transform group-hover:scale-110 group-hover:rotate-6 ${colorClass}`}
+                    >
+                      {getInitials(member.name)}
+                    </div>
+                    <span className="text-stone-700">{member.name}</span>
+                  </div>
+                );
+              })}
+            </div>
           )}
         </section>
 
@@ -2206,6 +2216,152 @@ export default function TripDetail() {
             processReceiptFile(file);
           }}
         />
+      )}
+
+      {/* 🚀 member management modal */}
+      {isMemberModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200"
+            onClick={() => {
+              setIsMemberModalOpen(false);
+              setEditingMemberId(null);
+            }}
+          ></div>
+          <div className="relative w-full max-w-md bg-white rounded-4xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200 border border-stone-100">
+            {/* 🔥 tighter padding: p-4 sm:p-5 */}
+            <div className="flex items-center justify-between p-4 sm:p-5 border-b border-stone-100 bg-stone-50/50">
+              <div>
+                <h3 className="text-xl font-black text-stone-800">
+                  manage crew 👥
+                </h3>
+                <p className="text-xs font-bold text-stone-400 mt-1">
+                  add, rename, or remove friends
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setIsMemberModalOpen(false);
+                  setEditingMemberId(null);
+                }}
+                className="w-10 h-10 flex items-center justify-center bg-white border-2 border-stone-100 rounded-full text-stone-400 hover:text-stone-800 hover:border-stone-300 transition-all active:scale-90"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* 🔥 tighter padding & empty state added */}
+            <div className="overflow-y-auto p-4 sm:p-5 space-y-3 bg-[#fdfbf7]">
+              {trip.members.length === 0 ? (
+                <div className="py-10 flex flex-col items-center justify-center text-center">
+                  <div className="text-5xl mb-3 opacity-40 animate-bounce">
+                    👻
+                  </div>
+                  <p className="text-sm font-bold text-stone-400">
+                    it&apos;s a ghost town in here!
+                  </p>
+                  <p className="text-xs font-bold text-stone-300 mt-1">
+                    add some crew members below.
+                  </p>
+                </div>
+              ) : (
+                trip.members.map((member) => (
+                  <div
+                    key={member.id}
+                    className="flex items-center justify-between bg-white p-3 border-2 border-stone-100 rounded-2xl shadow-sm hover:border-stone-200 transition-colors group"
+                  >
+                    {editingMemberId === member.id ? (
+                      <div className="flex items-center gap-2 w-full">
+                        <input
+                          type="text"
+                          autoFocus
+                          value={editMemberName}
+                          onChange={(e) => setEditMemberName(e.target.value)}
+                          className="flex-1 bg-stone-50 border-2 border-stone-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:border-emerald-400 focus:bg-white transition-all"
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter")
+                              handleRenameMember(member.id);
+                            if (e.key === "Escape") setEditingMemberId(null);
+                          }}
+                        />
+                        <button
+                          onClick={() => handleRenameMember(member.id)}
+                          className="p-2 bg-emerald-100 text-emerald-600 rounded-xl hover:bg-emerald-500 hover:text-white transition-colors"
+                        >
+                          <svg
+                            className="w-5 h-5"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2.5}
+                              d="M5 13l4 4L19 7"
+                            />
+                          </svg>
+                        </button>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-3">
+                          <div
+                            className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-black border ${getAvatarColor(member.name)}`}
+                          >
+                            {getInitials(member.name)}
+                          </div>
+                          <span className="font-extrabold text-stone-700">
+                            {member.name}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                          <button
+                            onClick={() => {
+                              setEditingMemberId(member.id);
+                              setEditMemberName(member.name);
+                            }}
+                            className="w-8 h-8 flex items-center justify-center rounded-xl bg-stone-100 text-stone-500 hover:bg-amber-100 hover:text-amber-600 transition-colors"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            onClick={() =>
+                              handleRemoveMember(member.id, member.name)
+                            }
+                            className="w-8 h-8 flex items-center justify-center rounded-xl bg-stone-100 text-stone-500 hover:bg-rose-100 hover:text-rose-600 transition-colors"
+                          >
+                            🗑️
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* 🔥 tighter padding here too */}
+            <div className="p-4 sm:p-5 bg-white border-t border-stone-100">
+              <form onSubmit={handleAddMember} className="flex gap-2">
+                <input
+                  type="text"
+                  value={newMemberName}
+                  onChange={(e) => setNewMemberName(e.target.value)}
+                  placeholder="type a new name..."
+                  className="flex-1 bg-stone-50 border-2 border-stone-100 shadow-inner rounded-2xl px-5 py-3.5 text-sm font-bold focus:outline-none focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100 transition-all placeholder:font-medium placeholder:text-stone-300"
+                />
+                <button
+                  type="submit"
+                  disabled={!newMemberName.trim()}
+                  className="px-6 py-3.5 bg-stone-900 text-white disabled:bg-stone-300 disabled:text-stone-500 hover:bg-emerald-600 rounded-2xl text-sm font-bold transition-all shadow-md active:scale-95 disabled:active:scale-100 disabled:shadow-none"
+                >
+                  add +
+                </button>
+              </form>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   );

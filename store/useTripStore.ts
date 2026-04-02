@@ -15,6 +15,7 @@ interface TripStore {
   updateTripStatus: (tripId: string, status: string) => Promise<void>;
   deleteTrip: (tripId: string) => Promise<void>;
   addMember: (tripId: string, member: Member) => Promise<void>;
+  updateMember: (tripId: string, memberId: string, newName: string) => Promise<void>;
   deleteMember: (tripId: string, memberId: string) => Promise<void>;
   addExpense: (tripId: string, expense: Expense) => Promise<void>;
   updateExpense: (
@@ -264,6 +265,24 @@ export const useTripStore = create<TripStore>((set, get) => ({
     await supabase
       .from("members")
       .insert({ id: member.id, trip_id: tripId, name: member.name });
+    set({ isSyncing: false });
+  },
+
+  updateMember: async (tripId, memberId, newName) => {
+    set({ isSyncing: true });
+    set((state) => ({
+      trips: state.trips.map((t) =>
+        t.id === tripId
+          ? {
+              ...t,
+              members: t.members.map((m) =>
+                m.id === memberId ? { ...m, name: newName } : m,
+              ),
+            }
+          : t,
+      ),
+    }));
+    await supabase.from("members").update({ name: newName }).eq("id", memberId);
     set({ isSyncing: false });
   },
 

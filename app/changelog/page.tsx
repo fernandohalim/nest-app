@@ -5,6 +5,18 @@ import packageJson from "../../package.json";
 
 const releases = [
   {
+    version: "1.2.1",
+    date: "apr 2, 2026",
+    title: "crew management & prompt fix 👥",
+    badge: "patch",
+    badgeColor: "bg-sky-100 text-sky-700 border-sky-200",
+    features: [
+      "added rename members feature.",
+      "refine the member management into a dedicated popup modal.",
+      "fix the receipt scanner prompt to strictly output exact category matches.",
+    ],
+  },
+  {
     version: "1.2",
     date: "mar 31, 2026",
     title: "math & polish 💅",
