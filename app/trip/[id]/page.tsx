@@ -43,6 +43,23 @@ const timeAgo = (dateStr: string) => {
   return `${Math.floor(hrs / 24)}d ago`;
 };
 
+// 🔥 NEW HELPER: Maps DB currency string to display symbol
+export const getCurrencySymbol = (currencyCode: string) => {
+  const symbols: Record<string, string> = {
+    IDR: "Rp",
+    SGD: "$",
+    MYR: "RM",
+    THB: "฿",
+    JPY: "¥",
+    KRW: "₩",
+    AUD: "$",
+    USD: "$",
+    EUR: "€",
+    GBP: "£",
+  };
+  return symbols[currencyCode] || currencyCode;
+};
+
 export default function TripDetail() {
   const params = useParams();
   const router = useRouter();
@@ -71,6 +88,11 @@ export default function TripDetail() {
     (Date.now() - lastActive) / (1000 * 60 * 60 * 24),
   );
   const daysLeft = Math.max(0, 7 - daysSinceActive);
+
+  // 🔥 Get the dynamic symbol based on the trip's currency
+  const currencySymbol = trip
+    ? getCurrencySymbol(trip.currency || "IDR")
+    : "Rp";
 
   const isOwner = Boolean(
     user?.id && trip?.owner_id && user.id === trip.owner_id,
@@ -230,12 +252,14 @@ export default function TripDetail() {
 
       if (error || data?.error) throw new Error("failed to scan");
 
-      const formattedItems: ExpenseItem[] = data.items.map((item: any) => ({
-        id: uuidv4(),
-        name: item.name,
-        price: item.price,
-        assignedTo: [],
-      }));
+      const formattedItems: ExpenseItem[] = data.items.map(
+        (item: { name: string; price: number }) => ({
+          id: uuidv4(),
+          name: item.name,
+          price: item.price,
+          assignedTo: [],
+        }),
+      );
 
       const totalScannedAmount =
         data.totalAmount ||
@@ -261,7 +285,7 @@ export default function TripDetail() {
       await new Promise((resolve) => setTimeout(resolve, 500));
       setEditingExpense(scannedExpense);
       setIsAddingExpense(true);
-    } catch (error) {
+    } catch {
       clearInterval(progressInterval);
       showAlert(
         "couldn't read that receipt, try another one!",
@@ -348,7 +372,7 @@ export default function TripDetail() {
               myBaseSum += myBaseShare;
               originalSum += myBaseShare;
               subItems.push(
-                `${i.name}${shareText} • ${Math.round(myBaseShare).toLocaleString()}`.trim(),
+                `${i.name}${shareText} • ${Number(myBaseShare).toLocaleString("en-US", { maximumFractionDigits: 2 })}`.trim(),
               );
             });
 
@@ -363,7 +387,7 @@ export default function TripDetail() {
               const diffShare = amountOwed - myBaseSum - extra;
               if (Math.abs(diffShare) >= 0.5) {
                 subItems.push(
-                  `${difference > 0 ? "tax & tip" : "global discount"} • ${diffShare > 0 ? "+" : ""}${Math.round(diffShare).toLocaleString()}`,
+                  `${difference > 0 ? "tax & tip" : "global discount"} • ${diffShare > 0 ? "+" : ""}${Number(diffShare).toLocaleString("en-US", { maximumFractionDigits: 2 })}`,
                 );
               }
             }
@@ -371,10 +395,10 @@ export default function TripDetail() {
             const extra = exp.adjustments?.[id] || 0;
             if (extra > 0) {
               subItems.push(
-                `debt after split • ${Math.round(amt - extra).toLocaleString()}`,
+                `debt after split • ${Number(amt - extra).toLocaleString("en-US", { maximumFractionDigits: 2 })}`,
               );
               subItems.push(
-                `adjusted bill • +${Math.round(extra).toLocaleString()}`,
+                `adjusted bill • +${Number(extra).toLocaleString("en-US", { maximumFractionDigits: 2 })}`,
               );
             }
           }
@@ -629,15 +653,17 @@ export default function TripDetail() {
             </div>
             <button
               onClick={() => {
-                trip.status === "finished"
-                  ? showAlert(
-                      "this trip is safely locked and stored permanently in the database. no cleanup robots will touch it! ✨",
-                      "trip secured 🔒",
-                    )
-                  : showAlert(
-                      "mark this trip as 'settled' in the settings menu to save it permanently. otherwise, the database will automatically clean it up to save space!",
-                      "retention policy ⏳",
-                    );
+                if (trip.status === "finished") {
+                  showAlert(
+                    "this trip is safely locked and stored permanently in the database. no cleanup robots will touch it! ✨",
+                    "trip secured 🔒",
+                  );
+                } else {
+                  showAlert(
+                    "mark this trip as 'settled' in the settings menu to save it permanently. otherwise, the database will automatically clean it up to save space!",
+                    "retention policy ⏳",
+                  );
+                }
               }}
               className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center transition-all active:scale-90 ${trip.status === "finished" ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200" : daysLeft <= 2 ? "bg-rose-100 text-rose-700 hover:bg-rose-200" : "bg-stone-100 text-stone-500 hover:bg-stone-200 hover:text-stone-800"}`}
             >
@@ -723,7 +749,9 @@ export default function TripDetail() {
           </div>
 
           <div className="text-5xl font-black tracking-tighter relative z-10 my-2 drop-shadow-md">
-            <span className="text-2xl text-emerald-200 align-top mr-1">rp</span>
+            <span className="text-2xl text-emerald-200 align-top mr-1">
+              {currencySymbol}
+            </span>
             {totalTripCost.toLocaleString()}
           </div>
 
@@ -887,7 +915,11 @@ export default function TripDetail() {
               />
               <CustomSelect
                 value={sortBy}
-                onChange={(val) => setSortBy(val as any)}
+                onChange={(val) =>
+                  setSortBy(
+                    val as "newest" | "oldest" | "amount_high" | "amount_low",
+                  )
+                }
                 options={[
                   { value: "newest", label: "latest first" },
                   { value: "oldest", label: "oldest first" },
@@ -977,7 +1009,7 @@ export default function TripDetail() {
                       </div>
                       <div className="text-right shrink-0 pl-2">
                         <p className="text-lg sm:text-xl font-black text-emerald-600">
-                          {exp.totalAmount.toLocaleString()}
+                          {currencySymbol} {exp.totalAmount.toLocaleString()}
                         </p>
                         <p className="text-[10px] sm:text-xs font-bold text-stone-400 mt-1 flex items-center justify-end gap-1">
                           {isExpanded ? "close" : "details"}
@@ -1028,7 +1060,11 @@ export default function TripDetail() {
                                       </span>
                                     </div>
                                     <span className="font-black text-stone-600">
-                                      {Math.round(item.price).toLocaleString()}
+                                      {currencySymbol}{" "}
+                                      {Number(item.price).toLocaleString(
+                                        "en-US",
+                                        { maximumFractionDigits: 2 },
+                                      )}
                                     </span>
                                   </div>
                                 ))}
@@ -1041,13 +1077,20 @@ export default function TripDetail() {
                                   <p className="leading-tight">
                                     subtotal is{" "}
                                     <span className="font-black">
-                                      {Math.round(itemsSum).toLocaleString()}
+                                      {currencySymbol}{" "}
+                                      {Number(itemsSum).toLocaleString(
+                                        "en-US",
+                                        { maximumFractionDigits: 2 },
+                                      )}
                                     </span>
                                     . the extra{" "}
                                     <span className="font-black">
-                                      {Math.round(
+                                      {currencySymbol}{" "}
+                                      {Number(
                                         Math.abs(difference),
-                                      ).toLocaleString()}
+                                      ).toLocaleString("en-US", {
+                                        maximumFractionDigits: 2,
+                                      })}
                                     </span>{" "}
                                     {difference > 0 ? "tax/tip" : "discount"} is
                                     split fairly across the items.
@@ -1139,7 +1182,11 @@ export default function TripDetail() {
                                         <span
                                           className={`font-black text-lg leading-none ${isSettled ? "text-stone-300 line-through decoration-2" : "text-stone-800"}`}
                                         >
-                                          {Math.round(amount).toLocaleString()}
+                                          {currencySymbol}{" "}
+                                          {Number(amount).toLocaleString(
+                                            "en-US",
+                                            { maximumFractionDigits: 2 },
+                                          )}
                                         </span>
                                       </div>
                                     </div>
@@ -1178,9 +1225,15 @@ export default function TripDetail() {
                                                       {shareText}
                                                     </span>
                                                     <span className="shrink-0 text-stone-300">
-                                                      {Math.round(
+                                                      {currencySymbol}{" "}
+                                                      {Number(
                                                         myBaseShare,
-                                                      ).toLocaleString()}
+                                                      ).toLocaleString(
+                                                        "en-US",
+                                                        {
+                                                          maximumFractionDigits: 2,
+                                                        },
+                                                      )}
                                                     </span>
                                                   </span>
                                                 );
@@ -1201,9 +1254,12 @@ export default function TripDetail() {
                                                     {memberDiffShare > 0
                                                       ? "+"
                                                       : ""}
-                                                    {Math.round(
-                                                      memberDiffShare,
-                                                    ).toLocaleString()}
+                                                    {currencySymbol}{" "}
+                                                    {Number(
+                                                      Math.abs(memberDiffShare),
+                                                    ).toLocaleString("en-US", {
+                                                      maximumFractionDigits: 2,
+                                                    })}
                                                   </span>
                                                 </span>
                                               )}
@@ -1217,9 +1273,12 @@ export default function TripDetail() {
                                                 ↳ debt after split
                                               </span>
                                               <span className="shrink-0 text-stone-300">
-                                                {Math.round(
+                                                {currencySymbol}{" "}
+                                                {Number(
                                                   amount - extra,
-                                                ).toLocaleString()}
+                                                ).toLocaleString("en-US", {
+                                                  maximumFractionDigits: 2,
+                                                })}
                                               </span>
                                             </span>
                                             <span className="text-[11px] font-bold text-amber-500/80 leading-tight flex justify-between gap-3">
@@ -1230,10 +1289,11 @@ export default function TripDetail() {
                                                 adjusted bill
                                               </span>
                                               <span className="shrink-0 text-amber-500">
-                                                +
-                                                {Math.round(
-                                                  extra,
-                                                ).toLocaleString()}
+                                                +{currencySymbol}{" "}
+                                                {Number(extra).toLocaleString(
+                                                  "en-US",
+                                                  { maximumFractionDigits: 2 },
+                                                )}
                                               </span>
                                             </span>
                                           </>
@@ -1246,10 +1306,11 @@ export default function TripDetail() {
                                               extra adjustment
                                             </span>
                                             <span className="shrink-0 text-amber-500">
-                                              +
-                                              {Math.round(
-                                                extra,
-                                              ).toLocaleString()}
+                                              +{currencySymbol}{" "}
+                                              {Number(extra).toLocaleString(
+                                                "en-US",
+                                                { maximumFractionDigits: 2 },
+                                              )}
                                             </span>
                                           </span>
                                         )
@@ -1261,26 +1322,69 @@ export default function TripDetail() {
                             },
                           )}
                         </div>
-                        {canEdit && trip.status !== "finished" && (
-                          <div className="flex gap-3">
+                        <div className="flex gap-2 sm:gap-3">
+                          {canEdit && trip.status !== "finished" ? (
+                            <>
+                              <button
+                                onClick={() =>
+                                  router.push(`/expense/${exp.id}`)
+                                }
+                                className="w-12 sm:w-14 shrink-0 flex items-center justify-center bg-white border-2 border-stone-200 text-stone-500 hover:border-emerald-400 hover:text-emerald-500 rounded-2xl transition-all active:scale-95 shadow-sm"
+                                title="Share Expense"
+                              >
+                                <svg
+                                  className="w-5 h-5 sm:w-6 sm:h-6"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2.5}
+                                    d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+                                  />
+                                </svg>
+                              </button>
+                              <button
+                                onClick={() => {
+                                  setEditingExpense(exp);
+                                  setExpandedExpenseId(null);
+                                  setIsAddingExpense(true);
+                                }}
+                                className="flex-1 text-xs sm:text-sm font-bold py-3 sm:py-3.5 bg-white border-2 border-stone-200 text-stone-700 hover:border-stone-800 hover:bg-stone-800 hover:text-white rounded-2xl transition-all active:scale-95 shadow-sm"
+                              >
+                                ✏️ edit
+                              </button>
+                              <button
+                                onClick={() => handleDeleteExpense(exp.id)}
+                                className="flex-1 text-xs sm:text-sm font-bold py-3 sm:py-3.5 bg-white border-2 border-rose-100 text-rose-500 hover:border-rose-500 hover:bg-rose-500 hover:text-white rounded-2xl transition-all active:scale-95 shadow-sm"
+                              >
+                                🗑️ delete
+                              </button>
+                            </>
+                          ) : (
                             <button
-                              onClick={() => {
-                                setEditingExpense(exp);
-                                setExpandedExpenseId(null);
-                                setIsAddingExpense(true);
-                              }}
-                              className="flex-1 text-sm font-bold py-3 bg-white border-2 border-stone-200 text-stone-700 hover:border-stone-800 hover:bg-stone-800 hover:text-white rounded-2xl transition-all active:scale-95 shadow-sm"
+                              onClick={() => router.push(`/expense/${exp.id}`)}
+                              className="flex-1 text-sm font-black py-3 sm:py-3.5 bg-emerald-500 text-white hover:bg-emerald-600 rounded-2xl transition-all active:scale-95 shadow-sm flex items-center justify-center gap-2"
                             >
-                              ✏️ edit
+                              <svg
+                                className="w-5 h-5"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2.5}
+                                  d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+                                />
+                              </svg>
+                              share
                             </button>
-                            <button
-                              onClick={() => handleDeleteExpense(exp.id)}
-                              className="flex-1 text-sm font-bold py-3 bg-white border-2 border-rose-100 text-rose-500 hover:border-rose-500 hover:bg-rose-500 hover:text-white rounded-2xl transition-all active:scale-95 shadow-sm"
-                            >
-                              🗑️ delete
-                            </button>
-                          </div>
-                        )}
+                          )}
+                        </div>
                       </div>
                     )}
                   </div>
@@ -1355,7 +1459,10 @@ export default function TripDetail() {
                     <div className="flex items-center gap-2 sm:gap-4 text-right flex-1 min-w-0 justify-end">
                       <div className="flex flex-col min-w-0 items-end">
                         <span className="font-extrabold text-base sm:text-lg text-emerald-400 truncate max-w-full">
-                          {Math.round(settlement.amount).toLocaleString()}
+                          {currencySymbol}{" "}
+                          {Number(settlement.amount).toLocaleString("en-US", {
+                            maximumFractionDigits: 2,
+                          })}
                         </span>
                         <span className="text-stone-400 font-bold text-[9px] sm:text-xs tracking-widest uppercase truncate max-w-full">
                           to {settlement.to.name}
@@ -1389,9 +1496,7 @@ export default function TripDetail() {
                       (details.totalPaid === 0 && details.totalOwed === 0)
                     )
                       return null;
-                    const net = Math.round(
-                      details.totalPaid - details.totalOwed,
-                    );
+                    const net = details.totalPaid - details.totalOwed;
 
                     return (
                       <div
@@ -1414,7 +1519,10 @@ export default function TripDetail() {
                             className={`text-xs font-black px-3.5 py-1.5 rounded-xl uppercase tracking-widest border-2 ${net > 0 ? "bg-emerald-50 text-emerald-600 border-emerald-100" : "bg-stone-50 text-stone-500 border-stone-200"}`}
                           >
                             {net > 0 ? "gets " : net < 0 ? "owes " : "even "}
-                            {Math.abs(net).toLocaleString()}
+                            {currencySymbol}{" "}
+                            {Number(Math.abs(net)).toLocaleString("en-US", {
+                              maximumFractionDigits: 2,
+                            })}
                           </span>
                         </div>
                         <div className="flex gap-3 mb-6">
@@ -1423,7 +1531,11 @@ export default function TripDetail() {
                               total paid out
                             </span>
                             <span className="font-black text-emerald-700">
-                              {Math.round(details.totalPaid).toLocaleString()}
+                              {currencySymbol}{" "}
+                              {Number(details.totalPaid).toLocaleString(
+                                "en-US",
+                                { maximumFractionDigits: 2 },
+                              )}
                             </span>
                           </div>
                           <div className="flex-1 bg-stone-50 border border-stone-100 rounded-2xl p-3 flex flex-col gap-1">
@@ -1431,7 +1543,11 @@ export default function TripDetail() {
                               total consumed
                             </span>
                             <span className="font-black text-stone-700">
-                              {Math.round(details.totalOwed).toLocaleString()}
+                              {currencySymbol}{" "}
+                              {Number(details.totalOwed).toLocaleString(
+                                "en-US",
+                                { maximumFractionDigits: 2 },
+                              )}
                             </span>
                           </div>
                         </div>
@@ -1457,6 +1573,7 @@ export default function TripDetail() {
                                       className={`font-black shrink-0 ${item.isNegative ? "text-stone-400" : "text-emerald-700"}`}
                                     >
                                       {item.isNegative ? "-" : "+"}
+                                      {currencySymbol}{" "}
                                       {Math.abs(item.amount).toLocaleString()}
                                     </span>
                                   </div>
@@ -1485,9 +1602,11 @@ export default function TripDetail() {
                                         <span
                                           className={`font-black ${item.isSettled ? "text-stone-400 line-through decoration-2" : "text-stone-800"}`}
                                         >
-                                          {Math.round(
-                                            item.amount,
-                                          ).toLocaleString()}
+                                          {currencySymbol}{" "}
+                                          {Number(item.amount).toLocaleString(
+                                            "en-US",
+                                            { maximumFractionDigits: 2 },
+                                          )}
                                         </span>
                                         {item.isSettled && (
                                           <span className="text-[9px] font-black text-stone-400 uppercase tracking-widest mt-0.5">
@@ -1537,7 +1656,7 @@ export default function TripDetail() {
                                                   <span
                                                     className={`shrink-0 ${priceColor}`}
                                                   >
-                                                    {pricePart}
+                                                    {currencySymbol} {pricePart}
                                                   </span>
                                                 )}
                                               </div>
@@ -1573,12 +1692,14 @@ export default function TripDetail() {
         <div className="fixed bottom-8 right-8 lg:bottom-12 lg:right-12 flex flex-col gap-3 z-40 items-end animate-in slide-in-from-bottom-8 duration-500">
           <button
             onClick={() => {
-              trip.members.length === 0
-                ? showAlert(
-                    "you need to add some friends to the tab first!",
-                    "lonely trip? 🧍",
-                  )
-                : setShowScanner(true);
+              if (trip.members.length === 0) {
+                showAlert(
+                  "you need to add some friends to the tab first!",
+                  "lonely trip? 🧍",
+                );
+              } else {
+                setShowScanner(true);
+              }
             }}
             disabled={isScanning}
             className="group relative active:scale-95 transition-all duration-300 disabled:opacity-50 disabled:active:scale-100"
@@ -1613,12 +1734,14 @@ export default function TripDetail() {
           </button>
           <button
             onClick={() => {
-              trip.members.length === 0
-                ? showAlert(
-                    "you need to add some friends to the tab first!",
-                    "lonely trip? 🧍",
-                  )
-                : setIsAddingExpense(true);
+              if (trip.members.length === 0) {
+                showAlert(
+                  "you need to add some friends to the tab first!",
+                  "lonely trip? 🧍",
+                );
+              } else {
+                setIsAddingExpense(true);
+              }
             }}
             className="flex items-center gap-3 pl-6 pr-2 py-2 bg-stone-900 text-white rounded-full shadow-[0_10px_40px_rgba(0,0,0,0.3)] hover:bg-emerald-600 active:scale-95 transition-all duration-300 group"
           >
@@ -1702,6 +1825,7 @@ export default function TripDetail() {
                   setIsAddingExpense(false);
                   setEditingExpense(undefined);
                 }}
+                currencySymbol={currencySymbol}
               />
             </div>
           </div>
@@ -1710,6 +1834,7 @@ export default function TripDetail() {
 
       {/* EXTRACTED MODALS GO HERE! */}
       <TripSettingsModal
+        key={showSettings ? "open" : "closed"}
         isOpen={showSettings}
         onClose={() => setShowSettings(false)}
         trip={trip}
@@ -1724,6 +1849,7 @@ export default function TripDetail() {
         onClose={() => setShowSettlementModal(false)}
         rawDebts={rawDebts}
         settlements={settlements}
+        currencySymbol={currencySymbol}
       />
 
       {showScanner && (

@@ -13,7 +13,7 @@ export default function Changelog() {
         {/* sticky cozy header */}
         <div className="sticky top-0 pt-4 pb-4 bg-[#fdfbf7]/90 backdrop-blur-xl z-20 flex items-center justify-between mb-8 border-b border-stone-100/50">
           <button
-            onClick={() => router.back()}
+            onClick={() => router.push("/")}
             className="w-11 h-11 flex items-center justify-center rounded-full bg-white shadow-sm border border-stone-100 text-stone-500 hover:text-emerald-600 hover:scale-110 active:scale-95 transition-all"
           >
             <svg

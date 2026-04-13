@@ -2,6 +2,19 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
+    version: "2.0",
+    date: "apr 13, 2026",
+    title: "receipts & borders 🌍",
+    badge: "major",
+    badgeColor: "bg-emerald-100 text-emerald-700 border-emerald-200",
+    features: [
+      "added smart multi-currency support with dynamic decimal formatting.",
+      "added exportable, high-res, nest-branded receipt images for easy sharing.",
+      "fixed the date picker with year navigation and a 'right now' shortcut.",
+      "fixed a navigation loop bug when exiting trips."
+    ],
+  },
+  {
     version: "1.2.3",
     date: "apr 2, 2026",
     title: "cleaning up 🧼",

@@ -96,4 +96,5 @@ export interface ExpenseFormProps {
   initialExpense?: Expense;
   onSave: (expense: Expense) => void;
   onCancel: () => void;
+  currencySymbol?: string;
 }

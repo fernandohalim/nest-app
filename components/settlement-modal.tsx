@@ -7,6 +7,7 @@ interface SettlementModalProps {
   onClose: () => void;
   rawDebts: { from: string; to: string; amount: number }[];
   settlements: Transaction[];
+  currencySymbol?: string;
 }
 
 export default function SettlementModal({
@@ -14,6 +15,7 @@ export default function SettlementModal({
   onClose,
   rawDebts,
   settlements,
+  currencySymbol = "Rp",
 }: SettlementModalProps) {
   if (!isOpen) return null;
 
@@ -79,7 +81,10 @@ export default function SettlementModal({
                         {debt.from} owes {debt.to}
                       </span>
                       <span className="font-black text-stone-400">
-                        {Math.round(debt.amount).toLocaleString()}
+                        {currencySymbol}{" "}
+                        {Number(debt.amount).toLocaleString("en-US", {
+                          maximumFractionDigits: 2,
+                        })}{" "}
                       </span>
                     </div>
                   ))}
@@ -113,7 +118,10 @@ export default function SettlementModal({
                         {s.from.name} pays {s.to.name}
                       </span>
                       <span className="font-black text-emerald-600">
-                        {Math.round(s.amount).toLocaleString()}
+                        {currencySymbol}{" "}
+                        {Number(s.amount).toLocaleString("en-US", {
+                          maximumFractionDigits: 2,
+                        })}
                       </span>
                     </div>
                   ))}

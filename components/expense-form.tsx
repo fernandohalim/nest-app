@@ -1,12 +1,19 @@
 "use client";
 
 import { useState } from "react";
-import { Member, Expense, ExpenseItem } from "@/lib/types";
+import { Member, Expense } from "@/lib/types";
 import { v4 as uuidv4 } from "uuid";
 import { useAlertStore } from "@/store/useAlertStore";
 import CustomSelect from "./custom-select";
 import CustomDatePicker from "./custom-date-picker";
-import { ExpenseFormProps } from "@/lib/types";
+
+export interface ExpenseFormProps {
+  members: Member[];
+  initialExpense?: Expense;
+  onSave: (expense: Expense) => void;
+  onCancel: () => void;
+  currencySymbol?: string;
+}
 
 const CATEGORIES = [
   { value: "food & bev", label: "🍔 food & bev" },
@@ -28,15 +35,47 @@ const getLocalISOString = () => {
   return `${y}-${m}-${d}T${h}:${min}:00`;
 };
 
-const formatNumber = (value: string | number) => {
-  if (!value) return "";
-  const numericOnly = value.toString().replace(/\D/g, "");
-  if (!numericOnly) return "";
-  return parseInt(numericOnly, 10).toLocaleString("en-US");
+// 🔥 Bulletproof formatter for decimals
+const formatNumber = (value: string | number | undefined) => {
+  if (value === "" || value === null || value === undefined) return "";
+  let strVal = value.toString();
+
+  strVal = strVal.replace(/[^\d.]/g, "");
+  const parts = strVal.split(".");
+
+  let wholePart = parts[0];
+  const decimalPart = parts.length > 1 ? "." + parts[1].substring(0, 2) : "";
+
+  if (!wholePart && !decimalPart) return "";
+  if (!wholePart) wholePart = "0";
+
+  const formattedWhole = parseInt(wholePart, 10).toLocaleString("en-US");
+
+  if (strVal.endsWith(".") && decimalPart === "") return formattedWhole + ".";
+
+  return formattedWhole + decimalPart;
 };
 
-const getRawNumber = (formattedValue: string) =>
-  parseInt(formattedValue.replace(/,/g, ""), 10) || 0;
+// 🔥 Bulletproof parser (prevents the crash you saw!)
+const getRawNumber = (formattedValue: string | number | undefined) => {
+  if (
+    formattedValue === undefined ||
+    formattedValue === null ||
+    formattedValue === ""
+  )
+    return 0;
+  const strVal = formattedValue.toString();
+  const num = parseFloat(strVal.replace(/,/g, ""));
+  return isNaN(num) ? 0 : num;
+};
+
+// Local type to handle typing decimals
+interface FormExpenseItem {
+  id: string;
+  name: string;
+  priceInput: string;
+  assignedTo: string[];
+}
 
 function useExpenseFormLogic(
   members: Member[],
@@ -99,14 +138,20 @@ function useExpenseFormLogic(
       : {},
   );
 
-  const [items, setItems] = useState<ExpenseItem[]>(
-    initialExpense?.items || [
-      { id: uuidv4(), name: "", price: 0, assignedTo: [] },
-    ],
+  // Initialize items with the new priceInput string
+  const [items, setItems] = useState<FormExpenseItem[]>(
+    initialExpense?.items
+      ? initialExpense.items.map((i) => ({
+          id: i.id,
+          name: i.name,
+          priceInput: i.price ? formatNumber(i.price) : "",
+          assignedTo: i.assignedTo,
+        }))
+      : [{ id: uuidv4(), name: "", priceInput: "", assignedTo: [] }],
   );
+
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Math & Handlers
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) =>
     setAmount(formatNumber(e.target.value));
   const handlePayerChange = (id: string, val: string) =>
@@ -119,19 +164,24 @@ function useExpenseFormLogic(
     );
 
   const handleAddItem = () =>
-    setItems([...items, { id: uuidv4(), name: "", price: 0, assignedTo: [] }]);
+    setItems([
+      ...items,
+      { id: uuidv4(), name: "", priceInput: "", assignedTo: [] },
+    ]);
+
   const handleRemoveItem = (id: string) =>
     setItems(items.filter((item) => item.id !== id));
 
   const handleItemChange = (
     id: string,
-    field: "name" | "price",
+    field: "name" | "priceInput",
     value: string,
   ) => {
     setItems(
       items.map((item) => {
         if (item.id === id) {
-          if (field === "price") return { ...item, price: getRawNumber(value) };
+          if (field === "priceInput")
+            return { ...item, priceInput: formatNumber(value) };
           return { ...item, name: value };
         }
         return item;
@@ -229,9 +279,15 @@ function useExpenseFormLogic(
         owedBy[id] = splitAmount;
       });
     } else if (splitType === "exact") {
-      const validItems = items.filter(
-        (i) => i.name.trim() !== "" && i.price > 0,
-      );
+      const validItems = items
+        .map((i) => ({
+          id: i.id,
+          name: i.name,
+          price: getRawNumber(i.priceInput),
+          assignedTo: i.assignedTo,
+        }))
+        .filter((i) => i.name.trim() !== "" && i.price > 0);
+
       if (validItems.length === 0) {
         showAlert(
           "add at least one item with a price to split it exactly.",
@@ -302,7 +358,14 @@ function useExpenseFormLogic(
       splitType,
       items:
         splitType === "exact"
-          ? items.filter((i) => i.name.trim() !== "" && i.price > 0)
+          ? items
+              .map((i) => ({
+                id: i.id,
+                name: i.name,
+                price: getRawNumber(i.priceInput),
+                assignedTo: i.assignedTo,
+              }))
+              .filter((i) => i.name.trim() !== "" && i.price > 0)
           : undefined,
       adjustments: splitType === "adjustment" ? savedAdjustments : undefined,
       settledShares: initialExpense?.settledShares,
@@ -312,13 +375,16 @@ function useExpenseFormLogic(
     });
   };
 
-  const totalAmountNum = parseFloat(amount.toString().replace(/,/g, "")) || 0;
+  const totalAmountNum = getRawNumber(amount);
   const currentPaidSum = Object.values(payers).reduce(
-    (sum, val) => sum + (parseFloat(val.toString().replace(/,/g, "")) || 0),
+    (sum, val) => sum + getRawNumber(val),
     0,
   );
   const mathDiff = totalAmountNum - currentPaidSum;
-  const itemsSum = items.reduce((acc, item) => acc + item.price, 0);
+  const itemsSum = items.reduce(
+    (acc, item) => acc + getRawNumber(item.priceInput),
+    0,
+  );
   const difference = totalAmountNum - itemsSum;
 
   return {
@@ -362,6 +428,7 @@ export default function ExpenseForm({
   initialExpense,
   onSave,
   onCancel,
+  currencySymbol = "Rp",
 }: ExpenseFormProps) {
   const {
     title,
@@ -414,10 +481,12 @@ export default function ExpenseForm({
           autoFocus
         />
         <div className="flex items-center gap-3">
-          <span className="text-4xl font-black text-stone-300">rp</span>
+          <span className="text-4xl font-black text-stone-300">
+            {currencySymbol}
+          </span>
           <input
             type="text"
-            inputMode="numeric"
+            inputMode="decimal"
             placeholder="0"
             value={amount}
             onChange={handleAmountChange}
@@ -486,7 +555,7 @@ export default function ExpenseForm({
                 </span>
                 <input
                   type="text"
-                  inputMode="numeric"
+                  inputMode="decimal"
                   placeholder="0"
                   value={payers[m.id] || ""}
                   onChange={(e) => handlePayerChange(m.id, e.target.value)}
@@ -514,7 +583,10 @@ export default function ExpenseForm({
                     left to assign:
                   </span>
                   <span className="text-sm font-black">
-                    {mathDiff.toLocaleString()}
+                    {currencySymbol}{" "}
+                    {Number(mathDiff).toLocaleString("en-US", {
+                      maximumFractionDigits: 2,
+                    })}
                   </span>
                 </div>
               ) : (
@@ -523,7 +595,10 @@ export default function ExpenseForm({
                     overpaid by:
                   </span>
                   <span className="text-sm font-black">
-                    {Math.abs(mathDiff).toLocaleString()}
+                    {currencySymbol}{" "}
+                    {Number(Math.abs(mathDiff)).toLocaleString("en-US", {
+                      maximumFractionDigits: 2,
+                    })}
                   </span>
                 </div>
               )}
@@ -625,7 +700,7 @@ export default function ExpenseForm({
                   {splitType === "adjustment" && (
                     <input
                       type="text"
-                      inputMode="numeric"
+                      inputMode="decimal"
                       placeholder="+ extra"
                       value={adjustments[m.id] || ""}
                       onChange={(e) =>
@@ -655,7 +730,7 @@ export default function ExpenseForm({
             {items.map((item) => {
               const isOrphaned =
                 item.name.trim() !== "" &&
-                item.price > 0 &&
+                getRawNumber(item.priceInput) > 0 &&
                 item.assignedTo.length === 0;
 
               return (
@@ -678,11 +753,11 @@ export default function ExpenseForm({
                     />
                     <input
                       type="text"
-                      inputMode="numeric"
+                      inputMode="decimal"
                       placeholder="price"
-                      value={item.price ? formatNumber(item.price) : ""}
+                      value={item.priceInput}
                       onChange={(e) =>
-                        handleItemChange(item.id, "price", e.target.value)
+                        handleItemChange(item.id, "priceInput", e.target.value)
                       }
                       className={`flex-4 min-w-0 text-sm font-black text-right bg-transparent px-3 py-3 sm:py-4 focus:outline-none focus:bg-white transition-all text-emerald-600 border-r-2 ${isOrphaned ? "border-rose-100" : "border-stone-100"}`}
                     />
@@ -784,16 +859,24 @@ export default function ExpenseForm({
           </div>
         )}
 
-        {/* Existing exact sum warning */}
+        {/* exact sum warning */}
         {splitType === "exact" && itemsSum > 0 && difference !== 0 && (
           <div className="p-5 bg-amber-50 border-2 border-amber-100 rounded-3xl text-sm font-bold text-amber-800 flex items-start gap-3 animate-in fade-in slide-in-from-bottom-2">
             <span className="text-2xl leading-none">💡</span>
             <p className="leading-tight">
               subtotal is{" "}
-              <span className="font-black">{itemsSum.toLocaleString()}</span>.
-              the extra{" "}
               <span className="font-black">
-                {Math.abs(difference).toLocaleString()}
+                {currencySymbol}{" "}
+                {Number(itemsSum).toLocaleString("en-US", {
+                  maximumFractionDigits: 2,
+                })}
+              </span>
+              . the extra{" "}
+              <span className="font-black">
+                {currencySymbol}{" "}
+                {Number(Math.abs(difference)).toLocaleString("en-US", {
+                  maximumFractionDigits: 2,
+                })}
               </span>{" "}
               {difference > 0 ? "tax/tip" : "discount"} will be split fairly
               across the items.

@@ -118,51 +118,103 @@ function useDatePickerLogic(value: string, onChange: (value: string) => void) {
     );
   };
 
+  // 🔥 NEW: Month & Year Jumpers
   const handlePrevMonth = (e: React.MouseEvent) => {
     e.stopPropagation();
     setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1));
   };
-
   const handleNextMonth = (e: React.MouseEvent) => {
     e.stopPropagation();
     setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1));
   };
-
-  const handleSelectDate = (day: number) => {
-    const newDate = new Date(viewDate.getFullYear(), viewDate.getMonth(), day);
-    let hours12 = parseInt(time12.h) || 12;
-    if (hours12 === 12) hours12 = 0;
-    if (time12.ampm === "PM") hours12 += 12;
-
-    newDate.setHours(hours12, parseInt(time12.m) || 0, 0, 0);
-    onChange(formatLocalISO(newDate));
+  const handlePrevYear = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setViewDate(new Date(viewDate.getFullYear() - 1, viewDate.getMonth(), 1));
+  };
+  const handleNextYear = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setViewDate(new Date(viewDate.getFullYear() + 1, viewDate.getMonth(), 1));
   };
 
-  const handleTimeChange = (field: "h" | "m" | "ampm", val: string) => {
-    if (field !== "ampm") val = val.replace(/\D/g, ""); // strip letters
-    const newTime = { ...time12, [field]: val };
-    setTime12(newTime);
+  // 🔥 NEW: Shortcut to right now
+  const handleSetNow = () => {
+    const now = new Date();
+    setViewDate(new Date(now.getFullYear(), now.getMonth(), 1));
+    let h = now.getHours();
+    const ampm = h >= 12 ? "PM" : "AM";
+    h = h % 12 || 12;
+    setTime12({
+      h: String(h).padStart(2, "0"),
+      m: String(now.getMinutes()).padStart(2, "0"),
+      ampm,
+    });
+    onChange(formatLocalISO(now));
+  };
 
-    let hours12 = parseInt(newTime.h) || 12;
-    let mins = parseInt(newTime.m) || 0;
-    if (hours12 > 12) hours12 = 12;
-    if (mins > 59) mins = 59;
+  // Centralized parent updater
+  const updateParentDate = (
+    day: number | null,
+    hStr: string,
+    mStr: string,
+    ampm: string,
+  ) => {
+    const targetDay =
+      day !== null
+        ? day
+        : value
+          ? new Date(value).getDate()
+          : new Date().getDate();
+    const newDate = new Date(
+      viewDate.getFullYear(),
+      viewDate.getMonth(),
+      targetDay,
+    );
+
+    const hours12 = parseInt(hStr, 10) || 12;
+    const mins = parseInt(mStr, 10) || 0;
 
     let hours24 = hours12;
     if (hours24 === 12) hours24 = 0;
-    if (newTime.ampm === "PM") hours24 += 12;
+    if (ampm === "PM") hours24 += 12;
 
-    const newDate = value ? new Date(value) : new Date();
     newDate.setHours(hours24, mins, 0, 0);
     onChange(formatLocalISO(newDate));
   };
 
+  const handleSelectDate = (day: number) => {
+    updateParentDate(day, time12.h, time12.m, time12.ampm);
+  };
+
+  // 🔥 FIXED: Typing allows empty strings and single digits temporarily
+  const handleTimeChange = (field: "h" | "m", val: string) => {
+    val = val.replace(/\D/g, "").slice(0, 2);
+    setTime12((prev) => ({ ...prev, [field]: val }));
+  };
+
+  // 🔥 FIXED: Formats cleanly when you click away
   const handleBlur = (field: "h" | "m") => {
-    let val = parseInt(time12[field]) || (field === "h" ? 12 : 0);
-    if (field === "h" && val > 12) val = 12;
-    if (field === "h" && val === 0) val = 12;
+    let val = parseInt(time12[field], 10);
+    if (isNaN(val)) val = field === "h" ? 12 : 0;
+    if (field === "h") {
+      if (val > 12) val = 12;
+      if (val === 0) val = 12;
+    }
     if (field === "m" && val > 59) val = 59;
-    setTime12((prev) => ({ ...prev, [field]: String(val).padStart(2, "0") }));
+
+    const paddedVal = String(val).padStart(2, "0");
+    setTime12((prev) => ({ ...prev, [field]: paddedVal }));
+    updateParentDate(
+      null,
+      field === "h" ? paddedVal : time12.h,
+      field === "m" ? paddedVal : time12.m,
+      time12.ampm,
+    );
+  };
+
+  const handleAmPmToggle = () => {
+    const newAmPm = time12.ampm === "AM" ? "PM" : "AM";
+    setTime12((prev) => ({ ...prev, ampm: newAmPm }));
+    updateParentDate(null, time12.h, time12.m, newAmPm);
   };
 
   return {
@@ -178,9 +230,13 @@ function useDatePickerLogic(value: string, onChange: (value: string) => void) {
     isToday,
     handlePrevMonth,
     handleNextMonth,
+    handlePrevYear,
+    handleNextYear,
     handleSelectDate,
     handleTimeChange,
     handleBlur,
+    handleAmPmToggle,
+    handleSetNow,
   };
 }
 
@@ -202,9 +258,13 @@ export default function CustomDatePicker({
     isToday,
     handlePrevMonth,
     handleNextMonth,
+    handlePrevYear,
+    handleNextYear,
     handleSelectDate,
     handleTimeChange,
     handleBlur,
+    handleAmPmToggle,
+    handleSetNow,
   } = useDatePickerLogic(value, onChange);
 
   return (
@@ -232,50 +292,107 @@ export default function CustomDatePicker({
 
       {isOpen && (
         <div className="absolute top-full left-0 mt-2 p-4 bg-white border-2 border-stone-100 rounded-3xl shadow-xl z-50 w-76 animate-in fade-in slide-in-from-top-2 duration-200">
+          {/* 🔥 NEW: Right Now Shortcut */}
+          <button
+            type="button"
+            onClick={handleSetNow}
+            className="w-full mb-4 py-2.5 bg-emerald-50 text-emerald-600 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-100 hover:text-emerald-700 transition-colors flex items-center justify-center gap-2"
+          >
+            <span className="text-sm">⚡</span> set to right now
+          </button>
+
+          {/* Month/Year Nav */}
           <div className="flex justify-between items-center mb-4">
-            <button
-              type="button"
-              onClick={handlePrevMonth}
-              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-stone-100 text-stone-500 transition-colors"
-            >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+            <div className="flex gap-1">
+              <button
+                type="button"
+                onClick={handlePrevYear}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-stone-100 text-stone-400 hover:text-stone-600 transition-colors"
+                title="Previous Year"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={3}
-                  d="M15 19l-7-7 7-7"
-                />
-              </svg>
-            </button>
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={3}
+                    d="M11 19l-7-7 7-7m8 14l-7-7 7-7"
+                  />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={handlePrevMonth}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-stone-100 text-stone-500 transition-colors"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={3}
+                    d="M15 19l-7-7 7-7"
+                  />
+                </svg>
+              </button>
+            </div>
+
             <span className="font-black text-stone-800 text-sm tracking-wide">
               {MONTHS[viewDate.getMonth()]} {viewDate.getFullYear()}
             </span>
-            <button
-              type="button"
-              onClick={handleNextMonth}
-              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-stone-100 text-stone-500 transition-colors"
-            >
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+
+            <div className="flex gap-1">
+              <button
+                type="button"
+                onClick={handleNextMonth}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-stone-100 text-stone-500 transition-colors"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={3}
-                  d="M9 5l7 7-7 7"
-                />
-              </svg>
-            </button>
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={3}
+                    d="M9 5l7 7-7 7"
+                  />
+                </svg>
+              </button>
+              <button
+                type="button"
+                onClick={handleNextYear}
+                className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-stone-100 text-stone-400 hover:text-stone-600 transition-colors"
+                title="Next Year"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={3}
+                    d="M13 5l7 7-7 7M5 5l7 7-7 7"
+                  />
+                </svg>
+              </button>
+            </div>
           </div>
 
+          {/* Calendar Grid */}
           <div className="grid grid-cols-7 gap-1 mb-2">
             {DAYS.map((day) => (
               <div
@@ -349,9 +466,7 @@ export default function CustomDatePicker({
               </div>
               <button
                 type="button"
-                onClick={() =>
-                  handleTimeChange("ampm", time12.ampm === "AM" ? "PM" : "AM")
-                }
+                onClick={handleAmPmToggle}
                 className="ml-auto px-2 py-1 bg-stone-200 text-[10px] font-black uppercase tracking-widest text-stone-600 rounded-lg hover:bg-emerald-100 hover:text-emerald-700 transition-colors"
               >
                 {time12.ampm}

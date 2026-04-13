@@ -19,7 +19,9 @@
 
 ## ✨ features
 
-* 📸 **ai receipt scanner:** skip the manual data entry. upload a photo of your bill, and nest magically extracts the items, prices, merchant, and date using **gemini 2.5 flash**.
+* 📸 **ai receipt scanner:** skip manual data entry. upload a photo of your bill, and nest magically extracts the items, prices, merchant, and date using **gemini 2.5 flash**.
+* 🧾 **exportable group receipts:** generate and download beautiful, high-res, itemized receipt images (complete with individual breakdowns) perfect for dropping directly into whatsapp or line.
+* 🌍 **smart multi-currency:** taking a trip abroad? nest handles multiple currencies perfectly, dynamically adjusting decimal formatting for currencies like idr, jpy, and usd.
 * 🍕 **exact line-item splitting:** split the tab equally, by custom adjustments, or exactly by who consumed what (with tax and tip distributed fairly!).
 * 🤝 **optimized settlements:** our transparent ledger calculates the absolute minimum number of transactions needed to settle up the whole group.
 * 💸 **one-tap settle up:** easily mark debts as paid and watch the ledger balance itself perfectly to zero.

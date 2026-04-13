@@ -1,10 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTripStore } from "@/store/useTripStore";
 import { useAlertStore } from "@/store/useAlertStore";
 import { Trip } from "@/lib/types";
+import CustomSelect from "./custom-select";
+import { CURRENCIES } from "./create-trip-modal";
 
 interface TripSettingsModalProps {
   isOpen: boolean;
@@ -18,24 +20,23 @@ export default function TripSettingsModal({
   trip,
 }: TripSettingsModalProps) {
   const router = useRouter();
-  const { renameTrip, deleteTrip, updateTripStatus } = useTripStore();
-  const { showConfirm } = useAlertStore();
-  const [editTripName, setEditTripName] = useState(trip.name);
 
-  // sync name when modal opens
-  useEffect(() => {
-    if (isOpen) setEditTripName(trip.name);
-  }, [isOpen, trip.name]);
+  // Perfectly typed! No "any" needed anymore!
+  const { updateTripDetails, deleteTrip, updateTripStatus } = useTripStore();
+  const { showConfirm } = useAlertStore();
+
+  const [editTripName, setEditTripName] = useState(trip.name);
+  const [editCurrency, setEditCurrency] = useState(trip.currency || "IDR");
 
   if (!isOpen) return null;
 
-  const handleRenameTrip = async (e: React.FormEvent) => {
+  const handleSaveDetails = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!editTripName.trim() || editTripName.trim() === trip.name) {
+    if (!editTripName.trim()) {
       onClose();
       return;
     }
-    await renameTrip(trip.id, editTripName.trim());
+    await updateTripDetails(trip.id, editTripName.trim(), editCurrency);
     onClose();
   };
 
@@ -74,24 +75,37 @@ export default function TripSettingsModal({
           </button>
         </div>
 
-        <form onSubmit={handleRenameTrip} className="mb-8">
-          <label className="block text-sm font-bold text-stone-500 mb-2 ml-1">
-            rename trip
-          </label>
-          <div className="flex gap-2 w-full">
+        <form onSubmit={handleSaveDetails} className="mb-8 flex flex-col gap-4">
+          <div>
+            <label className="block text-sm font-bold text-stone-500 mb-2 ml-1">
+              rename trip
+            </label>
             <input
               type="text"
               value={editTripName}
               onChange={(e) => setEditTripName(e.target.value)}
-              className="flex-1 min-w-0 bg-stone-50 border-2 border-stone-100 rounded-2xl px-4 sm:px-5 py-3 sm:py-3.5 text-sm font-bold focus:outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 transition-all"
+              className="w-full bg-stone-50 border-2 border-stone-100 rounded-2xl px-4 sm:px-5 py-3 sm:py-3.5 text-sm font-bold focus:outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 transition-all"
             />
-            <button
-              type="submit"
-              className="shrink-0 px-5 sm:px-6 py-3 sm:py-3.5 bg-stone-900 text-white rounded-2xl text-sm font-bold active:scale-95 transition-all shadow-md"
-            >
-              save
-            </button>
           </div>
+
+          <div className="relative z-20">
+            <label className="block text-sm font-bold text-stone-500 mb-2 ml-1">
+              base currency
+            </label>
+            <CustomSelect
+              value={editCurrency}
+              onChange={setEditCurrency}
+              options={CURRENCIES}
+              className="w-full"
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="w-full mt-2 py-3.5 bg-stone-900 text-white rounded-2xl text-sm font-bold active:scale-95 transition-all shadow-md"
+          >
+            save changes
+          </button>
         </form>
 
         <div className="border-t-2 border-stone-100 pt-8 mb-8">
