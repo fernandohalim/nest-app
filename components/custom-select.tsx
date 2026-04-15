@@ -9,6 +9,7 @@ function useCustomSelectLogic(
   onChange: (value: string) => void,
 ) {
   const [isOpen, setIsOpen] = useState(false);
+  const [dropUp, setDropUp] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   const selectedOption = options.find((opt) => opt.value === value);
@@ -28,7 +29,21 @@ function useCustomSelectLogic(
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  const handleToggle = () => setIsOpen(!isOpen);
+  const handleToggle = () => {
+    // dynamically check screen space before opening
+    if (!isOpen && dropdownRef.current) {
+      const rect = dropdownRef.current.getBoundingClientRect();
+      const spaceBelow = window.innerHeight - rect.bottom;
+
+      // if there's less than 250px of space below, open upwards!
+      if (spaceBelow < 250) {
+        setDropUp(true);
+      } else {
+        setDropUp(false);
+      }
+    }
+    setIsOpen(!isOpen);
+  };
 
   const handleSelect = (selectedValue: string) => {
     onChange(selectedValue);
@@ -37,6 +52,7 @@ function useCustomSelectLogic(
 
   return {
     isOpen,
+    dropUp,
     dropdownRef,
     selectedOption,
     handleToggle,
@@ -50,8 +66,14 @@ export default function CustomSelect({
   options,
   className = "",
 }: CustomSelectProps) {
-  const { isOpen, dropdownRef, selectedOption, handleToggle, handleSelect } =
-    useCustomSelectLogic(value, options, onChange);
+  const {
+    isOpen,
+    dropUp,
+    dropdownRef,
+    selectedOption,
+    handleToggle,
+    handleSelect,
+  } = useCustomSelectLogic(value, options, onChange);
 
   return (
     <div className={`relative ${className}`} ref={dropdownRef}>
@@ -64,7 +86,7 @@ export default function CustomSelect({
         <span>{selectedOption?.label || "select..."}</span>
         <svg
           className={`w-4 h-4 text-stone-400 transition-transform duration-300 ${
-            isOpen ? "rotate-180" : ""
+            isOpen ? (dropUp ? "-rotate-180" : "rotate-180") : ""
           }`}
           fill="none"
           stroke="currentColor"
@@ -81,7 +103,13 @@ export default function CustomSelect({
 
       {/* Dropdown Menu List */}
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-2 bg-white border-2 border-stone-100 rounded-2xl shadow-xl z-50 overflow-hidden animate-in fade-in slide-in-from-top-2 duration-200">
+        <div
+          className={`absolute left-0 right-0 bg-white border-2 border-stone-100 rounded-2xl shadow-xl z-50 overflow-hidden animate-in fade-in duration-200 ${
+            dropUp
+              ? "bottom-[calc(100%+8px)] slide-in-from-bottom-2"
+              : "top-[calc(100%+8px)] slide-in-from-top-2 mt-2"
+          }`}
+        >
           <div className="max-h-60 overflow-y-auto py-1">
             {options.map((option) => (
               <button

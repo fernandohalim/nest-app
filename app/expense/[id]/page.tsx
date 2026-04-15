@@ -54,7 +54,6 @@ export default function UnifiedExpensePage() {
   const expenseId = params.id as string;
 
   const { showAlert } = useAlertStore();
-
   const receiptRef = useRef<HTMLDivElement>(null);
 
   const [isLoading, setIsLoading] = useState(true);
@@ -98,6 +97,8 @@ export default function UnifiedExpensePage() {
       };
       setExpense(mappedExp);
 
+      // 🔥 FIX: if there's a trip, fetch the trip members.
+      // if it's a quick split (no trip), use the ephemeral members!
       if (expData.trip_id) {
         const [tripRes, membersRes] = await Promise.all([
           supabase
@@ -109,7 +110,10 @@ export default function UnifiedExpensePage() {
         ]);
         if (tripRes.data) setTripData(tripRes.data);
         if (membersRes.data) setMembers(membersRes.data);
+      } else if (expData.ephemeral_members) {
+        setMembers(expData.ephemeral_members);
       }
+
       setIsLoading(false);
     };
     fetchData();
@@ -215,7 +219,14 @@ export default function UnifiedExpensePage() {
       {/* top navigation */}
       <div className="w-full max-w-md flex justify-between items-center mb-6">
         <button
-          onClick={() => router.back()}
+          onClick={() => {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get("from") === "quick" || !tripData) {
+              router.push("/?tab=quick");
+            } else {
+              router.back();
+            }
+          }}
           className="w-11 h-11 flex items-center justify-center rounded-full bg-white shadow-sm border border-stone-100 text-stone-500 hover:text-emerald-600 hover:scale-110 hover:-translate-y-0.5 active:scale-95 transition-all"
         >
           <svg
@@ -232,24 +243,36 @@ export default function UnifiedExpensePage() {
             />
           </svg>
         </button>
-        <button
-          onClick={handleCopyLink}
-          className="w-11 h-11 flex items-center justify-center rounded-full bg-white shadow-sm border border-stone-100 text-stone-500 hover:text-emerald-600 hover:scale-110 hover:-translate-y-0.5 active:scale-95 transition-all"
-        >
-          <svg
-            className="w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
+
+        <div className="flex items-center gap-2">
+          {!tripData && (
+            <button
+              onClick={() => router.push(`/quick-split?edit=${expense.id}`)}
+              className="px-4 h-11 flex items-center justify-center rounded-full bg-white shadow-sm border border-stone-100 text-stone-500 font-bold text-sm hover:text-emerald-600 hover:border-emerald-200 active:scale-95 transition-all"
+            >
+              ✏️ edit receipt
+            </button>
+          )}
+
+          <button
+            onClick={handleCopyLink}
+            className="w-11 h-11 flex items-center justify-center rounded-full bg-white shadow-sm border border-stone-100 text-stone-500 hover:text-emerald-600 hover:scale-110 hover:-translate-y-0.5 active:scale-95 transition-all"
           >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2.5}
-              d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
-            />
-          </svg>
-        </button>
+            <svg
+              className="w-5 h-5"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2.5}
+                d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+              />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* nest-style trip redirect button */}
@@ -291,7 +314,6 @@ export default function UnifiedExpensePage() {
         ref={receiptRef}
         className="w-full max-w-md bg-white rounded-3xl shadow-xl border-2 border-stone-100 flex flex-col font-sans text-stone-800 animate-in zoom-in-95 duration-500 overflow-hidden relative"
       >
-        {/* receipt header */}
         <div className="p-6 sm:p-8 border-b-2 border-dashed border-stone-200 flex flex-col items-center text-center bg-white relative z-10">
           <div className="text-4xl mb-4">🧾</div>
           <h1 className="text-2xl font-black text-stone-800 leading-tight mb-2">
@@ -308,7 +330,6 @@ export default function UnifiedExpensePage() {
           </p>
         </div>
 
-        {/* receipt body */}
         <div className="p-6 sm:p-8 bg-white relative z-10 flex flex-col">
           <div className="flex flex-col gap-3 mb-8">
             <div className="flex justify-between items-center text-sm">
@@ -329,7 +350,6 @@ export default function UnifiedExpensePage() {
             </div>
           </div>
 
-          {/* breakdown by member */}
           <div className="flex flex-col gap-5 mb-8">
             <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest block border-b-2 border-stone-100 pb-2">
               breakdown by member
@@ -431,7 +451,6 @@ export default function UnifiedExpensePage() {
 
           <div className="w-full border-t-2 border-stone-200 mb-6 border-dashed"></div>
 
-          {/* subtotal / tax / discount summary */}
           <div className="flex flex-col gap-2 mb-6 text-sm">
             {expense.splitType === "exact" && Math.abs(difference) > 0 && (
               <>
@@ -471,7 +490,6 @@ export default function UnifiedExpensePage() {
               )}
           </div>
 
-          {/* massive total block */}
           <div className="flex justify-between items-end p-5 bg-emerald-50 border-2 border-emerald-100 rounded-2xl">
             <span className="text-[11px] font-black text-emerald-800 uppercase tracking-widest">
               total
@@ -481,7 +499,6 @@ export default function UnifiedExpensePage() {
             </span>
           </div>
 
-          {/* branding footer & barcode */}
           <div className="flex flex-col items-center mt-10 pt-6 border-t-2 border-dashed border-stone-200">
             <div className="flex gap-0.75 mb-3 opacity-30 h-10 items-center justify-center">
               {BARCODE_WIDTHS.map((width, i) => (
@@ -498,7 +515,6 @@ export default function UnifiedExpensePage() {
         </div>
       </div>
 
-      {/* download button */}
       <button
         onClick={handleExportImage}
         disabled={isExporting}
