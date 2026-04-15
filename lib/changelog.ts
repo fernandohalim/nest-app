@@ -2,6 +2,18 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
+    version: "2.1.1",
+    date: "apr 15, 2026",
+    title: "receipts bug fix & tab sync 🛠️",
+    badge: "patch",
+    badgeColor: "bg-teal-100 text-teal-700 border-teal-200",
+    features: [
+      "fixed receipts tab filter bug.",
+      "fixed a routing bug in switching between trips and receipts.",
+      "added search and sorting filters directly to the receipts tab.",
+    ],
+  },
+  {
     version: "2.1",
     date: "apr 15, 2026",
     title: "quick splits 📸",

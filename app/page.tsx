@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useTripStore } from "@/store/useTripStore";
 import { useAlertStore } from "@/store/useAlertStore";
 import { supabase } from "@/lib/supabase";
-import { Expense } from "@/lib/types";
+import { Expense, Member } from "@/lib/types"; // 🔥 added Member here
 import CreateTripModal from "@/components/create-trip-modal";
 import AboutModal from "@/components/about-modal";
 import ProfileMenu from "@/components/profile-menu";
@@ -23,6 +23,7 @@ interface QuickSplitRow {
   expense_date: string;
   created_at: string;
   category: string;
+  ephemeral_members?: Member[]; // 🔥 added this so we can filter by it!
 }
 
 function HomeContent() {
@@ -39,14 +40,26 @@ function HomeContent() {
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
+  // 🔥 local state for instant tab switching
   const currentTab = searchParams.get("tab");
-  const viewMode = currentTab === "quick" ? "quick" : "trips";
+  const urlMode = currentTab === "quick" ? "quick" : "trips";
+
+  const [viewMode, setLocalViewMode] = useState<"trips" | "quick">(urlMode);
+  const [prevTab, setPrevTab] = useState(currentTab);
+
+  if (currentTab !== prevTab) {
+    setLocalViewMode(urlMode);
+    setPrevTab(currentTab);
+  }
 
   const setViewMode = (mode: "trips" | "quick") => {
+    setLocalViewMode(mode);
+    setSearchQuery("");
+    setVisibleCount(5);
     if (mode === "trips") {
-      router.replace("/");
+      router.push("/");
     } else {
-      router.replace("/?tab=quick");
+      router.push("/?tab=quick");
     }
   };
 
@@ -68,8 +81,9 @@ function HomeContent() {
     { value: "z_a", label: "name (z to a)", icon: "🔠" },
   ];
 
-  const hasActiveFilters =
+  const hasActiveTripFilters =
     showOnlyMine || includeSettled || sortBy !== "newest";
+  const hasActiveQuickFilters = sortBy !== "newest";
 
   useEffect(() => {
     fetchTrips();
@@ -86,7 +100,19 @@ function HomeContent() {
         .order("created_at", { ascending: false });
 
       if (data && !error) {
-        const mappedData: Expense[] = (data as QuickSplitRow[]).map((exp) => ({
+        // 🔥 strictly filter out receipts that don't belong to the logged in user!
+        const myQuickSplits = (data as QuickSplitRow[]).filter((exp) => {
+          const isPayer = exp.paid_by && exp.paid_by[user.id] !== undefined;
+          const isOwer = exp.owed_by && exp.owed_by[user.id] !== undefined;
+          const isMember =
+            exp.ephemeral_members &&
+            Array.isArray(exp.ephemeral_members) &&
+            exp.ephemeral_members.some((m) => m.id === user.id);
+
+          return isPayer || isOwer || isMember;
+        });
+
+        const mappedData: Expense[] = myQuickSplits.map((exp) => ({
           id: exp.id,
           title: exp.title,
           totalAmount: exp.total_amount,
@@ -149,6 +175,27 @@ function HomeContent() {
   const displayedTrips = processedTrips.slice(0, visibleCount);
   const hasMoreTrips = visibleCount < processedTrips.length;
 
+  const processedQuickSplits = quickSplits
+    .filter((exp) =>
+      exp.title.toLowerCase().includes(searchQuery.toLowerCase()),
+    )
+    .sort((a, b) => {
+      if (sortBy === "newest")
+        return (
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+      if (sortBy === "oldest")
+        return (
+          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+      if (sortBy === "a_z") return a.title.localeCompare(b.title);
+      if (sortBy === "z_a") return b.title.localeCompare(a.title);
+      return 0;
+    });
+
+  const displayedQuickSplits = processedQuickSplits.slice(0, visibleCount);
+  const hasMoreQuick = visibleCount < processedQuickSplits.length;
+
   const avatarUrl = user?.user_metadata?.avatar_url;
   const fullName =
     user?.user_metadata?.full_name || user?.email?.split("@")[0] || "User";
@@ -183,105 +230,217 @@ function HomeContent() {
 
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
           {viewMode === "quick" ? (
-            isLoadingQuick ? (
-              <div className="text-center py-20">
-                <div className="w-10 h-10 border-4 border-emerald-200 border-t-emerald-500 rounded-full animate-spin mx-auto mb-4"></div>
-                <p className="text-sm font-bold text-stone-400">
-                  finding receipts...
-                </p>
-              </div>
-            ) : quickSplits.length === 0 ? (
-              <div className="text-center py-16 bg-white rounded-4xl shadow-sm border-2 border-dashed border-stone-200 relative">
-                <div className="text-5xl mb-4 inline-block">📸</div>
-                <h3 className="text-lg font-extrabold text-stone-800 mb-1">
-                  no quick splits
-                </h3>
-                <p className="text-sm font-bold text-stone-400 px-4">
-                  snap a receipt directly from the + button. it lives here for 7
-                  days!
-                </p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {quickSplits.map((expense) => {
-                  const createdAt = new Date(expense.createdAt).getTime();
-                  const daysSince = Math.floor(
-                    (currentTime - createdAt) / (1000 * 60 * 60 * 24),
-                  );
-                  const daysLeft = Math.max(0, 7 - daysSince);
+            <>
+              {!isLoadingQuick && quickSplits.length > 0 && (
+                <div className="flex flex-col gap-3 mb-6 relative z-30">
+                  <div className="flex items-center gap-2 relative">
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        placeholder="search receipts..."
+                        value={searchQuery}
+                        onChange={(e) => {
+                          setSearchQuery(e.target.value);
+                          setVisibleCount(5);
+                        }}
+                        className="w-full pl-11 pr-4 py-4 text-sm font-bold border-2 border-stone-100 shadow-sm rounded-2xl focus:outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 transition-all bg-white text-stone-700 placeholder:text-stone-300"
+                      />
+                      <svg
+                        className="w-5 h-5 text-stone-400 absolute left-4 top-1/2 -translate-y-1/2"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={3}
+                          d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+                        />
+                      </svg>
+                    </div>
 
-                  return (
                     <button
-                      key={expense.id}
-                      onClick={() =>
-                        router.push(`/expense/${expense.id}?from=quick`)
-                      }
-                      className="w-full bg-white p-5 rounded-3xl shadow-sm border-2 border-stone-100 hover:shadow-md hover:border-emerald-200 transition-all text-left flex justify-between items-center group active:scale-[0.98]"
+                      onClick={() => setIsFilterOpen(!isFilterOpen)}
+                      className={`shrink-0 w-14 h-14 rounded-2xl border-2 flex items-center justify-center transition-all shadow-sm relative active:scale-95 ${
+                        isFilterOpen || hasActiveQuickFilters
+                          ? "bg-emerald-50 border-emerald-300 text-emerald-600"
+                          : "bg-white border-stone-100 text-stone-500 hover:border-stone-200"
+                      }`}
                     >
-                      <div className="flex flex-col gap-2 pr-4 min-w-0 flex-1">
-                        <h3 className="font-extrabold text-stone-800 text-lg truncate group-hover:text-emerald-700 transition-colors">
-                          {expense.title}
-                        </h3>
-                        <div className="flex items-center flex-wrap gap-2 text-[10px] font-black uppercase tracking-widest">
-                          <span className="text-stone-400">
-                            {new Date(expense.expenseDate.replace(" ", "T"))
-                              .toLocaleDateString("en-US", {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                              })
-                              .toUpperCase()}
-                          </span>
-                          <span className="text-stone-300">•</span>
-                          <span
-                            className={`px-2 py-0.5 rounded-md ${daysLeft <= 2 ? "bg-rose-50 text-rose-500" : "bg-amber-50 text-amber-500"}`}
-                          >
-                            ⏳ {daysLeft} day{daysLeft !== 1 ? "s" : ""} left
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div
-                          onClick={(e) =>
-                            handleDeleteQuickSplit(expense.id, expense.title, e)
-                          }
-                          className="shrink-0 w-10 h-10 rounded-full bg-stone-50 flex items-center justify-center text-stone-400 hover:bg-rose-500 hover:text-white transition-colors"
-                        >
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2.5}
-                              d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                            />
-                          </svg>
-                        </div>
-                        <div className="shrink-0 w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
-                          <svg
-                            className="w-5 h-5 group-hover:translate-x-0.5 transition-transform"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2.5}
-                              d="M9 5l7 7-7 7"
-                            />
-                          </svg>
-                        </div>
-                      </div>
+                      <svg
+                        className="w-5 h-5"
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2.5}
+                          d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
+                        />
+                      </svg>
+                      {hasActiveQuickFilters && (
+                        <div className="absolute top-3 right-3 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-emerald-50"></div>
+                      )}
                     </button>
-                  );
-                })}
-              </div>
-            )
+
+                    {isFilterOpen && (
+                      <>
+                        <div
+                          className="fixed inset-0 z-40"
+                          onClick={() => setIsFilterOpen(false)}
+                        ></div>
+                        <div className="absolute top-[calc(100%+8px)] right-0 w-60 bg-white border-2 border-stone-100 rounded-3xl shadow-xl z-50 overflow-hidden flex flex-col animate-in fade-in slide-in-from-top-2 duration-200">
+                          <div className="p-2 flex flex-col">
+                            <span className="text-[10px] font-black text-stone-300 uppercase tracking-widest px-3 pt-3 pb-2">
+                              sort by
+                            </span>
+                            {sortOptions.map((option) => (
+                              <button
+                                key={option.value}
+                                onClick={() => {
+                                  setSortBy(option.value as SortType);
+                                  setIsFilterOpen(false);
+                                  setVisibleCount(5);
+                                }}
+                                className={`flex items-center gap-3 w-full px-3 py-3 text-left text-[13px] font-black rounded-xl transition-colors ${
+                                  sortBy === option.value
+                                    ? "bg-emerald-50 text-emerald-700"
+                                    : "text-stone-500 hover:bg-stone-50 hover:text-stone-800"
+                                }`}
+                              >
+                                <span className="text-base">{option.icon}</span>
+                                <span className="flex-1">{option.label}</span>
+                                {sortBy === option.value && (
+                                  <span className="text-emerald-500 text-lg leading-none">
+                                    ✓
+                                  </span>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {isLoadingQuick ? (
+                <div className="text-center py-20">
+                  <div className="w-10 h-10 border-4 border-emerald-200 border-t-emerald-500 rounded-full animate-spin mx-auto mb-4"></div>
+                  <p className="text-sm font-bold text-stone-400">
+                    finding receipts...
+                  </p>
+                </div>
+              ) : processedQuickSplits.length === 0 ? (
+                <div className="text-center py-16 bg-white rounded-4xl shadow-sm border-2 border-dashed border-stone-200 relative">
+                  <div className="text-5xl mb-4 inline-block">📸</div>
+                  <h3 className="text-lg font-extrabold text-stone-800 mb-1">
+                    {searchQuery ? "no receipts found" : "no quick splits"}
+                  </h3>
+                  <p className="text-sm font-bold text-stone-400 px-4">
+                    {searchQuery
+                      ? "try a different name."
+                      : "snap a receipt directly from the + button. it lives here for 7 days!"}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {displayedQuickSplits.map((expense) => {
+                    const createdAt = new Date(expense.createdAt).getTime();
+                    const daysSince = Math.floor(
+                      (currentTime - createdAt) / (1000 * 60 * 60 * 24),
+                    );
+                    const daysLeft = Math.max(0, 7 - daysSince);
+
+                    return (
+                      <button
+                        key={expense.id}
+                        onClick={() =>
+                          router.push(`/expense/${expense.id}?from=quick`)
+                        }
+                        className="w-full bg-white p-5 rounded-3xl shadow-sm border-2 border-stone-100 hover:shadow-md hover:border-emerald-200 transition-all text-left flex justify-between items-center group active:scale-[0.98]"
+                      >
+                        <div className="flex flex-col gap-2 pr-4 min-w-0 flex-1">
+                          <h3 className="font-extrabold text-stone-800 text-lg truncate group-hover:text-emerald-700 transition-colors">
+                            {expense.title}
+                          </h3>
+                          <div className="flex items-center flex-wrap gap-2 text-[10px] font-black uppercase tracking-widest">
+                            <span className="text-stone-400">
+                              {new Date(expense.expenseDate.replace(" ", "T"))
+                                .toLocaleDateString("en-US", {
+                                  month: "short",
+                                  day: "numeric",
+                                  year: "numeric",
+                                })
+                                .toUpperCase()}
+                            </span>
+                            <span className="text-stone-300">•</span>
+                            <span
+                              className={`px-2 py-0.5 rounded-md ${daysLeft <= 2 ? "bg-rose-50 text-rose-500" : "bg-amber-50 text-amber-500"}`}
+                            >
+                              ⏳ {daysLeft} day{daysLeft !== 1 ? "s" : ""} left
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <div
+                            onClick={(e) =>
+                              handleDeleteQuickSplit(
+                                expense.id,
+                                expense.title,
+                                e,
+                              )
+                            }
+                            className="shrink-0 w-10 h-10 rounded-full bg-stone-50 flex items-center justify-center text-stone-400 hover:bg-rose-500 hover:text-white transition-colors"
+                          >
+                            <svg
+                              className="w-4 h-4"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2.5}
+                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                              />
+                            </svg>
+                          </div>
+                          <div className="shrink-0 w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+                            <svg
+                              className="w-5 h-5 group-hover:translate-x-0.5 transition-transform"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2.5}
+                                d="M9 5l7 7-7 7"
+                              />
+                            </svg>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                  {hasMoreQuick && (
+                    <button
+                      onClick={() => setVisibleCount((prev) => prev + 5)}
+                      className="w-full mt-4 py-4 bg-stone-100 text-stone-500 font-black rounded-3xl hover:bg-stone-200 active:scale-95 transition-all text-sm border-2 border-stone-200/50 hover:border-stone-300 border-dashed"
+                    >
+                      load more receipts ⬇️
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
           ) : (
             <>
               {!isLoading && trips.length > 0 && (
@@ -316,7 +475,7 @@ function HomeContent() {
                     <button
                       onClick={() => setIsFilterOpen(!isFilterOpen)}
                       className={`shrink-0 w-14 h-14 rounded-2xl border-2 flex items-center justify-center transition-all shadow-sm relative active:scale-95 ${
-                        isFilterOpen || hasActiveFilters
+                        isFilterOpen || hasActiveTripFilters
                           ? "bg-emerald-50 border-emerald-300 text-emerald-600"
                           : "bg-white border-stone-100 text-stone-500 hover:border-stone-200"
                       }`}
@@ -334,7 +493,7 @@ function HomeContent() {
                           d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"
                         />
                       </svg>
-                      {hasActiveFilters && (
+                      {hasActiveTripFilters && (
                         <div className="absolute top-3 right-3 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-emerald-50"></div>
                       )}
                     </button>
@@ -408,7 +567,11 @@ function HomeContent() {
                                   setIsFilterOpen(false);
                                   setVisibleCount(5);
                                 }}
-                                className={`flex items-center gap-3 w-full px-3 py-3 text-left text-[13px] font-black rounded-xl transition-colors ${sortBy === option.value ? "bg-emerald-50 text-emerald-700" : "text-stone-500 hover:bg-stone-50 hover:text-stone-800"}`}
+                                className={`flex items-center gap-3 w-full px-3 py-3 text-left text-[13px] font-black rounded-xl transition-colors ${
+                                  sortBy === option.value
+                                    ? "bg-emerald-50 text-emerald-700"
+                                    : "text-stone-500 hover:bg-stone-50 hover:text-stone-800"
+                                }`}
                               >
                                 <span className="text-base">{option.icon}</span>
                                 <span className="flex-1">{option.label}</span>
@@ -814,7 +977,6 @@ function HomeContent() {
   );
 }
 
-// 🔥 Wrap the component in Suspense to safely use searchParams!
 export default function HomePage() {
   return (
     <Suspense

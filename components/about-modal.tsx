@@ -10,7 +10,7 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-[70] flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300">
+    <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-70 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300">
       {/* backdrop */}
       <div className="fixed inset-0" onClick={onClose}></div>
 
