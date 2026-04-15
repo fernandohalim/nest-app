@@ -4,9 +4,10 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useTripStore } from "@/store/useTripStore";
 import { useAlertStore } from "@/store/useAlertStore";
-import ProfileMenu from "@/components/profile-menu";
 import CreateTripModal from "@/components/create-trip-modal";
 import AboutModal from "@/components/about-modal";
+import ProfileMenu from "@/components/profile-menu";
+import Image from "next/image"; // 🔥 needed for the google avatar
 
 type SortType = "newest" | "oldest" | "a_z" | "z_a";
 
@@ -15,9 +16,12 @@ export default function Home() {
   const showAlert = useAlertStore((state) => state.showAlert);
   const { user, trips, fetchTrips, isLoading } = useTripStore();
 
+  // modal states
   const [isCreating, setIsCreating] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
 
+  // view states
   const [viewMode, setViewMode] = useState<"ongoing" | "finished">("ongoing");
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortType>("newest");
@@ -61,11 +65,17 @@ export default function Home() {
   const displayedTrips = processedTrips.slice(0, visibleCount);
   const hasMoreTrips = visibleCount < processedTrips.length;
 
+  // 🔥 Safely grab their google data for the bottom nav avatar
+  const avatarUrl = user?.user_metadata?.avatar_url;
+  const fullName =
+    user?.user_metadata?.full_name || user?.email?.split("@")[0] || "User";
+  const initial = fullName.charAt(0).toUpperCase();
+
   return (
-    <main className="flex min-h-screen flex-col items-center p-6 bg-[#fdfbf7] pb-32 font-sans selection:bg-emerald-200 selection:text-emerald-900">
+    <main className="flex min-h-screen flex-col items-center p-6 bg-[#fdfbf7] pb-48 font-sans selection:bg-emerald-200 selection:text-emerald-900 relative">
       <div className="w-full max-w-md relative">
-        {/* cozy header */}
-        <div className="flex justify-between items-start mb-8 pt-4">
+        {/* clean header */}
+        <div className="flex justify-between items-start mb-6 pt-4">
           <div className="flex flex-col gap-1">
             <div className="flex items-center gap-2">
               <h1 className="text-4xl font-black tracking-tight text-emerald-800 drop-shadow-sm">
@@ -99,85 +109,12 @@ export default function Home() {
               split expenses, keep the peace 🌱
             </p>
           </div>
-          <ProfileMenu />
         </div>
 
-        {/* trips list with animated toggle, search, and sort */}
+        {/* feed content */}
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-          <div className="bg-stone-100 p-1.5 rounded-3xl flex gap-1 relative overflow-hidden mb-6">
-            <div
-              className={`absolute top-1.5 bottom-1.5 w-[49%] bg-white rounded-2xl shadow-sm transition-all duration-300 ease-out ${viewMode === "ongoing" ? "left-[1%]" : "left-[50%]"}`}
-            ></div>
-            <button
-              onClick={() => {
-                setViewMode("ongoing");
-                setVisibleCount(5);
-              }}
-              className={`flex-1 py-3 text-sm z-10 rounded-2xl transition-all active:scale-95 flex items-center justify-center gap-1.5 ${viewMode === "ongoing" ? "font-black text-stone-800" : "font-bold text-stone-500 hover:text-stone-700"}`}
-            >
-              ongoing
-              <div
-                onClick={(e) => {
-                  e.stopPropagation();
-                  showAlert(
-                    "trips with active spending that haven't been fully paid back yet.",
-                    "ongoing trips 🏃‍♂️",
-                  );
-                }}
-                className="w-5 h-5 rounded-full flex items-center justify-center text-stone-300 hover:bg-stone-200 hover:text-stone-500 transition-colors"
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={3}
-                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-              </div>
-            </button>
-            <button
-              onClick={() => {
-                setViewMode("finished");
-                setVisibleCount(5);
-              }}
-              className={`flex-1 py-3 text-sm z-10 rounded-2xl transition-all active:scale-95 flex items-center justify-center gap-1.5 ${viewMode === "finished" ? "font-black text-stone-800" : "font-bold text-stone-500 hover:text-stone-700"}`}
-            >
-              settled up 🤝
-              <div
-                onClick={(e) => {
-                  e.stopPropagation();
-                  showAlert(
-                    "trips where everyone has paid their debts and the trip is closed.",
-                    "settled trips 🤝",
-                  );
-                }}
-                className="w-5 h-5 rounded-full flex items-center justify-center text-stone-300 hover:bg-stone-200 hover:text-stone-500 transition-colors"
-              >
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={3}
-                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-              </div>
-            </button>
-          </div>
-
           {!isLoading && trips.length > 0 && (
-            <div className="flex flex-col gap-3 mb-8">
+            <div className="flex flex-col gap-3 mb-6">
               <div className="relative w-full">
                 <input
                   type="text"
@@ -216,30 +153,6 @@ export default function Home() {
                     className={`w-2.5 h-2.5 rounded-full shrink-0 transition-colors duration-300 ${showOnlyMine ? "bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]" : "bg-stone-200"}`}
                   ></div>
                   created by me
-                  <div
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      showAlert(
-                        "only show trips where you are the owner.",
-                        "created by me 👑",
-                      );
-                    }}
-                    className={`w-5 h-5 rounded-full flex items-center justify-center transition-colors ${showOnlyMine ? "text-emerald-400 hover:bg-emerald-100 hover:text-emerald-600" : "text-stone-300 hover:bg-stone-100 hover:text-stone-500"}`}
-                  >
-                    <svg
-                      className="w-3.5 h-3.5"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={3}
-                        d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                      />
-                    </svg>
-                  </div>
                 </button>
 
                 <div className="relative w-full h-full">
@@ -354,17 +267,14 @@ export default function Home() {
                             </span>
                           </>
                         )}
+                        <span>•</span>
+                        <span className="shrink-0">
+                          {new Date(trip.createdAt).toLocaleDateString(
+                            "en-US",
+                            { month: "short", day: "numeric", year: "numeric" },
+                          )}
+                        </span>
                       </div>
-                      <span className="text-stone-400/80">
-                        created at{" "}
-                        {new Date(trip.createdAt).toLocaleString("en-US", {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                          hour: "numeric",
-                          minute: "2-digit",
-                        })}
-                      </span>
                     </div>
                   </div>
                   <div className="shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-stone-50 flex items-center justify-center text-stone-400 group-hover:bg-emerald-100 group-hover:text-emerald-600 transition-colors shadow-sm border border-stone-100 group-hover:border-emerald-200 group-hover:-rotate-45">
@@ -396,43 +306,7 @@ export default function Home() {
           )}
         </div>
 
-        <div className="mt-12 mb-8 text-center animate-in fade-in duration-1000 delay-300 pb-16">
-          <button
-            onClick={() => setIsAboutOpen(true)}
-            className="text-[10px] font-black text-stone-400 uppercase tracking-widest hover:text-emerald-500 transition-colors active:scale-95 flex items-center justify-center gap-1.5 mx-auto bg-white/50 px-4 py-2 rounded-full border border-stone-100"
-          >
-            about?
-          </button>
-        </div>
-
-        {!isCreating && (
-          <div className="fixed bottom-8 right-8 lg:bottom-12 lg:right-12 z-40 animate-in slide-in-from-bottom-8 duration-500">
-            <button
-              onClick={() => setIsCreating(true)}
-              className="flex items-center gap-3 pl-6 pr-2 py-2 bg-stone-900 text-white rounded-full shadow-[0_10px_40px_rgba(0,0,0,0.3)] hover:bg-emerald-600 active:scale-95 transition-all duration-300 group"
-            >
-              <span className="text-xs font-black tracking-widest uppercase">
-                new trip
-              </span>
-              <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center group-hover:bg-white/30 transition-colors shadow-inner">
-                <svg
-                  className="w-6 h-6 group-hover:rotate-90 transition-transform duration-300"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2.5}
-                    d="M12 4v16m8-8H4"
-                  />
-                </svg>
-              </div>
-            </button>
-          </div>
-        )}
-
+        {/* our perfectly integrated modals */}
         <CreateTripModal
           isOpen={isCreating}
           onClose={() => setIsCreating(false)}
@@ -441,6 +315,129 @@ export default function Home() {
           isOpen={isAboutOpen}
           onClose={() => setIsAboutOpen(false)}
         />
+        <ProfileMenu
+          isOpen={isProfileOpen}
+          onClose={() => setIsProfileOpen(false)}
+        />
+      </div>
+
+      {/* 🔥 The Perfectly Balanced Native Bottom App Bar */}
+      <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pb-0 sm:pb-6 px-0 sm:px-4 pointer-events-none">
+        <div className="w-full max-w-md bg-white rounded-t-3xl sm:rounded-3xl h-20 shadow-[0_-10px_40px_rgba(0,0,0,0.08)] flex items-center justify-between px-6 relative pointer-events-auto border-t sm:border border-stone-100">
+          {/* Left Group */}
+          <div className="flex items-center gap-4 sm:gap-6">
+            <button
+              onClick={() => setViewMode("ongoing")}
+              className={`flex flex-col items-center gap-1 transition-all active:scale-90 w-12 ${viewMode === "ongoing" ? "text-emerald-500 scale-105" : "text-stone-400 hover:text-stone-600"}`}
+            >
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2.5}
+                  d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"
+                />
+              </svg>
+              <span className="text-[10px] font-black">home</span>
+            </button>
+
+            <button
+              onClick={() => setViewMode("finished")}
+              className={`flex flex-col items-center gap-1 transition-all active:scale-90 w-12 ${viewMode === "finished" ? "text-emerald-500 scale-105" : "text-stone-400 hover:text-stone-600"}`}
+            >
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2.5}
+                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+              <span className="text-[10px] font-black">settled</span>
+            </button>
+          </div>
+
+          {/* Center Cutout & FAB */}
+          <div className="absolute left-1/2 -top-8 -translate-x-1/2 flex justify-center">
+            <div className="w-24 h-24 bg-[#fdfbf7] rounded-full p-2 flex items-center justify-center">
+              <button
+                onClick={() => setIsCreating(true)}
+                className="w-full h-full rounded-full border-4 border-white flex items-center justify-center text-white bg-emerald-500 transition-all duration-300 active:scale-90 shadow-[0_10px_30px_rgba(16,185,129,0.3)] hover:bg-emerald-600"
+              >
+                <svg
+                  className="w-8 h-8"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={3}
+                    d="M12 4v16m8-8H4"
+                  />
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          {/* right group */}
+          <div className="flex items-center gap-4 sm:gap-6">
+            <button
+              onClick={() => setIsAboutOpen(true)}
+              className="flex flex-col items-center gap-1 transition-all active:scale-90 w-12 text-stone-400 hover:text-stone-600"
+            >
+              <svg
+                className="w-6 h-6"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2.5}
+                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+              <span className="text-[10px] font-black">about</span>
+            </button>
+
+            {/* 🔥 perfectly leveled google avatar profile button */}
+            <button
+              onClick={() => setIsProfileOpen(true)}
+              className="flex flex-col items-center gap-1 transition-all active:scale-90 w-12 text-stone-400 hover:text-stone-600 group"
+            >
+              <div className="w-6 h-6 rounded-full overflow-hidden transition-all bg-stone-200 flex items-center justify-center shrink-0 group-hover:opacity-80">
+                {avatarUrl ? (
+                  <Image
+                    src={avatarUrl}
+                    alt={fullName}
+                    width={24}
+                    height={24}
+                    unoptimized
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <span className="text-[10px] font-black text-stone-500 group-hover:text-stone-600 transition-colors">
+                    {initial}
+                  </span>
+                )}
+              </div>
+              <span className="text-[10px] font-black">profile</span>
+            </button>
+          </div>
+        </div>
       </div>
     </main>
   );

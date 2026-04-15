@@ -3,7 +3,6 @@
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
-import { useTripStore } from "@/store/useTripStore";
 import { useAlertStore } from "@/store/useAlertStore";
 import { toPng } from "html-to-image";
 import { Expense, Member } from "@/lib/types";
@@ -54,7 +53,6 @@ export default function UnifiedExpensePage() {
   const router = useRouter();
   const expenseId = params.id as string;
 
-  const { user } = useTripStore();
   const { showAlert } = useAlertStore();
 
   const receiptRef = useRef<HTMLDivElement>(null);
@@ -135,7 +133,7 @@ export default function UnifiedExpensePage() {
       link.click();
 
       showAlert("receipt saved to your device! 📸", "exported ✨");
-    } catch (err) {
+    } catch {
       showAlert("couldn't create the image. try again!", "error ❌");
     } finally {
       setIsExporting(false);
@@ -485,7 +483,7 @@ export default function UnifiedExpensePage() {
 
           {/* branding footer & barcode */}
           <div className="flex flex-col items-center mt-10 pt-6 border-t-2 border-dashed border-stone-200">
-            <div className="flex gap-[3px] mb-3 opacity-30 h-10 items-center justify-center">
+            <div className="flex gap-0.75 mb-3 opacity-30 h-10 items-center justify-center">
               {BARCODE_WIDTHS.map((width, i) => (
                 <div key={i} className={`h-full bg-stone-800 ${width}`}></div>
               ))}

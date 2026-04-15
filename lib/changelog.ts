@@ -2,6 +2,17 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
+    version: "2.0.1",
+    date: "apr 15, 2026",
+    title: "refined navigation & rich cards ✨",
+    badge: "patch",
+    badgeColor: "bg-teal-100 text-teal-700 border-teal-200",
+    features: [
+      "added a clean bottom app bar.",
+      "refine profile menu into a sleek, full-screen bottom sheet modal.",
+    ],
+  },
+  {
     version: "2.0",
     date: "apr 13, 2026",
     title: "receipts & borders 🌍",
