@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, Suspense } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useTripStore } from "@/store/useTripStore";
 import { useAlertStore } from "@/store/useAlertStore";
 import { supabase } from "@/lib/supabase";
@@ -25,8 +25,9 @@ interface QuickSplitRow {
   category: string;
 }
 
-export default function Home() {
+function HomeContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { showAlert, showConfirm } = useAlertStore();
   const { user, trips, fetchTrips, isLoading } = useTripStore();
   const [currentTime] = useState(() => Date.now());
@@ -38,8 +39,17 @@ export default function Home() {
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
-  // view states
-  const [viewMode, setViewMode] = useState<"trips" | "quick">("trips");
+  const currentTab = searchParams.get("tab");
+  const viewMode = currentTab === "quick" ? "quick" : "trips";
+
+  const setViewMode = (mode: "trips" | "quick") => {
+    if (mode === "trips") {
+      router.replace("/");
+    } else {
+      router.replace("/?tab=quick");
+    }
+  };
+
   const [searchQuery, setSearchQuery] = useState("");
   const [sortBy, setSortBy] = useState<SortType>("newest");
   const [showOnlyMine, setShowOnlyMine] = useState(false);
@@ -97,13 +107,12 @@ export default function Home() {
     }
   }, [user, viewMode]);
 
-  // 🔥 the new delete handler for standalone receipts
   const handleDeleteQuickSplit = (
     id: string,
     title: string,
     e: React.MouseEvent,
   ) => {
-    e.stopPropagation(); // prevents the card from routing when you click the trash button
+    e.stopPropagation();
     showConfirm(
       `are you sure you want to delete "${title}"?`,
       async () => {
@@ -148,10 +157,9 @@ export default function Home() {
   return (
     <main className="flex min-h-screen flex-col items-center p-6 bg-[#fdfbf7] pb-48 font-sans selection:bg-emerald-200 selection:text-emerald-900 relative">
       <div className="w-full max-w-md relative">
-        {/* 🔥 completely revamped dynamic header */}
         <div className="flex justify-between items-center mb-6 pt-4">
-          <h1 className="text-4xl font-black tracking-tight text-stone-800 drop-shadow-sm capitalize">
-            {viewMode} {viewMode === "trips" ? "🎒" : "🧾"}
+          <h1 className="text-4xl font-black tracking-tight text-stone-800 drop-shadow-sm">
+            {viewMode === "trips" ? "trips 🎒" : "receipts 🧾"}
           </h1>
           <button
             onClick={() => setIsInfoModalOpen(true)}
@@ -173,10 +181,8 @@ export default function Home() {
           </button>
         </div>
 
-        {/* feed content */}
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
           {viewMode === "quick" ? (
-            /* 🔥 STANDALONE RECEIPTS TAB */
             isLoadingQuick ? (
               <div className="text-center py-20">
                 <div className="w-10 h-10 border-4 border-emerald-200 border-t-emerald-500 rounded-full animate-spin mx-auto mb-4"></div>
@@ -198,7 +204,6 @@ export default function Home() {
             ) : (
               <div className="space-y-4">
                 {quickSplits.map((expense) => {
-                  // 🔥 countdown math
                   const createdAt = new Date(expense.createdAt).getTime();
                   const daysSince = Math.floor(
                     (currentTime - createdAt) / (1000 * 60 * 60 * 24),
@@ -219,7 +224,6 @@ export default function Home() {
                         </h3>
                         <div className="flex items-center flex-wrap gap-2 text-[10px] font-black uppercase tracking-widest">
                           <span className="text-stone-400">
-                            {/* 🔥 formatted to match trip cards: APR 21, 2025 */}
                             {new Date(expense.expenseDate.replace(" ", "T"))
                               .toLocaleDateString("en-US", {
                                 month: "short",
@@ -237,7 +241,6 @@ export default function Home() {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {/* 🔥 new delete button */}
                         <div
                           onClick={(e) =>
                             handleDeleteQuickSplit(expense.id, expense.title, e)
@@ -280,7 +283,6 @@ export default function Home() {
               </div>
             )
           ) : (
-            /* 🔥 TRIPS TAB (ACTIVE & SETTLED) */
             <>
               {!isLoading && trips.length > 0 && (
                 <div className="flex flex-col gap-3 mb-6 relative z-30">
@@ -559,7 +561,6 @@ export default function Home() {
           onClose={() => setIsProfileOpen(false)}
         />
 
-        {/* 🔥 NEW INFO MODAL */}
         {isInfoModalOpen && (
           <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-70 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300">
             <div className="bg-[#fdfbf7] w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500 overflow-hidden relative pb-8 sm:pb-0">
@@ -696,7 +697,6 @@ export default function Home() {
         )}
       </div>
 
-      {/* native bottom app bar */}
       <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pb-0 sm:pb-6 px-0 sm:px-4 pointer-events-none">
         <div className="w-full max-w-md bg-white/95 backdrop-blur-xl rounded-t-3xl sm:rounded-3xl h-20 shadow-[0_-10px_40px_rgba(0,0,0,0.08)] flex items-center justify-between px-6 relative pointer-events-auto border-t sm:border border-stone-100">
           <div className="flex items-center gap-4 sm:gap-6">
@@ -811,5 +811,20 @@ export default function Home() {
         </div>
       </div>
     </main>
+  );
+}
+
+// 🔥 Wrap the component in Suspense to safely use searchParams!
+export default function HomePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center bg-[#fdfbf7]">
+          <div className="w-10 h-10 border-4 border-emerald-200 border-t-emerald-500 rounded-full animate-spin mx-auto"></div>
+        </div>
+      }
+    >
+      <HomeContent />
+    </Suspense>
   );
 }

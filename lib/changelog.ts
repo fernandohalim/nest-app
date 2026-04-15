@@ -2,6 +2,19 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
+    version: "2.1",
+    date: "apr 15, 2026",
+    title: "quick splits 📸",
+    badge: "feature",
+    badgeColor: "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200",
+    features: [
+      "added 'quick split': standalone receipts without needing a full group trip.",
+      "refine home dashboard with dedicated tabs for trips and quick receipts.",
+      "refine about modal and social links",
+      "refine changelog layout",
+    ]
+  },
+  {
     version: "2.0.1",
     date: "apr 15, 2026",
     title: "refined navigation & rich cards ✨",

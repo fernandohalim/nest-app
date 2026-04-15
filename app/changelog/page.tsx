@@ -1,11 +1,17 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 import packageJson from "../../package.json";
 import { releases } from "@/lib/changelog";
 
 export default function Changelog() {
   const router = useRouter();
+
+  // 🔥 state to track which patch versions are currently expanded
+  const [expandedVersions, setExpandedVersions] = useState<
+    Record<string, boolean>
+  >({});
 
   return (
     <main className="flex min-h-screen flex-col items-center p-6 bg-[#fdfbf7] pb-32 font-sans selection:bg-emerald-200 selection:text-emerald-900">
@@ -50,6 +56,10 @@ export default function Changelog() {
               weight = parts[1] === "0" ? 1 : 2;
             }
 
+            // 🔥 major (1) and minor (2) versions are always open. patches (3) use state.
+            const isExpanded =
+              weight !== 3 || expandedVersions[release.version];
+
             // render different nodes based on weight
             let Node = null;
             if (weight === 1) {
@@ -85,7 +95,18 @@ export default function Changelog() {
 
                 {/* content card */}
                 <div
+                  onClick={() => {
+                    // 🔥 toggle expansion ONLY if it's a patch version
+                    if (weight === 3) {
+                      setExpandedVersions((prev) => ({
+                        ...prev,
+                        [release.version]: !prev[release.version],
+                      }));
+                    }
+                  }}
                   className={`flex-1 transition-all group-hover:-translate-y-1 ${
+                    weight === 3 ? "cursor-pointer" : "cursor-default"
+                  } ${
                     weight === 1
                       ? "p-6 rounded-4xl bg-white border-2 border-stone-300 shadow-lg hover:shadow-xl hover:border-emerald-500" // anchor Card
                       : weight === 2
@@ -101,47 +122,70 @@ export default function Changelog() {
                         v{release.version} - {release.badge}
                       </span>
                     </div>
-                    <time className="text-[10px] font-bold text-stone-400 uppercase tracking-wider shrink-0">
-                      {release.date}
-                    </time>
+                    <div className="flex items-center gap-2">
+                      <time className="text-[10px] font-bold text-stone-400 uppercase tracking-wider shrink-0">
+                        {release.date}
+                      </time>
+                      {/* 🔥 animated chevron ONLY for patches */}
+                      {weight === 3 && (
+                        <svg
+                          className={`w-4 h-4 text-stone-300 transition-transform duration-300 ${
+                            isExpanded ? "rotate-180 text-emerald-500" : ""
+                          }`}
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={3}
+                            d="M19 9l-7 7-7 7"
+                          />
+                        </svg>
+                      )}
+                    </div>
                   </div>
 
                   {/* title scales based on weight */}
                   <h3
-                    className={`font-extrabold text-stone-800 mb-3 ${
+                    className={`font-extrabold text-stone-800 ${
                       weight === 1
                         ? "text-2xl"
                         : weight === 2
                           ? "text-lg"
                           : "text-base"
-                    }`}
+                    } ${isExpanded ? "mb-3" : "mb-1"}`}
                   >
                     {release.title}
                   </h3>
 
-                  <ul className="space-y-2">
-                    {release.features.map((feature, idx) => (
-                      <li
-                        key={idx}
-                        className={`text-sm font-bold flex items-start gap-2 leading-tight ${
-                          weight === 3 ? "text-stone-400" : "text-stone-500"
-                        }`}
-                      >
-                        <span
-                          className={`mt-0.5 shrink-0 transition-colors ${
-                            weight === 1
-                              ? "text-stone-800 group-hover:text-emerald-500"
-                              : weight === 2
-                                ? "text-emerald-400"
-                                : "text-stone-300 group-hover:text-sky-400"
+                  {/* conditionally render features based on state */}
+                  {isExpanded && (
+                    <ul className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-300">
+                      {release.features.map((feature, idx) => (
+                        <li
+                          key={idx}
+                          className={`text-sm font-bold flex items-start gap-2 leading-tight ${
+                            weight === 3 ? "text-stone-400" : "text-stone-500"
                           }`}
                         >
-                          ↳
-                        </span>
-                        <span>{feature}</span>
-                      </li>
-                    ))}
-                  </ul>
+                          <span
+                            className={`mt-0.5 shrink-0 transition-colors ${
+                              weight === 1
+                                ? "text-stone-800 group-hover:text-emerald-500"
+                                : weight === 2
+                                  ? "text-emerald-400"
+                                  : "text-stone-300 group-hover:text-sky-400"
+                            }`}
+                          >
+                            ↳
+                          </span>
+                          <span>{feature}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
                 </div>
               </div>
             );
