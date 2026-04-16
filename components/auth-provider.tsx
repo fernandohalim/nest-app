@@ -42,7 +42,9 @@ export default function AuthProvider({
 
     // define our safe zones
     const isPublicRoute =
-      pathname.startsWith("/trip/") || pathname === "/changelog";
+      pathname.startsWith("/trip/") ||
+      pathname === "/changelog" ||
+      pathname.startsWith("/expenses/");
     const isAuthRoute = pathname === "/login" || pathname === "/auth/callback";
 
     if (!user && !isAuthRoute && !isPublicRoute) {

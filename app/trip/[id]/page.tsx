@@ -215,6 +215,16 @@ export default function TripDetail() {
     }
   };
 
+  const handleSmartBack = () => {
+    if (typeof window !== "undefined") {
+      if (document.referrer.includes(window.location.host)) {
+        router.back();
+      } else {
+        router.push("/");
+      }
+    }
+  };
+
   const handleSaveExpense = async (expense: Expense) => {
     const exists = trip?.expenses.some((e) => e.id === expense.id);
     if (exists) {
@@ -477,36 +487,6 @@ export default function TripDetail() {
     });
   }
 
-  const getRawDebts = () => {
-    if (!trip) return [];
-    const raw: { from: string; to: string; amount: number }[] = [];
-    trip.expenses.forEach((exp) => {
-      const payers = Object.keys(exp.paidBy || {});
-      if (payers.length === 0) return;
-      const mainPayerId = payers[0];
-      const mainPayer = trip.members.find((m) => m.id === mainPayerId);
-      if (!mainPayer) return;
-
-      Object.entries(exp.owedBy || {}).forEach(([oweId, amount]) => {
-        if (oweId !== mainPayerId && amount > 0) {
-          if (exp.settledShares && exp.settledShares[oweId]) return;
-          const debtor = trip.members.find((m) => m.id === oweId);
-          if (!debtor) return;
-
-          const existing = raw.find(
-            (d) => d.from === debtor.name && d.to === mainPayer.name,
-          );
-          if (existing) {
-            existing.amount += amount;
-          } else {
-            raw.push({ from: debtor.name, to: mainPayer.name, amount });
-          }
-        }
-      });
-    });
-    return raw;
-  };
-  const rawDebts = getRawDebts();
   const totalTripCost =
     trip?.expenses.reduce((sum, exp) => sum + exp.totalAmount, 0) || 0;
 
@@ -533,7 +513,7 @@ export default function TripDetail() {
           hmm, couldn&apos;t find this trip.
         </p>
         <button
-          onClick={() => router.push("/")}
+          onClick={handleSmartBack}
           className="mt-6 px-6 py-3 bg-white border-2 border-stone-200 rounded-full text-sm text-stone-700 font-bold hover:border-emerald-500 hover:text-emerald-600 hover:-translate-y-1 transition-all shadow-sm"
         >
           ← head back home
@@ -548,7 +528,7 @@ export default function TripDetail() {
         {/* top navigation */}
         <div className="flex justify-between items-center mb-6">
           <button
-            onClick={() => router.push("/")}
+            onClick={handleSmartBack}
             className="w-11 h-11 flex items-center justify-center rounded-full bg-white shadow-sm border border-stone-100 text-stone-500 hover:text-emerald-600 hover:scale-110 hover:-translate-y-0.5 active:scale-95 transition-all"
           >
             <svg

@@ -62,6 +62,8 @@ export default function TripSettingsModal({
 
   return (
     <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
+      <div className="fixed inset-0" onClick={onClose}></div>
+
       <div className="bg-white rounded-[2.5rem] p-8 w-full max-w-sm shadow-2xl animate-in zoom-in-95 slide-in-from-bottom-8 duration-300">
         <div className="flex justify-between items-center mb-8">
           <h3 className="text-2xl font-black text-stone-800">

@@ -797,6 +797,11 @@ function HomeContent() {
         {/* action menu (intent modal) */}
         {isActionMenuOpen && (
           <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-60 flex items-end justify-center animate-in fade-in duration-300">
+            <div
+              className="fixed inset-0"
+              onClick={() => setIsActionMenuOpen(false)}
+            ></div>
+
             <div className="bg-[#fdfbf7] w-full max-w-md rounded-t-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full duration-500 p-6 pt-8 pb-12 relative">
               <button
                 onClick={() => setIsActionMenuOpen(false)}

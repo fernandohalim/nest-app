@@ -2,6 +2,18 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
+    version: "2.2.1",
+    date: "apr 16, 2026",
+    title: "smart routing & modal polish 🧠",
+    badge: "patch",
+    badgeColor: "bg-teal-100 text-teal-700 border-teal-200",
+    features: [
+      "added a 'smart back button' on trip pages that knows if you came from a shared link or the dashboard, preventing users from getting stuck.",
+      "added clickable background backdrops to all modals.",
+      "added exception for expense detail page, allowing the page shared to a non-logged in user"
+    ],
+  },
+  {
     version: "2.2",
     date: "apr 16, 2026",
     title: "settlements & polish update 🤝",

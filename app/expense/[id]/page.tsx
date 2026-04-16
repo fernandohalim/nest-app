@@ -233,7 +233,7 @@ export default function UnifiedExpensePage() {
       : getMemberName(payersEntries[0][0]);
 
   return (
-    <main className="flex min-h-screen flex-col items-center p-4 sm:p-6 bg-[#fdfbf7] pb-40 font-sans selection:bg-emerald-200 selection:text-emerald-900">
+    <main className="flex min-h-screen flex-col items-center p-4 sm:p-6 bg-[#fdfbf7] pb-10 font-sans selection:bg-emerald-200 selection:text-emerald-900">
       {/* top navigation */}
       <div className="w-full max-w-md flex justify-between items-center mb-6">
         <button
