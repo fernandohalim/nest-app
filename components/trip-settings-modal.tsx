@@ -62,9 +62,8 @@ export default function TripSettingsModal({
 
   return (
     <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
-      <div className="fixed inset-0" onClick={onClose}></div>
-
-      <div className="bg-white rounded-[2.5rem] p-8 w-full max-w-sm shadow-2xl animate-in zoom-in-95 slide-in-from-bottom-8 duration-300">
+      <div className="absolute inset-0" onClick={onClose}></div>
+      <div className="relative z-10 bg-white rounded-[2.5rem] p-8 w-full max-w-sm shadow-2xl animate-in zoom-in-95 slide-in-from-bottom-8 duration-300">
         <div className="flex justify-between items-center mb-8">
           <h3 className="text-2xl font-black text-stone-800">
             trip settings ⚙️
@@ -76,7 +75,6 @@ export default function TripSettingsModal({
             ×
           </button>
         </div>
-
         <form onSubmit={handleSaveDetails} className="mb-8 flex flex-col gap-4">
           <div>
             <label className="block text-sm font-bold text-stone-500 mb-2 ml-1">
@@ -109,7 +107,6 @@ export default function TripSettingsModal({
             save changes
           </button>
         </form>
-
         <div className="border-t-2 border-stone-100 pt-8 mb-8">
           <div className="flex justify-between items-center p-4 bg-stone-50 rounded-2xl border-2 border-stone-100">
             <div>
@@ -132,7 +129,6 @@ export default function TripSettingsModal({
             </button>
           </div>
         </div>
-
         <div className="border-t-2 border-rose-100 pt-8">
           <button
             onClick={handleFullTripDelete}
