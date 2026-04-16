@@ -193,14 +193,26 @@ export default function TripDetail() {
     }
   };
 
-  const handleShare = () => {
-    const url = `${window.location.origin}/trip/${tripId}`;
-    const message = `hola! 👋 i created a trip for "${trip?.name}" on nest to split our expenses.\n\ntap the link below to join the trip:\n${url}`;
-    navigator.clipboard.writeText(message);
-    showAlert(
-      "invite message copied! paste it in the group chat 📱",
-      "copied! ✨",
-    );
+  const handleShare = async () => {
+    const url = window.location.href;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `nest: ${trip?.name}`,
+          text: `i created a trip named ${trip?.name}! view it on nest. 🧾`,
+          url: url,
+        });
+      } catch (err) {
+        if ((err as Error).name !== "AbortError") {
+          navigator.clipboard.writeText(url);
+          showAlert("link copied! send it to the group 📱", "copied! 🔗");
+        }
+      }
+    } else {
+      navigator.clipboard.writeText(url);
+      showAlert("link copied! send it to the group 📱", "copied! 🔗");
+    }
   };
 
   const handleSaveExpense = async (expense: Expense) => {
@@ -587,8 +599,8 @@ export default function TripDetail() {
                 <path
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M8.684 13.342C8.886 12.938 9 12.482 9 12c0-.482-.114-.938-.316-1.342m0 2.684a3 3 0 110-2.684m0 2.684l6.632 3.316m-6.632-6l6.632-3.316m0 0a3 3 0 105.367-2.684 3 3 0 00-5.367 2.684zm0 9.316a3 3 0 105.368 2.684 3 3 0 00-5.368-2.684z"
+                  strokeWidth={2.5}
+                  d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8m-4-6l-4-4m0 0L8 6m4-4v13"
                 />
               </svg>
             </button>
@@ -1111,7 +1123,7 @@ export default function TripDetail() {
                               );
                               const canMarkPaid =
                                 !isPayer &&
-                                isOwner &&
+                                canEdit &&
                                 !isMultiPayer &&
                                 trip.status !== "finished";
                               const isSettled =
@@ -1398,31 +1410,20 @@ export default function TripDetail() {
         {trip.expenses.length > 0 && (
           <section className="mt-14 mb-8 animate-in fade-in slide-in-from-bottom-4 duration-500 delay-300">
             <div className="flex justify-between items-end mb-4 px-1">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center justify-between w-full">
                 <h2 className="text-xl font-extrabold text-stone-800">
                   who pays who 🤝
                 </h2>
                 <button
                   onClick={() => setShowSettlementModal(true)}
-                  className="w-6 h-6 rounded-full bg-stone-200 text-stone-500 hover:bg-stone-300 hover:text-stone-700 flex items-center justify-center transition-colors"
+                  className="text-xs font-bold px-4 py-2 bg-stone-100 text-stone-600 rounded-xl hover:bg-stone-200 hover:text-stone-800 transition-colors flex items-center gap-2 shadow-sm active:scale-95"
                 >
-                  <svg
-                    className="w-3.5 h-3.5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={3}
-                      d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                    />
-                  </svg>
+                  verify my tab 🧾
                 </button>
               </div>
             </div>
 
+            {/* who pays who */}
             {settlements.length === 0 ? (
               <div className="bg-emerald-50 border-2 border-emerald-200 rounded-3xl p-6 text-center transform hover:rotate-1 transition-transform">
                 <div className="text-4xl mb-2">⚖️</div>
@@ -1437,41 +1438,41 @@ export default function TripDetail() {
               <div className="space-y-4 relative">
                 <div className="absolute left-6 top-6 bottom-6 w-1 bg-stone-200 rounded-full z-0"></div>
                 {settlements.map((settlement, index) => (
-                  <div
-                    key={index}
-                    className="flex justify-between items-center p-4 sm:p-5 bg-stone-900 text-white rounded-4xl shadow-xl shadow-stone-900/10 relative z-10 hover:translate-x-2 transition-transform cursor-default gap-2"
-                  >
-                    <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
-                      <div
-                        className={`w-8 h-8 sm:w-10 sm:h-10 shrink-0 rounded-full flex items-center justify-center text-xs sm:text-sm font-black border-2 border-white ${getAvatarColor(settlement.from.name)}`}
-                      >
-                        {getInitials(settlement.from.name)}
+                  <div key={index} className="relative z-10 flex flex-col">
+                    <div className="flex justify-between items-center p-4 sm:p-5 bg-stone-900 text-white rounded-4xl shadow-xl shadow-stone-900/10 hover:-translate-y-1 transition-all text-left w-full gap-2 relative z-20 group">
+                      <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
+                        <div
+                          className={`w-8 h-8 sm:w-10 sm:h-10 shrink-0 rounded-full flex items-center justify-center text-xs sm:text-sm font-black border-2 border-white ${getAvatarColor(settlement.from.name)}`}
+                        >
+                          {getInitials(settlement.from.name)}
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="font-extrabold text-base sm:text-lg truncate">
+                            {settlement.from.name}
+                          </span>
+                          <span className="text-stone-400 font-bold text-[9px] sm:text-xs tracking-widest uppercase">
+                            pays
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex flex-col min-w-0">
-                        <span className="font-extrabold text-base sm:text-lg truncate">
-                          {settlement.from.name}
-                        </span>
-                        <span className="text-stone-400 font-bold text-[9px] sm:text-xs tracking-widest uppercase">
-                          pays
-                        </span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 sm:gap-4 text-right flex-1 min-w-0 justify-end">
-                      <div className="flex flex-col min-w-0 items-end">
-                        <span className="font-extrabold text-base sm:text-lg text-emerald-400 truncate max-w-full">
-                          {currencySymbol}{" "}
-                          {Number(settlement.amount).toLocaleString("en-US", {
-                            maximumFractionDigits: 2,
-                          })}
-                        </span>
-                        <span className="text-stone-400 font-bold text-[9px] sm:text-xs tracking-widest uppercase truncate max-w-full">
-                          to {settlement.to.name}
-                        </span>
-                      </div>
-                      <div
-                        className={`w-8 h-8 sm:w-10 sm:h-10 shrink-0 rounded-full flex items-center justify-center text-xs sm:text-sm font-black border-2 border-white ${getAvatarColor(settlement.to.name)}`}
-                      >
-                        {getInitials(settlement.to.name)}
+
+                      <div className="flex items-center gap-2 sm:gap-4 text-right flex-1 min-w-0 justify-end">
+                        <div className="flex flex-col min-w-0 items-end">
+                          <span className="font-extrabold text-base sm:text-lg text-emerald-400 truncate max-w-full">
+                            {currencySymbol}{" "}
+                            {Number(settlement.amount).toLocaleString("en-US", {
+                              maximumFractionDigits: 2,
+                            })}
+                          </span>
+                          <span className="text-stone-400 font-bold text-[9px] sm:text-xs tracking-widest uppercase truncate max-w-full">
+                            to {settlement.to.name}
+                          </span>
+                        </div>
+                        <div
+                          className={`w-8 h-8 sm:w-10 sm:h-10 shrink-0 rounded-full flex items-center justify-center text-xs sm:text-sm font-black border-2 border-white ${getAvatarColor(settlement.to.name)}`}
+                        >
+                          {getInitials(settlement.to.name)}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1847,7 +1848,8 @@ export default function TripDetail() {
       <SettlementModal
         isOpen={showSettlementModal}
         onClose={() => setShowSettlementModal(false)}
-        rawDebts={rawDebts}
+        members={trip.members}
+        memberDetails={memberDetails}
         settlements={settlements}
         currencySymbol={currencySymbol}
       />

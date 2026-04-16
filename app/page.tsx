@@ -52,21 +52,49 @@ function HomeContent() {
     setPrevTab(currentTab);
   }
 
+  // 🔥 initialize filters directly from the URL so they persist when you hit "back"!
+  const [searchQuery, setSearchQuery] = useState(searchParams.get("q") || "");
+  const [sortBy, setSortBy] = useState<SortType>(
+    (searchParams.get("sort") as SortType) || "newest",
+  );
+  const [showOnlyMine, setShowOnlyMine] = useState(
+    searchParams.get("mine") === "true",
+  );
+  const [includeSettled, setIncludeSettled] = useState(
+    searchParams.get("settled") === "true",
+  );
+
+  useEffect(() => {
+    const params = new URLSearchParams(searchParams.toString());
+
+    if (searchQuery) params.set("q", searchQuery);
+    else params.delete("q");
+    if (sortBy !== "newest") params.set("sort", sortBy);
+    else params.delete("sort");
+    if (showOnlyMine) params.set("mine", "true");
+    else params.delete("mine");
+    if (includeSettled) params.set("settled", "true");
+    else params.delete("settled");
+
+    const newQuery = params.toString();
+    if (newQuery !== searchParams.toString()) {
+      router.replace(`/?${newQuery}`, { scroll: false });
+    }
+  }, [searchQuery, sortBy, showOnlyMine, includeSettled, router, searchParams]);
+
   const setViewMode = (mode: "trips" | "quick") => {
     setLocalViewMode(mode);
     setSearchQuery("");
     setVisibleCount(5);
-    if (mode === "trips") {
-      router.push("/");
-    } else {
-      router.push("/?tab=quick");
-    }
-  };
 
-  const [searchQuery, setSearchQuery] = useState("");
-  const [sortBy, setSortBy] = useState<SortType>("newest");
-  const [showOnlyMine, setShowOnlyMine] = useState(false);
-  const [includeSettled, setIncludeSettled] = useState(false);
+    const params = new URLSearchParams(searchParams.toString());
+    if (mode === "quick") params.set("tab", "quick");
+    else params.delete("tab");
+    params.delete("q");
+
+    const newQuery = params.toString();
+    router.push(newQuery ? `/?${newQuery}` : "/");
+  };
 
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(5);
@@ -861,7 +889,7 @@ function HomeContent() {
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pb-0 sm:pb-6 px-0 sm:px-4 pointer-events-none">
-        <div className="w-full max-w-md bg-white/95 backdrop-blur-xl rounded-t-3xl sm:rounded-3xl h-20 shadow-[0_-10px_40px_rgba(0,0,0,0.08)] flex items-center justify-between px-6 relative pointer-events-auto border-t sm:border border-stone-100">
+        <div className="w-full max-w-md bg-white/95 backdrop-blur-xl rounded-t-3xl sm:rounded-3xl h-[calc(5rem+env(safe-area-inset-bottom))] pb-[env(safe-area-inset-bottom)] shadow-[0_-10px_40px_rgba(0,0,0,0.08)] flex items-center justify-between px-6 relative pointer-events-auto border-t sm:border border-stone-100">
           <div className="flex items-center gap-4 sm:gap-6">
             <button
               onClick={() => setViewMode("trips")}

@@ -144,9 +144,27 @@ export default function UnifiedExpensePage() {
     }
   };
 
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(window.location.href);
-    showAlert("link copied! send it to the group 📱", "copied! 🔗");
+  const handleShare = async () => {
+    const url = window.location.href;
+
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: `nest: ${expense?.title}`,
+          text: `here's the receipt for ${expense?.title} 🧾`,
+          url: url,
+        });
+      } catch (err) {
+        if ((err as Error).name !== "AbortError") {
+          navigator.clipboard.writeText(url);
+          showAlert("link copied! send it to the group 📱", "copied! 🔗");
+        }
+      }
+    } else {
+      // desktop fallback
+      navigator.clipboard.writeText(url);
+      showAlert("link copied! send it to the group 📱", "copied! 🔗");
+    }
   };
 
   if (isLoading) {
@@ -255,7 +273,7 @@ export default function UnifiedExpensePage() {
           )}
 
           <button
-            onClick={handleCopyLink}
+            onClick={handleShare}
             className="w-11 h-11 flex items-center justify-center rounded-full bg-white shadow-sm border border-stone-100 text-stone-500 hover:text-emerald-600 hover:scale-110 hover:-translate-y-0.5 active:scale-95 transition-all"
           >
             <svg
@@ -268,7 +286,7 @@ export default function UnifiedExpensePage() {
                 strokeLinecap="round"
                 strokeLinejoin="round"
                 strokeWidth={2.5}
-                d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"
+                d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8m-4-6l-4-4m0 0L8 6m4-4v13"
               />
             </svg>
           </button>
@@ -361,6 +379,7 @@ export default function UnifiedExpensePage() {
                   name: string;
                   share: number;
                   count: number;
+                  totalShares: number;
                 }[] = [];
                 let baseShareTotal = 0;
 
@@ -376,6 +395,7 @@ export default function UnifiedExpensePage() {
                         name: item.name,
                         share: shareVal,
                         count: myShares,
+                        totalShares: item.assignedTo.length,
                       });
                       baseShareTotal += shareVal;
                     }
@@ -406,7 +426,9 @@ export default function UnifiedExpensePage() {
                             >
                               <span className="font-bold truncate pr-2">
                                 ↳ {item.name}{" "}
-                                {item.count > 1 ? `(x${item.count})` : ""}
+                                {item.totalShares > 1
+                                  ? `(${item.count}/${item.totalShares})`
+                                  : ""}
                               </span>
                               <span className="shrink-0">
                                 {currencySymbol} {formatMoney(item.share)}

@@ -2,6 +2,21 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
+    version: "2.2",
+    date: "apr 16, 2026",
+    title: "settlements & polish update 🤝",
+    badge: "feature",
+    badgeColor: "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200",
+    features: [
+      "added a native 'share the proof' button inside settlements so you can paste the exact math directly into your group chat.",
+      "added native ios/android share sheets to both trip pages and quick split receipts.",
+      "added safe-area-inset padding so the bottom nav bar perfectly respects phone bezels.",
+      "refined the 'who pays who' section. user now can verify their own tab, reveals exactly what was consumed vs paid.",
+      "fixed dashboard filters not persist when you hit the back button, now saved via params.",
+      "fixed a math display bug where exact split items now properly show their fractions in expense detail page (e.g., french fries (1/2)).",
+    ],
+  },
+  {
     version: "2.1.1",
     date: "apr 15, 2026",
     title: "receipts bug fix & tab sync 🛠️",
