@@ -1,10 +1,15 @@
-import { writeFileSync } from "fs";
-import { version as _version } from "./package.json";
+import fs from "fs";
+import path from "path";
 
-const versionData = {
-  version: _version,
-};
+// read the package.json file as plain text to bypass strict node 24 json import rules
+const packagePath = path.join(process.cwd(), "package.json");
+const packageData = JSON.parse(fs.readFileSync(packagePath, "utf8"));
 
-writeFileSync("./public/version.json", JSON.stringify(versionData, null, 2));
+// write it to the public folder
+const outputPath = path.join(process.cwd(), "public", "version.json");
+fs.writeFileSync(
+  outputPath,
+  JSON.stringify({ version: packageData.version }, null, 2),
+);
 
-console.log(`✨ version.json generated with version ${_version}`);
+console.log(`✨ version.json generated with version ${packageData.version}`);
