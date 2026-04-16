@@ -2,6 +2,19 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
+    version: "2.2.2",
+    date: "apr 16, 2026",
+    title: "the always fresh update 🍃",
+    badge: "patch",
+    badgeColor: "bg-teal-100 text-teal-700 border-teal-200",
+    features: [
+      "fixed service worker caching that was trapping users on old versions of the app.",
+      "added a smart 'version guard' that detects new updates, silently assassinates the old cache, and automatically refreshes the app.",
+      "added an automated build script to sync version numbers safely.",
+      "added offline screen using modern react hooks to gracefully pause the app and prevent unsyncable changes.",
+    ],
+  },
+  {
     version: "2.2.1",
     date: "apr 16, 2026",
     title: "smart routing & modal polish 🧠",
@@ -10,7 +23,7 @@ export const releases: Release[] = [
     features: [
       "added a 'smart back button' on trip pages that knows if you came from a shared link or the dashboard, preventing users from getting stuck.",
       "added clickable background backdrops to all modals.",
-      "added exception for expense detail page, allowing the page shared to a non-logged in user"
+      "added exception for expense detail page, allowing the page shared to a non-logged in user",
     ],
   },
   {
@@ -51,7 +64,7 @@ export const releases: Release[] = [
       "refine home dashboard with dedicated tabs for trips and quick receipts.",
       "refine about modal and social links",
       "refine changelog layout",
-    ]
+    ],
   },
   {
     version: "2.0.1",
@@ -74,7 +87,7 @@ export const releases: Release[] = [
       "added smart multi-currency support with dynamic decimal formatting.",
       "added exportable, high-res, nest-branded receipt images for easy sharing.",
       "fixed the date picker with year navigation and a 'right now' shortcut.",
-      "fixed a navigation loop bug when exiting trips."
+      "fixed a navigation loop bug when exiting trips.",
     ],
   },
   {

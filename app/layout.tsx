@@ -4,6 +4,8 @@ import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 import AuthProvider from "@/components/auth-provider";
 import PlayfulAlert from "@/components/playful-alert";
+import VersionGuard from "@/components/version-guard";
+import OfflineScreen from "@/components/offline-screen";
 
 export const viewport: Viewport = {
   themeColor: "#fdfbf7",
@@ -58,21 +60,13 @@ export default function RootLayout({
       className={`${GeistSans.variable} ${GeistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-[#fdfbf7] text-stone-800">
+        <VersionGuard />
+        <OfflineScreen />
+
         <AuthProvider>
           {children}
           <PlayfulAlert />
         </AuthProvider>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              if ('serviceWorker' in navigator) {
-                window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js');
-                });
-              }
-            `,
-          }}
-        />
       </body>
     </html>
   );
