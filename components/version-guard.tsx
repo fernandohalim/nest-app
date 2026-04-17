@@ -15,17 +15,18 @@ export default function VersionGuard() {
             await navigator.serviceWorker.getRegistrations();
           for (const registration of registrations) {
             await registration.unregister();
+            console.log("💀 service worker assassinated");
           }
         }
 
-        // 🔥 check if we are offline first to save a network request!
-        if (!navigator.onLine) return;
+        const res = await fetch(`/version.json?t=${Date.now()}`, {
+          cache: "no-store",
+          headers: {
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            Pragma: "no-cache",
+          },
+        });
 
-        const res = await fetch(
-          `https://nest-splitbill-app.vercel.app/version.json?t=${Date.now()}`,
-        );
-
-        // 🔥 Make sure the response is actually OK before trying to parse JSON!
         if (!res.ok) {
           console.warn("version.json not found yet, skipping check.");
           return;
@@ -44,21 +45,30 @@ export default function VersionGuard() {
           if ("caches" in window) {
             const cacheNames = await caches.keys();
             await Promise.all(cacheNames.map((name) => caches.delete(name)));
+            console.log("🧹 old cache wiped out");
           }
 
           setTimeout(() => {
-            window.location.reload();
+            const currentUrl = new URL(window.location.href);
+            currentUrl.searchParams.set("updated", Date.now().toString());
+            window.location.href = currentUrl.toString();
           }, 2500);
         }
-      } catch {
-        // silently fail if we can't reach the server
-        console.warn("failed to check version, continuing anyway.");
+      } catch (error) {
+        console.warn("failed to check version (likely offline).", error);
       }
     };
 
-    nukeAndCheck();
+    const timeoutId = setTimeout(() => {
+      nukeAndCheck();
+    }, 500);
+
     window.addEventListener("focus", nukeAndCheck);
-    return () => window.removeEventListener("focus", nukeAndCheck);
+
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener("focus", nukeAndCheck);
+    };
   }, [showAlert]);
 
   return null;
