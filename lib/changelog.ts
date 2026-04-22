@@ -2,6 +2,18 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
+    version: "2.2.3",
+    date: "apr 22, 2026",
+    title: "relentless guard & quick split security 🛡️",
+    badge: "patch",
+    badgeColor: "bg-teal-100 text-teal-700 border-teal-200",
+    features: [
+      "fixed the version guard to use relative paths and cache-busting URLs to guarantee users always get the freshest update.",
+      "fixed quick split sharing so your friends can view the beautiful receipt link without being forced to create an account.",
+      "fixed 'edit receipt' button on quick splits, prevent it appearing on non owner user.",
+    ],
+  },
+  {
     version: "2.2.2",
     date: "apr 16, 2026",
     title: "the always fresh update 🍃",

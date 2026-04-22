@@ -44,7 +44,7 @@ export default function AuthProvider({
     const isPublicRoute =
       pathname.startsWith("/trip/") ||
       pathname === "/changelog" ||
-      pathname.startsWith("/expenses/");
+      pathname.startsWith("/expense/");
     const isAuthRoute = pathname === "/login" || pathname === "/auth/callback";
 
     if (!user && !isAuthRoute && !isPublicRoute) {

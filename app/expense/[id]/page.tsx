@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { useAlertStore } from "@/store/useAlertStore";
 import { toPng } from "html-to-image";
 import { Expense, Member } from "@/lib/types";
+import { useTripStore } from "@/store/useTripStore";
 
 const getCurrencySymbol = (currencyCode: string) => {
   const symbols: Record<string, string> = {
@@ -52,6 +53,7 @@ export default function UnifiedExpensePage() {
   const params = useParams();
   const router = useRouter();
   const expenseId = params.id as string;
+  const { user } = useTripStore();
 
   const { showAlert } = useAlertStore();
   const receiptRef = useRef<HTMLDivElement>(null);
@@ -232,6 +234,13 @@ export default function UnifiedExpensePage() {
       ? "multiple people"
       : getMemberName(payersEntries[0][0]);
 
+  const isOwner =
+    user &&
+    !tripData &&
+    ((expense.paidBy && expense.paidBy[user.id] !== undefined) ||
+      (expense.owedBy && expense.owedBy[user.id] !== undefined) ||
+      members.some((m) => m.id === user.id));
+
   return (
     <main className="flex min-h-screen flex-col items-center p-4 sm:p-6 bg-[#fdfbf7] pb-10 font-sans selection:bg-emerald-200 selection:text-emerald-900">
       {/* top navigation */}
@@ -263,7 +272,7 @@ export default function UnifiedExpensePage() {
         </button>
 
         <div className="flex items-center gap-2">
-          {!tripData && (
+          {!tripData && isOwner && (
             <button
               onClick={() => router.push(`/quick-split?edit=${expense.id}`)}
               className="px-4 h-11 flex items-center justify-center rounded-full bg-white shadow-sm border border-stone-100 text-stone-500 font-bold text-sm hover:text-emerald-600 hover:border-emerald-200 active:scale-95 transition-all"
@@ -369,10 +378,6 @@ export default function UnifiedExpensePage() {
           </div>
 
           <div className="flex flex-col gap-5 mb-8">
-            <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest block border-b-2 border-stone-100 pb-2">
-              breakdown by member
-            </span>
-
             <div className="flex flex-col gap-5">
               {Object.entries(expense.owedBy).map(([memberId, finalAmount]) => {
                 const memberItems: {
@@ -408,7 +413,7 @@ export default function UnifiedExpensePage() {
                 return (
                   <div key={memberId} className="flex flex-col gap-1.5">
                     <div className="flex justify-between items-center text-sm">
-                      <span className="font-extrabold text-stone-800 uppercase">
+                      <span className="font-extrabold text-stone-800">
                         {getMemberName(memberId)}
                       </span>
                       <span className="font-black text-stone-800">
@@ -430,7 +435,7 @@ export default function UnifiedExpensePage() {
                                   ? `(${item.count}/${item.totalShares})`
                                   : ""}
                               </span>
-                              <span className="shrink-0">
+                              <span className="font-bold truncate">
                                 {currencySymbol} {formatMoney(item.share)}
                               </span>
                             </div>
