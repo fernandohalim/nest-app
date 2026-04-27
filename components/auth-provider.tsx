@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useTripStore } from "@/store/useTripStore";
+import NestLoader from "./nest-loader";
 
 export default function AuthProvider({
   children,
@@ -58,18 +59,7 @@ export default function AuthProvider({
 
   // prevent accidentally flash the dashboard to a logged-out user
   if (isInitializing) {
-    return (
-      <div className="min-h-screen bg-[#fdfbf7] flex flex-col items-center justify-center p-6 selection:bg-emerald-200 selection:text-emerald-900">
-        <div className="relative w-16 h-16 flex items-center justify-center mx-auto mb-6">
-          <div className="absolute inset-0 border-4 border-emerald-100 rounded-full"></div>
-          <div className="absolute inset-0 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-          <span className="text-xl animate-pulse">🐣</span>
-        </div>
-        <p className="text-sm text-stone-500 font-bold tracking-wide">
-          warming up the nest...
-        </p>
-      </div>
-    );
+    return <NestLoader message="warming up the nest..." fullScreen />;
   }
 
   return <>{children}</>;

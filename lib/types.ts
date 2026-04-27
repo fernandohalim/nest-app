@@ -98,3 +98,25 @@ export interface ExpenseFormProps {
   onCancel: () => void;
   currencySymbol?: string;
 }
+
+export interface OwedItemDetail {
+  title: string;
+  amount: number;
+  subItems?: string[];
+  extra?: number;
+  isSettled?: boolean;
+  originalAmount?: number;
+}
+
+export interface PaidItemDetail {
+  title: string;
+  amount: number;
+  isNegative?: boolean;
+}
+
+export interface MemberDetail {
+  totalPaid: number;
+  totalOwed: number;
+  paidItems: PaidItemDetail[];
+  owedItems: OwedItemDetail[];
+}

@@ -7,22 +7,13 @@ import { useAlertStore } from "@/store/useAlertStore";
 import { toPng } from "html-to-image";
 import { Expense, Member } from "@/lib/types";
 import { useTripStore } from "@/store/useTripStore";
-
-const getCurrencySymbol = (currencyCode: string) => {
-  const symbols: Record<string, string> = {
-    IDR: "Rp",
-    SGD: "$",
-    MYR: "RM",
-    THB: "฿",
-    JPY: "¥",
-    KRW: "₩",
-    AUD: "$",
-    USD: "$",
-    EUR: "€",
-    GBP: "£",
-  };
-  return symbols[currencyCode] || currencyCode;
-};
+import NestLoader from "@/components/nest-loader";
+import {
+  formatDateDisplay,
+  formatMoney,
+  getCurrencySymbol,
+  moneyEquals,
+} from "@/lib/format";
 
 // hardcoded barcode widths to avoid react hydration errors with math.random
 const BARCODE_WIDTHS = [
@@ -172,14 +163,7 @@ export default function UnifiedExpensePage() {
   if (isLoading) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center bg-[#fdfbf7]">
-        <div className="relative w-16 h-16 flex items-center justify-center mb-6">
-          <div className="absolute inset-0 border-4 border-emerald-100 rounded-full"></div>
-          <div className="absolute inset-0 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-          <span className="text-xl animate-pulse">🧾</span>
-        </div>
-        <p className="text-sm text-stone-500 font-bold tracking-wide">
-          pulling up the receipt...
-        </p>
+        <NestLoader message="pulling up the receipt..." />
       </main>
     );
   }
@@ -202,13 +186,7 @@ export default function UnifiedExpensePage() {
   }
 
   const currencyCode = tripData?.currency || "IDR";
-  const isZeroDecimal = ["IDR", "JPY", "KRW"].includes(currencyCode);
   const currencySymbol = getCurrencySymbol(currencyCode);
-  const formatMoney = (val: number) =>
-    Number(val).toLocaleString("en-US", {
-      minimumFractionDigits: isZeroDecimal ? 0 : 2,
-      maximumFractionDigits: isZeroDecimal ? 0 : 2,
-    });
 
   const getMemberName = (id: string) =>
     members.find((m) => m.id === id)?.name || "unknown";
@@ -347,13 +325,7 @@ export default function UnifiedExpensePage() {
             {expense.title}
           </h1>
           <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest">
-            {new Date(expense.expenseDate).toLocaleString("en-US", {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-              hour: "numeric",
-              minute: "2-digit",
-            })}
+            {formatDateDisplay(expense.expenseDate, "datetime")}
           </p>
         </div>
 
@@ -417,7 +389,8 @@ export default function UnifiedExpensePage() {
                         {getMemberName(memberId)}
                       </span>
                       <span className="font-black text-stone-800">
-                        {currencySymbol} {formatMoney(finalAmount)}
+                        {currencySymbol}{" "}
+                        {formatMoney(finalAmount, currencyCode)}
                       </span>
                     </div>
 
@@ -436,18 +409,20 @@ export default function UnifiedExpensePage() {
                                   : ""}
                               </span>
                               <span className="font-bold truncate">
-                                {currencySymbol} {formatMoney(item.share)}
+                                {currencySymbol}{" "}
+                                {formatMoney(item.share, currencyCode)}
                               </span>
                             </div>
                           ))}
-                          {Math.abs(diff) >= 0.5 && (
+                          {!moneyEquals(diff, 0, 0.5) && (
                             <div className="flex justify-between text-xs text-stone-500 mt-0.5 pt-1.5 border-t border-stone-100/50">
                               <span className="font-bold uppercase text-[9px] tracking-widest pt-0.5">
                                 {diff > 0 ? "tax & tip" : "discount"}
                               </span>
                               <span className="shrink-0">
                                 {diff > 0 ? "+" : "-"}
-                                {currencySymbol} {formatMoney(Math.abs(diff))}
+                                {currencySymbol}{" "}
+                                {formatMoney(Math.abs(diff), currencyCode)}
                               </span>
                             </div>
                           )}
@@ -459,13 +434,14 @@ export default function UnifiedExpensePage() {
                         <div className="flex justify-between text-xs text-stone-500">
                           <span className="font-bold">↳ base split</span>
                           <span>
-                            {currencySymbol} {formatMoney(finalAmount - extra)}
+                            {currencySymbol}{" "}
+                            {formatMoney(finalAmount - extra, currencyCode)}
                           </span>
                         </div>
                         <div className="flex justify-between text-xs text-stone-500">
                           <span className="font-bold">↳ extra</span>
                           <span>
-                            +{currencySymbol} {formatMoney(extra)}
+                            +{currencySymbol} {formatMoney(extra, currencyCode)}
                           </span>
                         </div>
                       </div>
@@ -479,12 +455,12 @@ export default function UnifiedExpensePage() {
           <div className="w-full border-t-2 border-stone-200 mb-6 border-dashed"></div>
 
           <div className="flex flex-col gap-2 mb-6 text-sm">
-            {expense.splitType === "exact" && Math.abs(difference) > 0 && (
+            {expense.splitType === "exact" && !moneyEquals(difference, 0) && (
               <>
                 <div className="flex justify-between text-stone-500">
                   <span className="font-bold">subtotal</span>
                   <span className="font-black">
-                    {currencySymbol} {formatMoney(itemsSum)}
+                    {currencySymbol} {formatMoney(itemsSum, currencyCode)}
                   </span>
                 </div>
                 <div className="flex justify-between text-stone-500">
@@ -493,7 +469,8 @@ export default function UnifiedExpensePage() {
                   </span>
                   <span className="font-black">
                     {difference > 0 ? "+" : "-"}
-                    {currencySymbol} {formatMoney(Math.abs(difference))}
+                    {currencySymbol}{" "}
+                    {formatMoney(Math.abs(difference), currencyCode)}
                   </span>
                 </div>
               </>
@@ -504,13 +481,15 @@ export default function UnifiedExpensePage() {
                   <div className="flex justify-between text-stone-500">
                     <span className="font-bold">base subtotal</span>
                     <span className="font-black">
-                      {currencySymbol} {formatMoney(baseAdjustmentSubtotal)}
+                      {currencySymbol}{" "}
+                      {formatMoney(baseAdjustmentSubtotal, currencyCode)}
                     </span>
                   </div>
                   <div className="flex justify-between text-stone-500">
                     <span className="font-bold">adjustments</span>
                     <span className="font-black">
-                      +{currencySymbol} {formatMoney(totalExtraAdjustments)}
+                      +{currencySymbol}{" "}
+                      {formatMoney(totalExtraAdjustments, currencyCode)}
                     </span>
                   </div>
                 </>
@@ -522,7 +501,7 @@ export default function UnifiedExpensePage() {
               total
             </span>
             <span className="text-3xl font-black text-emerald-600">
-              {currencySymbol} {formatMoney(expense.totalAmount)}
+              {currencySymbol} {formatMoney(expense.totalAmount, currencyCode)}
             </span>
           </div>
 

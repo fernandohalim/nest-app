@@ -10,24 +10,8 @@ import { supabase } from "@/lib/supabase";
 import { User } from "@supabase/supabase-js"; // 🔥 imported to replace "any"
 import ExpenseForm from "@/components/expense-form";
 import CameraScanner from "@/components/camera-scanner";
-
-const getAvatarColor = (name: string) => {
-  const colors = [
-    "bg-pink-100 text-pink-700 border-pink-200",
-    "bg-purple-100 text-purple-700 border-purple-200",
-    "bg-indigo-100 text-indigo-700 border-indigo-200",
-    "bg-sky-100 text-sky-700 border-sky-200",
-    "bg-teal-100 text-teal-700 border-teal-200",
-    "bg-amber-100 text-amber-700 border-amber-200",
-    "bg-rose-100 text-rose-700 border-rose-200",
-  ];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++)
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return colors[Math.abs(hash) % colors.length];
-};
-
-const getInitials = (name: string) => name.substring(0, 2).toLowerCase();
+import NestLoader from "@/components/nest-loader";
+import { getAvatarColor, getInitials } from "@/lib/avatar";
 
 // 🔥 No more "any" keyword for currentUser!
 function QuickSplitMemberModal({
@@ -450,12 +434,7 @@ function QuickSplitContent() {
         </div>
 
         {isWarmingUp ? (
-          <div className="flex flex-col items-center justify-center py-32">
-            <div className="w-10 h-10 border-4 border-emerald-200 border-t-emerald-500 rounded-full animate-spin mb-4"></div>
-            <span className="text-sm font-bold text-stone-400 uppercase tracking-widest">
-              fetching receipt...
-            </span>
-          </div>
+          <NestLoader message="fetching receipt..." />
         ) : (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
             <section className="mb-8">
@@ -529,6 +508,7 @@ function QuickSplitContent() {
                 onSave={handleSaveReceipt}
                 onCancel={() => router.push("/?tab=quick")} // 🔥 strictly push back to the receipts tab
                 currencySymbol="Rp"
+                currencyCode="IDR"
               />
             </div>
           </div>
@@ -606,13 +586,7 @@ function QuickSplitContent() {
 
 export default function QuickSplitPage() {
   return (
-    <Suspense
-      fallback={
-        <div className="flex min-h-screen items-center justify-center bg-[#fdfbf7] text-stone-400 font-bold text-sm tracking-widest uppercase">
-          warming up...
-        </div>
-      }
-    >
+    <Suspense fallback={<NestLoader message="warming up..." fullScreen />}>
       <QuickSplitContent />
     </Suspense>
   );

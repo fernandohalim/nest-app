@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { supabase } from "@/lib/supabase";
 import { Trip, Expense, Member, ExpenseItem } from "@/lib/types";
 import { User } from "@supabase/supabase-js";
+import { useShallow } from "zustand/react/shallow";
 
 interface SupabaseExpenseRow {
   id: string;
@@ -383,3 +384,44 @@ export const useTripStore = create<TripStore>((set, get) => ({
     };
   },
 }));
+
+export const useUser = () => useTripStore((s) => s.user);
+
+export const useTrips = () => useTripStore((s) => s.trips);
+export const useTripsLoading = () => useTripStore((s) => s.isLoading);
+export const useIsSyncing = () => useTripStore((s) => s.isSyncing);
+
+export const useTripActions = () =>
+  useTripStore(
+    useShallow((s) => ({
+      fetchTrips: s.fetchTrips,
+      fetchTrip: s.fetchTrip,
+      addTrip: s.addTrip,
+      updateTripDetails: s.updateTripDetails,
+      updateTripStatus: s.updateTripStatus,
+      deleteTrip: s.deleteTrip,
+      toggleCollaborative: s.toggleCollaborative,
+      subscribeToTrip: s.subscribeToTrip,
+    })),
+  );
+
+export const useExpenseActions = () =>
+  useTripStore(
+    useShallow((s) => ({
+      addExpense: s.addExpense,
+      updateExpense: s.updateExpense,
+      deleteExpense: s.deleteExpense,
+      toggleExpenseSettled: s.toggleExpenseSettled,
+    })),
+  );
+
+export const useMemberActions = () =>
+  useTripStore(
+    useShallow((s) => ({
+      addMember: s.addMember,
+      updateMember: s.updateMember,
+      deleteMember: s.deleteMember,
+    })),
+  );
+
+export const useAuthActions = () => useTripStore((s) => ({ setUser: s.setUser }));

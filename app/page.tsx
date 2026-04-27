@@ -10,6 +10,7 @@ import CreateTripModal from "@/components/create-trip-modal";
 import AboutModal from "@/components/about-modal";
 import ProfileMenu from "@/components/profile-menu";
 import Image from "next/image";
+import NestLoader from "@/components/nest-loader";
 
 type SortType = "newest" | "oldest" | "a_z" | "z_a";
 
@@ -357,12 +358,7 @@ function HomeContent() {
               )}
 
               {isLoadingQuick ? (
-                <div className="text-center py-20">
-                  <div className="w-10 h-10 border-4 border-emerald-200 border-t-emerald-500 rounded-full animate-spin mx-auto mb-4"></div>
-                  <p className="text-sm font-bold text-stone-400">
-                    finding receipts...
-                  </p>
-                </div>
+                <NestLoader message="finding receipts..." size="sm" />
               ) : processedQuickSplits.length === 0 ? (
                 <div className="text-center py-16 bg-white rounded-4xl shadow-sm border-2 border-dashed border-stone-200 relative">
                   <div className="text-5xl mb-4 inline-block">📸</div>
@@ -619,16 +615,7 @@ function HomeContent() {
               )}
 
               {isLoading && trips.length === 0 ? (
-                <div className="text-center py-20">
-                  <div className="relative w-16 h-16 flex items-center justify-center mx-auto mb-6">
-                    <div className="absolute inset-0 border-4 border-emerald-100 rounded-full"></div>
-                    <div className="absolute inset-0 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-                    <span className="text-xl animate-pulse">🐣</span>
-                  </div>
-                  <p className="text-sm text-stone-500 font-bold tracking-wide">
-                    warming up the nest...
-                  </p>
-                </div>
+                <NestLoader message="warming up the nest..." />
               ) : processedTrips.length === 0 ? (
                 <div className="text-center py-16 bg-white rounded-4xl shadow-sm border-2 border-dashed border-stone-200 relative">
                   <div className="text-5xl mb-4 inline-block">🕊️</div>

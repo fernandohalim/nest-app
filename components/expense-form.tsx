@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from "uuid";
 import { useAlertStore } from "@/store/useAlertStore";
 import CustomSelect from "./custom-select";
 import CustomDatePicker from "./custom-date-picker";
+import { formatMoney, isZeroDecimalCurrency, moneyEquals } from "@/lib/format";
 
 export interface ExpenseFormProps {
   members: Member[];
@@ -13,6 +14,7 @@ export interface ExpenseFormProps {
   onSave: (expense: Expense) => void;
   onCancel: () => void;
   currencySymbol?: string;
+  currencyCode?: string;
 }
 
 const CATEGORIES = [
@@ -81,7 +83,9 @@ function useExpenseFormLogic(
   members: Member[],
   initialExpense: Expense | undefined,
   onSave: (expense: Expense) => void,
+  currencyCode: string,
 ) {
+  const isZeroDecimal = isZeroDecimalCurrency(currencyCode);
   const showAlert = useAlertStore((state) => state.showAlert);
 
   const [title, setTitle] = useState(initialExpense?.title || "");
@@ -241,9 +245,9 @@ function useExpenseFormLogic(
           sumPaid += num;
         }
       });
-      if (sumPaid !== totalAmountNum) {
+      if (!moneyEquals(sumPaid, totalAmountNum)) {
         showAlert(
-          `payments must equal ${totalAmountNum.toLocaleString()}`,
+          `payments must equal ${formatMoney(totalAmountNum, currencyCode)}`,
           "math error 🧮",
         );
         return;
@@ -429,6 +433,7 @@ export default function ExpenseForm({
   onSave,
   onCancel,
   currencySymbol = "Rp",
+  currencyCode = "IDR",
 }: ExpenseFormProps) {
   const {
     title,
@@ -463,7 +468,7 @@ export default function ExpenseForm({
     mathDiff,
     itemsSum,
     difference,
-  } = useExpenseFormLogic(members, initialExpense, onSave);
+  } = useExpenseFormLogic(members, initialExpense, onSave, currencyCode);
 
   const newLocal =
     "flex-[2] py-4.5 bg-stone-900 text-white rounded-2xl text-base font-black hover:bg-emerald-600 transition-all shadow-xl shadow-stone-900/20 hover:shadow-emerald-600/30 active:scale-95 disabled:bg-stone-300 disabled:shadow-none flex justify-center items-center";
@@ -570,23 +575,21 @@ export default function ExpenseForm({
                 <p className="text-[11px] font-bold text-stone-400 text-center py-2">
                   enter a total amount above first! 👆
                 </p>
-              ) : mathDiff === 0 ? (
+              ) : moneyEquals(mathDiff, 0) ? (
                 <div className="flex items-center justify-center gap-2 text-emerald-600 bg-emerald-50 py-2.5 rounded-xl animate-in zoom-in-95 duration-300">
                   <span className="text-lg">✨</span>
                   <span className="text-xs font-black uppercase tracking-widest">
                     perfectly matches total!
                   </span>
                 </div>
-              ) : mathDiff > 0 ? (
+              ) : mathDiff > 0.01 ? (
                 <div className="flex items-center justify-between text-amber-600 bg-amber-50 px-4 py-2.5 rounded-xl transition-colors">
                   <span className="text-[10px] font-black uppercase tracking-widest">
                     left to assign:
                   </span>
                   <span className="text-sm font-black">
                     {currencySymbol}{" "}
-                    {Number(mathDiff).toLocaleString("en-US", {
-                      maximumFractionDigits: 2,
-                    })}
+                    {formatMoney(Number(mathDiff), currencyCode)}
                   </span>
                 </div>
               ) : (
@@ -596,9 +599,7 @@ export default function ExpenseForm({
                   </span>
                   <span className="text-sm font-black">
                     {currencySymbol}{" "}
-                    {Number(Math.abs(mathDiff)).toLocaleString("en-US", {
-                      maximumFractionDigits: 2,
-                    })}
+                    {formatMoney(Number(Math.abs(mathDiff)), currencyCode)}
                   </span>
                 </div>
               )}
@@ -860,29 +861,26 @@ export default function ExpenseForm({
         )}
 
         {/* exact sum warning */}
-        {splitType === "exact" && itemsSum > 0 && difference !== 0 && (
-          <div className="p-5 bg-amber-50 border-2 border-amber-100 rounded-3xl text-sm font-bold text-amber-800 flex items-start gap-3 animate-in fade-in slide-in-from-bottom-2">
-            <span className="text-2xl leading-none">💡</span>
-            <p className="leading-tight">
-              subtotal is{" "}
-              <span className="font-black">
-                {currencySymbol}{" "}
-                {Number(itemsSum).toLocaleString("en-US", {
-                  maximumFractionDigits: 2,
-                })}
-              </span>
-              . the extra{" "}
-              <span className="font-black">
-                {currencySymbol}{" "}
-                {Number(Math.abs(difference)).toLocaleString("en-US", {
-                  maximumFractionDigits: 2,
-                })}
-              </span>{" "}
-              {difference > 0 ? "tax/tip" : "discount"} will be split fairly
-              across the items.
-            </p>
-          </div>
-        )}
+        {splitType === "exact" &&
+          itemsSum > 0 &&
+          !moneyEquals(difference, 0) && (
+            <div className="p-5 bg-amber-50 border-2 border-amber-100 rounded-3xl text-sm font-bold text-amber-800 flex items-start gap-3 animate-in fade-in slide-in-from-bottom-2">
+              <span className="text-2xl leading-none">💡</span>
+              <p className="leading-tight">
+                subtotal is{" "}
+                <span className="font-black">
+                  {currencySymbol} {formatMoney(itemsSum, currencyCode)}
+                </span>
+                . the extra{" "}
+                <span className="font-black">
+                  {currencySymbol}{" "}
+                  {formatMoney(Math.abs(difference), currencyCode)}
+                </span>{" "}
+                {difference > 0 ? "tax/tip" : "discount"} will be split fairly
+                across the items.
+              </p>
+            </div>
+          )}
       </div>
 
       {/* Action Buttons */}
