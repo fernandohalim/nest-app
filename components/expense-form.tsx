@@ -6,6 +6,13 @@ import { v4 as uuidv4 } from "uuid";
 import { useAlertStore } from "@/store/useAlertStore";
 import CustomSelect from "./custom-select";
 import CustomDatePicker from "./custom-date-picker";
+import {
+  formatNumberInput,
+  parseFormattedNumber,
+  isAmountEqual,
+  formatMoney,
+} from "@/lib/format";
+import { getCurrentLocalISO } from "@/lib/datetime";
 
 export interface ExpenseFormProps {
   members: Member[];
@@ -13,6 +20,7 @@ export interface ExpenseFormProps {
   onSave: (expense: Expense) => void;
   onCancel: () => void;
   currencySymbol?: string;
+  currencyCode?: string;
 }
 
 const CATEGORIES = [
@@ -25,51 +33,6 @@ const CATEGORIES = [
   { value: "other", label: "✨ other" },
 ];
 
-const getLocalISOString = () => {
-  const date = new Date();
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  const h = String(date.getHours()).padStart(2, "0");
-  const min = String(date.getMinutes()).padStart(2, "0");
-  return `${y}-${m}-${d}T${h}:${min}:00`;
-};
-
-// 🔥 Bulletproof formatter for decimals
-const formatNumber = (value: string | number | undefined) => {
-  if (value === "" || value === null || value === undefined) return "";
-  let strVal = value.toString();
-
-  strVal = strVal.replace(/[^\d.]/g, "");
-  const parts = strVal.split(".");
-
-  let wholePart = parts[0];
-  const decimalPart = parts.length > 1 ? "." + parts[1].substring(0, 2) : "";
-
-  if (!wholePart && !decimalPart) return "";
-  if (!wholePart) wholePart = "0";
-
-  const formattedWhole = parseInt(wholePart, 10).toLocaleString("en-US");
-
-  if (strVal.endsWith(".") && decimalPart === "") return formattedWhole + ".";
-
-  return formattedWhole + decimalPart;
-};
-
-// 🔥 Bulletproof parser (prevents the crash you saw!)
-const getRawNumber = (formattedValue: string | number | undefined) => {
-  if (
-    formattedValue === undefined ||
-    formattedValue === null ||
-    formattedValue === ""
-  )
-    return 0;
-  const strVal = formattedValue.toString();
-  const num = parseFloat(strVal.replace(/,/g, ""));
-  return isNaN(num) ? 0 : num;
-};
-
-// Local type to handle typing decimals
 interface FormExpenseItem {
   id: string;
   name: string;
@@ -81,18 +44,19 @@ function useExpenseFormLogic(
   members: Member[],
   initialExpense: Expense | undefined,
   onSave: (expense: Expense) => void,
+  currencyCode: string,
 ) {
   const showAlert = useAlertStore((state) => state.showAlert);
 
   const [title, setTitle] = useState(initialExpense?.title || "");
   const [amount, setAmount] = useState(
-    initialExpense ? formatNumber(initialExpense.totalAmount) : "",
+    initialExpense ? formatNumberInput(initialExpense.totalAmount) : "",
   );
   const [category, setCategory] = useState(
     initialExpense?.category || "food & bev",
   );
   const [expenseDate, setExpenseDate] = useState(
-    initialExpense?.expenseDate || getLocalISOString(),
+    initialExpense?.expenseDate || getCurrentLocalISO(),
   );
 
   const [isMultiplePayers, setIsMultiplePayers] = useState(
@@ -106,7 +70,7 @@ function useExpenseFormLogic(
   const [payers, setPayers] = useState<Record<string, string>>(
     initialExpense?.paidBy
       ? Object.entries(initialExpense.paidBy).reduce(
-          (acc, [k, v]) => ({ ...acc, [k]: formatNumber(v) }),
+          (acc, [k, v]) => ({ ...acc, [k]: formatNumberInput(v) }),
           {},
         )
       : {},
@@ -132,19 +96,18 @@ function useExpenseFormLogic(
   const [adjustments, setAdjustments] = useState<Record<string, string>>(
     initialExpense?.adjustments
       ? Object.entries(initialExpense.adjustments).reduce(
-          (acc, [k, v]) => ({ ...acc, [k]: formatNumber(v) }),
+          (acc, [k, v]) => ({ ...acc, [k]: formatNumberInput(v) }),
           {},
         )
       : {},
   );
 
-  // Initialize items with the new priceInput string
   const [items, setItems] = useState<FormExpenseItem[]>(
     initialExpense?.items
       ? initialExpense.items.map((i) => ({
           id: i.id,
           name: i.name,
-          priceInput: i.price ? formatNumber(i.price) : "",
+          priceInput: i.price ? formatNumberInput(i.price) : "",
           assignedTo: i.assignedTo,
         }))
       : [{ id: uuidv4(), name: "", priceInput: "", assignedTo: [] }],
@@ -153,11 +116,11 @@ function useExpenseFormLogic(
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleAmountChange = (e: React.ChangeEvent<HTMLInputElement>) =>
-    setAmount(formatNumber(e.target.value));
+    setAmount(formatNumberInput(e.target.value));
   const handlePayerChange = (id: string, val: string) =>
-    setPayers((prev) => ({ ...prev, [id]: formatNumber(val) }));
+    setPayers((prev) => ({ ...prev, [id]: formatNumberInput(val) }));
   const handleAdjustmentChange = (id: string, val: string) =>
-    setAdjustments((prev) => ({ ...prev, [id]: formatNumber(val) }));
+    setAdjustments((prev) => ({ ...prev, [id]: formatNumberInput(val) }));
   const toggleInvolved = (id: string) =>
     setInvolvedIds((prev) =>
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
@@ -181,7 +144,7 @@ function useExpenseFormLogic(
       items.map((item) => {
         if (item.id === id) {
           if (field === "priceInput")
-            return { ...item, priceInput: formatNumber(value) };
+            return { ...item, priceInput: formatNumberInput(value) };
           return { ...item, name: value };
         }
         return item;
@@ -217,7 +180,7 @@ function useExpenseFormLogic(
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const totalAmountNum = getRawNumber(amount);
+    const totalAmountNum = parseFormattedNumber(amount);
 
     if (!title.trim()) {
       showAlert("what are we paying for? give it a name!", "missing title! 📝");
@@ -235,15 +198,18 @@ function useExpenseFormLogic(
     if (isMultiplePayers) {
       let sumPaid = 0;
       Object.entries(payers).forEach(([id, val]) => {
-        const num = getRawNumber(val);
+        const num = parseFormattedNumber(val);
         if (num > 0) {
           finalPaidBy[id] = num;
           sumPaid += num;
         }
       });
-      if (sumPaid !== totalAmountNum) {
+
+      // 🔥 L3 FIX: float-safe equality. previously used !== which broke for
+      // any decimal currency (e.g. 33.33 + 33.33 + 33.34 !== 100).
+      if (!isAmountEqual(sumPaid, totalAmountNum, currencyCode)) {
         showAlert(
-          `payments must equal ${totalAmountNum.toLocaleString()}`,
+          `payments must equal ${formatMoney(totalAmountNum, currencyCode)}`,
           "math error 🧮",
         );
         return;
@@ -283,7 +249,7 @@ function useExpenseFormLogic(
         .map((i) => ({
           id: i.id,
           name: i.name,
-          price: getRawNumber(i.priceInput),
+          price: parseFormattedNumber(i.priceInput),
           assignedTo: i.assignedTo,
         }))
         .filter((i) => i.name.trim() !== "" && i.price > 0);
@@ -306,19 +272,39 @@ function useExpenseFormLogic(
         return;
       }
 
+      // 🔥 L12 FIX: distribute tax/tip difference proportionally instead of
+      // multiplying everything by a ratio. previously this used:
+      //   ratio = totalAmount / sumOfItems
+      //   each share = (item.price / item.assignedTo.length) * ratio
+      // ratio drift compounded on each re-save, leading to penny-level errors
+      // and "balanced!" check failures down the line.
+      //
+      // new approach: each member's BASE share comes from exact item math
+      // (no rounding). then the tax/tip delta is distributed in proportion
+      // to each member's base share. this keeps the per-item math exact and
+      // confines all rounding to a single, small distribution step.
       const sumOfItems = validItems.reduce((acc, item) => acc + item.price, 0);
-      const ratio = totalAmountNum / sumOfItems;
+      const taxTipDelta = totalAmountNum - sumOfItems;
 
+      // step 1: exact base share per member
+      const baseShares: Record<string, number> = {};
       validItems.forEach((item) => {
-        const splitPrice = item.price / item.assignedTo.length;
+        const perShare = item.price / item.assignedTo.length;
         item.assignedTo.forEach((memberId) => {
-          owedBy[memberId] = (owedBy[memberId] || 0) + splitPrice * ratio;
+          baseShares[memberId] = (baseShares[memberId] || 0) + perShare;
         });
+      });
+
+      // step 2: distribute the tax/tip delta proportionally to base share
+      Object.entries(baseShares).forEach(([memberId, base]) => {
+        const proportionalDelta =
+          sumOfItems > 0 ? (base / sumOfItems) * taxTipDelta : 0;
+        owedBy[memberId] = base + proportionalDelta;
       });
     } else if (splitType === "adjustment") {
       let sumAdjustments = 0;
       Object.entries(adjustments).forEach(([id, val]) => {
-        const num = getRawNumber(val);
+        const num = parseFormattedNumber(val);
         if (num > 0) {
           savedAdjustments[id] = num;
           sumAdjustments += num;
@@ -362,30 +348,36 @@ function useExpenseFormLogic(
               .map((i) => ({
                 id: i.id,
                 name: i.name,
-                price: getRawNumber(i.priceInput),
+                price: parseFormattedNumber(i.priceInput),
                 assignedTo: i.assignedTo,
               }))
               .filter((i) => i.name.trim() !== "" && i.price > 0)
           : undefined,
       adjustments: splitType === "adjustment" ? savedAdjustments : undefined,
       settledShares: initialExpense?.settledShares,
-      expenseDate: new Date(expenseDate).toISOString(),
-      createdAt: initialExpense?.createdAt || new Date().toISOString(),
+      // 🔥 L4 FIX: pass the wall-clock string straight through. no more
+      // new Date(...).toISOString() round-trip that silently shifts to UTC.
+      expenseDate: expenseDate,
+      createdAt: initialExpense?.createdAt || getCurrentLocalISO(),
       category,
     });
   };
 
-  const totalAmountNum = getRawNumber(amount);
+  const totalAmountNum = parseFormattedNumber(amount);
   const currentPaidSum = Object.values(payers).reduce(
-    (sum, val) => sum + getRawNumber(val),
+    (sum, val) => sum + parseFormattedNumber(val),
     0,
   );
   const mathDiff = totalAmountNum - currentPaidSum;
   const itemsSum = items.reduce(
-    (acc, item) => acc + getRawNumber(item.priceInput),
+    (acc, item) => acc + parseFormattedNumber(item.priceInput),
     0,
   );
   const difference = totalAmountNum - itemsSum;
+  // 🔥 L3: also use float-safe equality for the "perfectly matches" UI
+  const paidMatchesTotal =
+    totalAmountNum > 0 &&
+    isAmountEqual(currentPaidSum, totalAmountNum, currencyCode);
 
   return {
     title,
@@ -420,6 +412,7 @@ function useExpenseFormLogic(
     mathDiff,
     itemsSum,
     difference,
+    paidMatchesTotal,
   };
 }
 
@@ -429,6 +422,7 @@ export default function ExpenseForm({
   onSave,
   onCancel,
   currencySymbol = "Rp",
+  currencyCode = "IDR",
 }: ExpenseFormProps) {
   const {
     title,
@@ -463,20 +457,22 @@ export default function ExpenseForm({
     mathDiff,
     itemsSum,
     difference,
-  } = useExpenseFormLogic(members, initialExpense, onSave);
+    paidMatchesTotal,
+  } = useExpenseFormLogic(members, initialExpense, onSave, currencyCode);
 
-  const newLocal =
+  const submitButtonClasses =
     "flex-[2] py-4.5 bg-stone-900 text-white rounded-2xl text-base font-black hover:bg-emerald-600 transition-all shadow-xl shadow-stone-900/20 hover:shadow-emerald-600/30 active:scale-95 disabled:bg-stone-300 disabled:shadow-none flex justify-center items-center";
 
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-8">
-      {/* Hero Inputs */}
+      {/* hero inputs */}
       <div className="flex flex-col gap-5 p-2">
         <input
           type="text"
           placeholder="expense name (?)"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
+          aria-label="expense name"
           className="w-full text-3xl font-black bg-transparent border-none placeholder:text-stone-300 focus:outline-none text-stone-800 transition-all focus:scale-[1.02] transform origin-left"
           autoFocus
         />
@@ -490,12 +486,13 @@ export default function ExpenseForm({
             placeholder="0"
             value={amount}
             onChange={handleAmountChange}
+            aria-label="total amount"
             className="w-full text-5xl font-black bg-transparent border-none placeholder:text-stone-300 focus:outline-none text-emerald-600 transition-all focus:scale-[1.02] transform origin-left"
           />
         </div>
       </div>
 
-      {/* Meta details */}
+      {/* meta details */}
       <div className="flex gap-3 mt-2">
         <div className="flex-1 relative">
           <label className="absolute -top-2.5 left-3 bg-white px-1 text-[10px] font-black text-stone-400 uppercase tracking-widest z-10 pointer-events-none">
@@ -521,18 +518,25 @@ export default function ExpenseForm({
         </div>
       </div>
 
-      {/* Payer Section */}
+      {/* payer section */}
       <div className="bg-white rounded-3xl p-5 border-2 border-stone-100 shadow-sm">
         <div className="flex justify-between items-center mb-4">
           <span className="text-sm font-black text-stone-800 uppercase tracking-wide">
             who paid? 💳
           </span>
+          {/* 🔥 U3: clearer toggle pill instead of a tiny text link */}
           <button
             type="button"
             onClick={() => setIsMultiplePayers(!isMultiplePayers)}
-            className="text-[10px] font-black uppercase tracking-widest text-emerald-600 hover:text-white bg-emerald-50 hover:bg-emerald-500 px-3 py-1.5 rounded-xl transition-all active:scale-95"
+            aria-pressed={isMultiplePayers}
+            className={`flex items-center gap-1.5 text-[10px] font-black uppercase tracking-widest px-3 py-1.5 rounded-xl transition-all active:scale-95 border ${
+              isMultiplePayers
+                ? "bg-emerald-500 text-white border-emerald-500 shadow-sm"
+                : "bg-emerald-50 text-emerald-600 border-emerald-100 hover:bg-emerald-100"
+            }`}
           >
-            {isMultiplePayers ? "switch to one person" : "multiple people"}
+            <span>{isMultiplePayers ? "👥 split payers" : "👤 one payer"}</span>
+            <span className="opacity-60 text-[9px]">tap to toggle</span>
           </button>
         </div>
 
@@ -559,18 +563,18 @@ export default function ExpenseForm({
                   placeholder="0"
                   value={payers[m.id] || ""}
                   onChange={(e) => handlePayerChange(m.id, e.target.value)}
+                  aria-label={`amount paid by ${m.name}`}
                   className="w-24 text-right bg-transparent border-b-2 border-stone-200 text-base font-black text-emerald-600 focus:outline-none focus:border-emerald-500 py-1"
                 />
               </div>
             ))}
 
-            {/* Multiple Payers Math Helper */}
             <div className="mt-4 pt-4 border-t-2 border-dashed border-stone-100">
               {totalAmountNum === 0 ? (
                 <p className="text-[11px] font-bold text-stone-400 text-center py-2">
                   enter a total amount above first! 👆
                 </p>
-              ) : mathDiff === 0 ? (
+              ) : paidMatchesTotal ? (
                 <div className="flex items-center justify-center gap-2 text-emerald-600 bg-emerald-50 py-2.5 rounded-xl animate-in zoom-in-95 duration-300">
                   <span className="text-lg">✨</span>
                   <span className="text-xs font-black uppercase tracking-widest">
@@ -583,10 +587,7 @@ export default function ExpenseForm({
                     left to assign:
                   </span>
                   <span className="text-sm font-black">
-                    {currencySymbol}{" "}
-                    {Number(mathDiff).toLocaleString("en-US", {
-                      maximumFractionDigits: 2,
-                    })}
+                    {currencySymbol} {formatMoney(mathDiff, currencyCode)}
                   </span>
                 </div>
               ) : (
@@ -596,9 +597,7 @@ export default function ExpenseForm({
                   </span>
                   <span className="text-sm font-black">
                     {currencySymbol}{" "}
-                    {Number(Math.abs(mathDiff)).toLocaleString("en-US", {
-                      maximumFractionDigits: 2,
-                    })}
+                    {formatMoney(Math.abs(mathDiff), currencyCode)}
                   </span>
                 </div>
               )}
@@ -607,21 +606,33 @@ export default function ExpenseForm({
         )}
       </div>
 
-      {/* Split logic */}
+      {/* split logic */}
       <div className="flex flex-col gap-5">
         <div className="flex flex-col gap-2">
           <div className="flex justify-between items-center px-1">
             <span className="text-sm font-black text-stone-800 uppercase tracking-wide">
               how are we splitting? 🍕
             </span>
+            {/* 🔥 U3: small hint nudging users toward the powerful by-item mode */}
+            {!initialExpense && splitType === "equal" && (
+              <span className="text-[9px] font-bold text-emerald-500 uppercase tracking-widest animate-pulse">
+                💡 try by-item for receipts
+              </span>
+            )}
           </div>
 
-          <div className="bg-stone-100 p-1.5 rounded-3xl flex gap-1 relative overflow-hidden">
+          <div
+            role="tablist"
+            aria-label="split type"
+            className="bg-stone-100 p-1.5 rounded-3xl flex gap-1 relative overflow-hidden"
+          >
             <div
               className={`absolute top-1.5 bottom-1.5 w-[32%] bg-white rounded-2xl shadow-sm transition-all duration-300 ease-out ${splitType === "equal" ? "left-[1.5%]" : splitType === "exact" ? "left-[34%]" : "left-[66.5%]"}`}
             ></div>
             <button
               type="button"
+              role="tab"
+              aria-selected={splitType === "equal"}
               onClick={() => setSplitType("equal")}
               className={`flex-1 py-3 text-xs z-10 rounded-2xl transition-all active:scale-95 ${splitType === "equal" ? "font-black text-stone-800" : "font-bold text-stone-500 hover:text-stone-700"}`}
             >
@@ -629,6 +640,8 @@ export default function ExpenseForm({
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={splitType === "exact"}
               onClick={() => setSplitType("exact")}
               className={`flex-1 py-3 text-xs z-10 rounded-2xl transition-all active:scale-95 ${splitType === "exact" ? "font-black text-stone-800" : "font-bold text-stone-500 hover:text-stone-700"}`}
             >
@@ -636,6 +649,8 @@ export default function ExpenseForm({
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={splitType === "adjustment"}
               onClick={() => setSplitType("adjustment")}
               className={`flex-1 py-3 text-xs z-10 rounded-2xl transition-all active:scale-95 ${splitType === "adjustment" ? "font-black text-stone-800" : "font-bold text-stone-500 hover:text-stone-700"}`}
             >
@@ -669,10 +684,20 @@ export default function ExpenseForm({
                   key={m.id}
                   className={`flex items-center justify-between p-3.5 rounded-2xl border-2 transition-all cursor-pointer ${isTicked ? "bg-white border-emerald-400 shadow-sm" : hasAdjustment ? "bg-white border-stone-300 shadow-sm" : "bg-stone-50 border-stone-100 opacity-60 hover:opacity-100"}`}
                   onClick={() => toggleInvolved(m.id)}
+                  role="checkbox"
+                  aria-checked={isTicked}
+                  tabIndex={0}
+                  onKeyDown={(e) => {
+                    if (e.key === " " || e.key === "Enter") {
+                      e.preventDefault();
+                      toggleInvolved(m.id);
+                    }
+                  }}
                 >
                   <div className="flex items-center gap-4">
                     <div
                       className={`w-6 h-6 shrink-0 rounded-full border-2 flex items-center justify-center transition-all ${isTicked ? "bg-emerald-500 border-emerald-500 text-white scale-110" : "border-stone-300 bg-white"}`}
+                      aria-hidden="true"
                     >
                       {isTicked && (
                         <svg
@@ -707,6 +732,7 @@ export default function ExpenseForm({
                         handleAdjustmentChange(m.id, e.target.value)
                       }
                       onClick={(e) => e.stopPropagation()}
+                      aria-label={`extra adjustment for ${m.name}`}
                       className={`w-20 text-right bg-transparent border-b-2 text-sm font-black focus:outline-none py-1 placeholder:font-bold transition-colors ${isTicked ? "border-emerald-100 text-emerald-600 focus:border-emerald-500 placeholder:text-emerald-200" : "border-stone-200 text-stone-600 focus:border-stone-400 placeholder:text-stone-300"}`}
                     />
                   )}
@@ -730,7 +756,7 @@ export default function ExpenseForm({
             {items.map((item) => {
               const isOrphaned =
                 item.name.trim() !== "" &&
-                getRawNumber(item.priceInput) > 0 &&
+                parseFormattedNumber(item.priceInput) > 0 &&
                 item.assignedTo.length === 0;
 
               return (
@@ -738,7 +764,6 @@ export default function ExpenseForm({
                   key={item.id}
                   className={`border-2 rounded-3xl bg-white shadow-sm flex flex-col group overflow-hidden transition-colors duration-300 ${isOrphaned ? "border-rose-100 shadow-rose-100" : "border-stone-100"}`}
                 >
-                  {/* Inputs Row */}
                   <div
                     className={`flex items-center w-full border-b-2 transition-colors duration-300 ${isOrphaned ? "bg-rose-50/30 border-rose-100" : "bg-stone-50 border-stone-100"}`}
                   >
@@ -749,6 +774,7 @@ export default function ExpenseForm({
                       onChange={(e) =>
                         handleItemChange(item.id, "name", e.target.value)
                       }
+                      aria-label="item name"
                       className={`flex-6 min-w-0 text-sm font-black bg-transparent px-4 py-3 sm:py-4 focus:outline-none focus:bg-white transition-all border-r-2 ${isOrphaned ? "border-rose-100" : "border-stone-100"}`}
                     />
                     <input
@@ -759,18 +785,19 @@ export default function ExpenseForm({
                       onChange={(e) =>
                         handleItemChange(item.id, "priceInput", e.target.value)
                       }
+                      aria-label="item price"
                       className={`flex-4 min-w-0 text-sm font-black text-right bg-transparent px-3 py-3 sm:py-4 focus:outline-none focus:bg-white transition-all text-emerald-600 border-r-2 ${isOrphaned ? "border-rose-100" : "border-stone-100"}`}
                     />
                     <button
                       type="button"
                       onClick={() => handleRemoveItem(item.id)}
+                      aria-label="remove item"
                       className="w-10 sm:w-12 shrink-0 flex items-center justify-center self-stretch bg-transparent text-stone-400 hover:bg-rose-500 hover:text-white transition-all font-black text-lg"
                     >
                       ×
                     </button>
                   </div>
 
-                  {/* member tag row */}
                   <div className="flex flex-col px-3 py-3 sm:px-4 sm:py-3 bg-white">
                     <div className="flex flex-wrap gap-1.5 sm:gap-2">
                       {members.map((m) => {
@@ -790,6 +817,7 @@ export default function ExpenseForm({
                                 onClick={() =>
                                   increaseItemMemberWeight(item.id, m.id)
                                 }
+                                aria-label={`increase ${m.name}'s share of ${item.name || "this item"}`}
                                 className="text-[10px] sm:text-[11px] font-black pl-3.5 sm:pl-4 pr-2 py-1.5 sm:py-2 transition-colors hover:bg-stone-700 active:bg-stone-600 flex items-center gap-1.5"
                               >
                                 {m.name}
@@ -805,6 +833,7 @@ export default function ExpenseForm({
                                 onClick={() =>
                                   decreaseItemMemberWeight(item.id, m.id)
                                 }
+                                aria-label={`decrease ${m.name}'s share of ${item.name || "this item"}`}
                                 className="px-2 hover:bg-rose-500 hover:text-white text-stone-300 transition-colors active:bg-rose-600 flex items-center justify-center"
                               >
                                 <svg
@@ -812,6 +841,7 @@ export default function ExpenseForm({
                                   fill="none"
                                   stroke="currentColor"
                                   viewBox="0 0 24 24"
+                                  aria-hidden="true"
                                 >
                                   <path
                                     strokeLinecap="round"
@@ -832,6 +862,7 @@ export default function ExpenseForm({
                             onClick={() =>
                               increaseItemMemberWeight(item.id, m.id)
                             }
+                            aria-label={`assign ${item.name || "this item"} to ${m.name}`}
                             className="text-[10px] sm:text-[11px] font-black px-3.5 sm:px-4 py-1.5 sm:py-2 rounded-full transition-all active:scale-90 bg-stone-50 text-stone-400 border-2 border-stone-100 hover:bg-stone-200"
                           >
                             {m.name}
@@ -859,24 +890,18 @@ export default function ExpenseForm({
           </div>
         )}
 
-        {/* exact sum warning */}
         {splitType === "exact" && itemsSum > 0 && difference !== 0 && (
           <div className="p-5 bg-amber-50 border-2 border-amber-100 rounded-3xl text-sm font-bold text-amber-800 flex items-start gap-3 animate-in fade-in slide-in-from-bottom-2">
             <span className="text-2xl leading-none">💡</span>
             <p className="leading-tight">
               subtotal is{" "}
               <span className="font-black">
-                {currencySymbol}{" "}
-                {Number(itemsSum).toLocaleString("en-US", {
-                  maximumFractionDigits: 2,
-                })}
+                {currencySymbol} {formatMoney(itemsSum, currencyCode)}
               </span>
               . the extra{" "}
               <span className="font-black">
                 {currencySymbol}{" "}
-                {Number(Math.abs(difference)).toLocaleString("en-US", {
-                  maximumFractionDigits: 2,
-                })}
+                {formatMoney(Math.abs(difference), currencyCode)}
               </span>{" "}
               {difference > 0 ? "tax/tip" : "discount"} will be split fairly
               across the items.
@@ -885,7 +910,7 @@ export default function ExpenseForm({
         )}
       </div>
 
-      {/* Action Buttons */}
+      {/* action buttons */}
       <div className="flex gap-3 mt-6">
         <button
           type="button"
@@ -894,7 +919,11 @@ export default function ExpenseForm({
         >
           cancel
         </button>
-        <button type="submit" disabled={isSubmitting} className={newLocal}>
+        <button
+          type="submit"
+          disabled={isSubmitting}
+          className={submitButtonClasses}
+        >
           {isSubmitting ? (
             <div className="w-6 h-6 border-3 border-white border-t-transparent rounded-full animate-spin"></div>
           ) : initialExpense ? (

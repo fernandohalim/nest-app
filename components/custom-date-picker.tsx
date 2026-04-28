@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import { CustomDatePickerProps } from "@/lib/types";
+import { formatLocalISO } from "@/lib/datetime";
 
 const MONTHS = [
   "january",
@@ -19,16 +20,6 @@ const MONTHS = [
 ];
 
 const DAYS = ["su", "mo", "tu", "we", "th", "fr", "sa"];
-
-// helper to format dates strictly locally without shifting to utc
-const formatLocalISO = (date: Date) => {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-  const h = String(date.getHours()).padStart(2, "0");
-  const min = String(date.getMinutes()).padStart(2, "0");
-  return `${y}-${m}-${d}T${h}:${min}:00`;
-};
 
 function useDatePickerLogic(value: string, onChange: (value: string) => void) {
   const [isOpen, setIsOpen] = useState(false);
@@ -93,7 +84,7 @@ function useDatePickerLogic(value: string, onChange: (value: string) => void) {
     1,
   ).getDay();
 
-  const formattedDisplay = currentDate.toLocaleDateString("en-US", {
+  const formattedDisplay = currentDate.toLocaleDateString(undefined, {
     month: "short",
     day: "numeric",
     year: "numeric",
@@ -118,7 +109,6 @@ function useDatePickerLogic(value: string, onChange: (value: string) => void) {
     );
   };
 
-  // 🔥 NEW: Month & Year Jumpers
   const handlePrevMonth = (e: React.MouseEvent) => {
     e.stopPropagation();
     setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1));
@@ -136,7 +126,6 @@ function useDatePickerLogic(value: string, onChange: (value: string) => void) {
     setViewDate(new Date(viewDate.getFullYear() + 1, viewDate.getMonth(), 1));
   };
 
-  // 🔥 NEW: Shortcut to right now
   const handleSetNow = () => {
     const now = new Date();
     setViewDate(new Date(now.getFullYear(), now.getMonth(), 1));
@@ -151,7 +140,6 @@ function useDatePickerLogic(value: string, onChange: (value: string) => void) {
     onChange(formatLocalISO(now));
   };
 
-  // Centralized parent updater
   const updateParentDate = (
     day: number | null,
     hStr: string,
@@ -185,13 +173,11 @@ function useDatePickerLogic(value: string, onChange: (value: string) => void) {
     updateParentDate(day, time12.h, time12.m, time12.ampm);
   };
 
-  // 🔥 FIXED: Typing allows empty strings and single digits temporarily
   const handleTimeChange = (field: "h" | "m", val: string) => {
     val = val.replace(/\D/g, "").slice(0, 2);
     setTime12((prev) => ({ ...prev, [field]: val }));
   };
 
-  // 🔥 FIXED: Formats cleanly when you click away
   const handleBlur = (field: "h" | "m") => {
     let val = parseInt(time12[field], 10);
     if (isNaN(val)) val = field === "h" ? 12 : 0;
@@ -272,6 +258,9 @@ export default function CustomDatePicker({
       <button
         type="button"
         onClick={() => setIsOpen(!isOpen)}
+        aria-label="select date and time"
+        aria-haspopup="dialog"
+        aria-expanded={isOpen}
         className="w-full h-13 flex items-center justify-between bg-white border-2 border-stone-100 shadow-sm rounded-2xl px-4 py-3.5 text-sm font-bold text-stone-700 focus:outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 transition-all active:scale-[0.98]"
       >
         <span>{formattedDisplay}</span>
@@ -280,6 +269,7 @@ export default function CustomDatePicker({
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
+          aria-hidden="true"
         >
           <path
             strokeLinecap="round"
@@ -291,8 +281,11 @@ export default function CustomDatePicker({
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 mt-2 p-4 bg-white border-2 border-stone-100 rounded-3xl shadow-xl z-50 w-76 animate-in fade-in slide-in-from-top-2 duration-200">
-          {/* 🔥 NEW: Right Now Shortcut */}
+        <div
+          role="dialog"
+          aria-label="date picker"
+          className="absolute top-full left-0 mt-2 p-4 bg-white border-2 border-stone-100 rounded-3xl shadow-xl z-50 w-76 animate-in fade-in slide-in-from-top-2 duration-200"
+        >
           <button
             type="button"
             onClick={handleSetNow}
@@ -301,20 +294,21 @@ export default function CustomDatePicker({
             <span className="text-sm">⚡</span> set to right now
           </button>
 
-          {/* Month/Year Nav */}
           <div className="flex justify-between items-center mb-4">
             <div className="flex gap-1">
               <button
                 type="button"
                 onClick={handlePrevYear}
+                aria-label="previous year"
                 className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-stone-100 text-stone-400 hover:text-stone-600 transition-colors"
-                title="Previous Year"
+                title="previous year"
               >
                 <svg
                   className="w-4 h-4"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
@@ -327,6 +321,7 @@ export default function CustomDatePicker({
               <button
                 type="button"
                 onClick={handlePrevMonth}
+                aria-label="previous month"
                 className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-stone-100 text-stone-500 transition-colors"
               >
                 <svg
@@ -334,6 +329,7 @@ export default function CustomDatePicker({
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
@@ -353,6 +349,7 @@ export default function CustomDatePicker({
               <button
                 type="button"
                 onClick={handleNextMonth}
+                aria-label="next month"
                 className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-stone-100 text-stone-500 transition-colors"
               >
                 <svg
@@ -360,6 +357,7 @@ export default function CustomDatePicker({
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
@@ -372,14 +370,16 @@ export default function CustomDatePicker({
               <button
                 type="button"
                 onClick={handleNextYear}
+                aria-label="next year"
                 className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-stone-100 text-stone-400 hover:text-stone-600 transition-colors"
-                title="Next Year"
+                title="next year"
               >
                 <svg
                   className="w-4 h-4"
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
@@ -392,7 +392,6 @@ export default function CustomDatePicker({
             </div>
           </div>
 
-          {/* Calendar Grid */}
           <div className="grid grid-cols-7 gap-1 mb-2">
             {DAYS.map((day) => (
               <div
@@ -419,6 +418,8 @@ export default function CustomDatePicker({
                   key={day}
                   type="button"
                   onClick={() => handleSelectDate(day)}
+                  aria-label={`day ${day}`}
+                  aria-pressed={selected}
                   className={`h-9 rounded-full text-xs font-bold transition-all flex items-center justify-center
                     ${selected ? "bg-emerald-500 text-white shadow-md scale-105" : today ? "text-emerald-600 bg-emerald-50 border border-emerald-200 hover:bg-emerald-100" : "text-stone-600 hover:bg-stone-100 hover:text-stone-900"}
                   `}
@@ -429,7 +430,6 @@ export default function CustomDatePicker({
             })}
           </div>
 
-          {/* strictly custom 12-hour am/pm picker */}
           <div className="pt-4 border-t-2 border-stone-100 flex items-center justify-between gap-3">
             <div className="relative flex-1 bg-stone-50 border-2 border-stone-100 rounded-xl flex items-center px-2 py-1.5 overflow-hidden hover:border-emerald-200 transition-colors focus-within:border-emerald-400 focus-within:bg-white focus-within:ring-4 focus-within:ring-emerald-100">
               <svg
@@ -437,6 +437,7 @@ export default function CustomDatePicker({
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"
@@ -448,25 +449,30 @@ export default function CustomDatePicker({
               <div className="flex items-center gap-0.5">
                 <input
                   type="text"
+                  inputMode="numeric"
                   maxLength={2}
                   value={time12.h}
                   onChange={(e) => handleTimeChange("h", e.target.value)}
                   onBlur={() => handleBlur("h")}
+                  aria-label="hour"
                   className="w-6 text-center bg-transparent text-sm font-black text-stone-700 focus:outline-none placeholder:text-stone-300"
                 />
                 <span className="text-stone-400 font-black pb-0.5">:</span>
                 <input
                   type="text"
+                  inputMode="numeric"
                   maxLength={2}
                   value={time12.m}
                   onChange={(e) => handleTimeChange("m", e.target.value)}
                   onBlur={() => handleBlur("m")}
+                  aria-label="minute"
                   className="w-6 text-center bg-transparent text-sm font-black text-stone-700 focus:outline-none placeholder:text-stone-300"
                 />
               </div>
               <button
                 type="button"
                 onClick={handleAmPmToggle}
+                aria-label={`toggle to ${time12.ampm === "AM" ? "PM" : "AM"}`}
                 className="ml-auto px-2 py-1 bg-stone-200 text-[10px] font-black uppercase tracking-widest text-stone-600 rounded-lg hover:bg-emerald-100 hover:text-emerald-700 transition-colors"
               >
                 {time12.ampm}

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 
 type AlertType = "alert" | "confirm";
+export type AlertSeverity = "default" | "destructive";
 
 interface AlertState {
   isOpen: boolean;
@@ -9,7 +10,14 @@ interface AlertState {
   message: string;
   confirmText: string;
   cancelText: string;
+  severity: AlertSeverity;
   onConfirmAction?: () => void;
+}
+
+interface ShowConfirmOptions {
+  title?: string;
+  confirmText?: string;
+  severity?: AlertSeverity;
 }
 
 interface AlertActions {
@@ -17,8 +25,7 @@ interface AlertActions {
   showConfirm: (
     message: string,
     onConfirm: () => void,
-    title?: string,
-    confirmText?: string
+    options?: ShowConfirmOptions,
   ) => void;
   close: () => void;
   confirm: () => void;
@@ -31,7 +38,9 @@ export const useAlertStore = create<AlertState & AlertActions>((set, get) => ({
   message: "",
   confirmText: "got it",
   cancelText: "cancel",
+  severity: "default",
   onConfirmAction: undefined,
+
   showAlert: (message, title = "hold up! 🛑") =>
     set({
       isOpen: true,
@@ -39,22 +48,19 @@ export const useAlertStore = create<AlertState & AlertActions>((set, get) => ({
       message,
       title,
       confirmText: "got it!",
+      severity: "default",
       onConfirmAction: undefined,
     }),
 
-  showConfirm: (
-    message,
-    onConfirm,
-    title = "are you sure? 🤔",
-    confirmText = "yes, do it!"
-  ) =>
+  showConfirm: (message, onConfirm, options = {}) =>
     set({
       isOpen: true,
       type: "confirm",
       message,
-      title,
-      confirmText,
+      title: options.title ?? "are you sure? 🤔",
+      confirmText: options.confirmText ?? "yes, do it!",
       cancelText: "nevermind",
+      severity: options.severity ?? "default",
       onConfirmAction: onConfirm,
     }),
 
