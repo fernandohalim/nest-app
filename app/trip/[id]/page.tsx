@@ -14,11 +14,51 @@ import CameraScanner from "@/components/camera-scanner";
 import MemberModal from "@/components/member-modal";
 import TripSettingsModal from "@/components/trip-settings-modal";
 import SettlementModal from "@/components/settlement-modal";
-import NestLoader from "@/components/nest-loader";
-import { formatMoney, getCurrencySymbol } from "@/lib/format";
-import { getAvatarColor, getInitials } from "@/lib/avatar";
-import { timeAgo } from "@/lib/format";
-import { format } from "path";
+
+const getAvatarColor = (name: string) => {
+  const colors = [
+    "bg-pink-100 text-pink-700 border-pink-200",
+    "bg-purple-100 text-purple-700 border-purple-200",
+    "bg-indigo-100 text-indigo-700 border-indigo-200",
+    "bg-sky-100 text-sky-700 border-sky-200",
+    "bg-teal-100 text-teal-700 border-teal-200",
+    "bg-amber-100 text-amber-700 border-amber-200",
+    "bg-rose-100 text-rose-700 border-rose-200",
+  ];
+  let hash = 0;
+  for (let i = 0; i < name.length; i++)
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return colors[Math.abs(hash) % colors.length];
+};
+
+const getInitials = (name: string) => name.substring(0, 2).toLowerCase();
+
+const timeAgo = (dateStr: string) => {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+};
+
+// 🔥 NEW HELPER: Maps DB currency string to display symbol
+export const getCurrencySymbol = (currencyCode: string) => {
+  const symbols: Record<string, string> = {
+    IDR: "Rp",
+    SGD: "$",
+    MYR: "RM",
+    THB: "฿",
+    JPY: "¥",
+    KRW: "₩",
+    AUD: "$",
+    USD: "$",
+    EUR: "€",
+    GBP: "£",
+  };
+  return symbols[currencyCode] || currencyCode;
+};
 
 export default function TripDetail() {
   const params = useParams();
@@ -354,7 +394,7 @@ export default function TripDetail() {
               myBaseSum += myBaseShare;
               originalSum += myBaseShare;
               subItems.push(
-                `${i.name}${shareText} • ${formatMoney(Number(myBaseShare))}`.trim(),
+                `${i.name}${shareText} • ${Number(myBaseShare).toLocaleString("en-US", { maximumFractionDigits: 2 })}`.trim(),
               );
             });
 
@@ -369,7 +409,7 @@ export default function TripDetail() {
               const diffShare = amountOwed - myBaseSum - extra;
               if (Math.abs(diffShare) >= 0.5) {
                 subItems.push(
-                  `${difference > 0 ? "tax & tip" : "global discount"} • ${diffShare > 0 ? "+" : ""}${formatMoney(Number(diffShare))}`,
+                  `${difference > 0 ? "tax & tip" : "global discount"} • ${diffShare > 0 ? "+" : ""}${Number(diffShare).toLocaleString("en-US", { maximumFractionDigits: 2 })}`,
                 );
               }
             }
@@ -377,9 +417,11 @@ export default function TripDetail() {
             const extra = exp.adjustments?.[id] || 0;
             if (extra > 0) {
               subItems.push(
-                `debt after split • ${formatMoney(Number(amt - extra))}`,
+                `debt after split • ${Number(amt - extra).toLocaleString("en-US", { maximumFractionDigits: 2 })}`,
               );
-              subItems.push(`adjusted bill • +${formatMoney(Number(extra))}`);
+              subItems.push(
+                `adjusted bill • +${Number(extra).toLocaleString("en-US", { maximumFractionDigits: 2 })}`,
+              );
             }
           }
 
@@ -451,7 +493,14 @@ export default function TripDetail() {
   if (isLoading && !trip) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center p-6 bg-[#fdfbf7]">
-        <NestLoader message="warming up the nest..." />
+        <div className="relative w-16 h-16 flex items-center justify-center mb-6">
+          <div className="absolute inset-0 border-4 border-emerald-100 rounded-full"></div>
+          <div className="absolute inset-0 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
+          <span className="text-xl animate-pulse">🐣</span>
+        </div>
+        <p className="text-sm text-stone-500 font-bold tracking-wide">
+          warming up the nest...
+        </p>
       </main>
     );
   }
@@ -695,7 +744,7 @@ export default function TripDetail() {
             <span className="text-2xl text-emerald-200 align-top mr-1">
               {currencySymbol}
             </span>
-            {formatMoney(totalTripCost)}
+            {totalTripCost.toLocaleString()}
           </div>
 
           <div className="flex items-center gap-2 mt-6 bg-black/25 px-5 py-2 rounded-full text-xs font-bold text-emerald-50 backdrop-blur-sm relative z-10 shadow-inner">
@@ -952,7 +1001,7 @@ export default function TripDetail() {
                       </div>
                       <div className="text-right shrink-0 pl-2">
                         <p className="text-lg sm:text-xl font-black text-emerald-600">
-                          {currencySymbol} {formatMoney(exp.totalAmount)}
+                          {currencySymbol} {exp.totalAmount.toLocaleString()}
                         </p>
                         <p className="text-[10px] sm:text-xs font-bold text-stone-400 mt-1 flex items-center justify-end gap-1">
                           {isExpanded ? "close" : "details"}
@@ -1004,7 +1053,10 @@ export default function TripDetail() {
                                     </div>
                                     <span className="font-black text-stone-600">
                                       {currencySymbol}{" "}
-                                      {formatMoney(Number(item.price))}
+                                      {Number(item.price).toLocaleString(
+                                        "en-US",
+                                        { maximumFractionDigits: 2 },
+                                      )}
                                     </span>
                                   </div>
                                 ))}
@@ -1018,14 +1070,19 @@ export default function TripDetail() {
                                     subtotal is{" "}
                                     <span className="font-black">
                                       {currencySymbol}{" "}
-                                      {formatMoney(Number(itemsSum))}
+                                      {Number(itemsSum).toLocaleString(
+                                        "en-US",
+                                        { maximumFractionDigits: 2 },
+                                      )}
                                     </span>
                                     . the extra{" "}
                                     <span className="font-black">
                                       {currencySymbol}{" "}
-                                      {formatMoney(
-                                        Number(Math.abs(difference)),
-                                      )}
+                                      {Number(
+                                        Math.abs(difference),
+                                      ).toLocaleString("en-US", {
+                                        maximumFractionDigits: 2,
+                                      })}
                                     </span>{" "}
                                     {difference > 0 ? "tax/tip" : "discount"} is
                                     split fairly across the items.
@@ -1118,7 +1175,10 @@ export default function TripDetail() {
                                           className={`font-black text-lg leading-none ${isSettled ? "text-stone-300 line-through decoration-2" : "text-stone-800"}`}
                                         >
                                           {currencySymbol}{" "}
-                                          {formatMoney(Number(amount))}
+                                          {Number(amount).toLocaleString(
+                                            "en-US",
+                                            { maximumFractionDigits: 2 },
+                                          )}
                                         </span>
                                       </div>
                                     </div>
@@ -1158,8 +1218,13 @@ export default function TripDetail() {
                                                     </span>
                                                     <span className="shrink-0 text-stone-300">
                                                       {currencySymbol}{" "}
-                                                      {formatMoney(
-                                                        Number(myBaseShare),
+                                                      {Number(
+                                                        myBaseShare,
+                                                      ).toLocaleString(
+                                                        "en-US",
+                                                        {
+                                                          maximumFractionDigits: 2,
+                                                        },
                                                       )}
                                                     </span>
                                                   </span>
@@ -1742,7 +1807,6 @@ export default function TripDetail() {
                   setEditingExpense(undefined);
                 }}
                 currencySymbol={currencySymbol}
-                currencyCode={trip.currency || "IDR"}
               />
             </div>
           </div>
