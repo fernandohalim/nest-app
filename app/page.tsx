@@ -1,14 +1,16 @@
 "use client";
 
-import { useState, useEffect, Suspense } from "react";
+import { useState, useEffect, Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTripStore } from "@/store/useTripStore";
 import { useAlertStore } from "@/store/useAlertStore";
 import { supabase } from "@/lib/supabase";
-import { Expense, Member } from "@/lib/types"; // 🔥 added Member here
+import { Expense, Member } from "@/lib/types";
 import CreateTripModal from "@/components/create-trip-modal";
 import AboutModal from "@/components/about-modal";
 import ProfileMenu from "@/components/profile-menu";
+import LoadingState from "@/components/loading-state";
+import { formatDisplayDate } from "@/lib/datetime";
 import Image from "next/image";
 
 type SortType = "newest" | "oldest" | "a_z" | "z_a";
@@ -23,24 +25,28 @@ interface QuickSplitRow {
   expense_date: string;
   created_at: string;
   category: string;
-  ephemeral_members?: Member[]; // 🔥 added this so we can filter by it!
+  ephemeral_members?: Member[];
 }
 
 function HomeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { showAlert, showConfirm } = useAlertStore();
-  const { user, trips, fetchTrips, isLoading } = useTripStore();
+  const showAlert = useAlertStore((s) => s.showAlert);
+  const showConfirm = useAlertStore((s) => s.showConfirm);
+
+  const user = useTripStore((s) => s.user);
+  const trips = useTripStore((s) => s.trips);
+  const fetchTrips = useTripStore((s) => s.fetchTrips);
+  const isLoading = useTripStore((s) => s.isLoading);
+
   const [currentTime] = useState(() => Date.now());
 
-  // modal states
   const [isCreating, setIsCreating] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
-  // 🔥 local state for instant tab switching
   const currentTab = searchParams.get("tab");
   const urlMode = currentTab === "quick" ? "quick" : "trips";
 
@@ -52,7 +58,6 @@ function HomeContent() {
     setPrevTab(currentTab);
   }
 
-  // 🔥 initialize filters directly from the URL so they persist when you hit "back"!
   const [searchQuery, setSearchQuery] = useState(searchParams.get("q") || "");
   const [sortBy, setSortBy] = useState<SortType>(
     (searchParams.get("sort") as SortType) || "newest",
@@ -117,6 +122,16 @@ function HomeContent() {
     fetchTrips();
   }, [fetchTrips]);
 
+  // 🔥 L6 FIX: server-side ownership filter via the new created_by column.
+  //
+  // before: SELECT * WHERE trip_id IS NULL → returned every quick-split for
+  // every user, then filtered client-side based on whether auth.uid() showed
+  // up in paid_by/owed_by/ephemeral_members. that was both a privacy leak
+  // (PII like display names in JSON, visible to all authenticated users) and
+  // a hard scaling cap (kilobytes per row × every user × every page load).
+  //
+  // after: WHERE trip_id IS NULL AND created_by = auth.uid(). when RLS is
+  // enabled later, this constraint becomes architectural too.
   useEffect(() => {
     const fetchQuickSplits = async () => {
       if (!user) return;
@@ -125,22 +140,11 @@ function HomeContent() {
         .from("expenses")
         .select("*")
         .is("trip_id", null)
+        .eq("created_by", user.id)
         .order("created_at", { ascending: false });
 
       if (data && !error) {
-        // 🔥 strictly filter out receipts that don't belong to the logged in user!
-        const myQuickSplits = (data as QuickSplitRow[]).filter((exp) => {
-          const isPayer = exp.paid_by && exp.paid_by[user.id] !== undefined;
-          const isOwer = exp.owed_by && exp.owed_by[user.id] !== undefined;
-          const isMember =
-            exp.ephemeral_members &&
-            Array.isArray(exp.ephemeral_members) &&
-            exp.ephemeral_members.some((m) => m.id === user.id);
-
-          return isPayer || isOwer || isMember;
-        });
-
-        const mappedData: Expense[] = myQuickSplits.map((exp) => ({
+        const mappedData: Expense[] = (data as QuickSplitRow[]).map((exp) => ({
           id: exp.id,
           title: exp.title,
           totalAmount: exp.total_amount,
@@ -161,6 +165,7 @@ function HomeContent() {
     }
   }, [user, viewMode]);
 
+  // 🔥 U5 follow-through: severity is now explicit, not inferred from title.
   const handleDeleteQuickSplit = (
     id: string,
     title: string,
@@ -177,51 +182,72 @@ function HomeContent() {
           showAlert("failed to delete the receipt.", "error ❌");
         }
       },
-      "delete receipt? 🗑️",
-      "yes, delete it",
+      {
+        title: "delete receipt? 🗑️",
+        confirmText: "yes, delete it",
+        severity: "destructive",
+      },
     );
   };
 
-  const processedTrips = trips
-    .filter((t) => (includeSettled ? true : t.status !== "finished"))
-    .filter((t) => t.name.toLowerCase().includes(searchQuery.toLowerCase()))
-    .filter((t) => (showOnlyMine ? t.owner_id === user?.id : true))
-    .sort((a, b) => {
-      if (sortBy === "newest")
-        return (
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-      if (sortBy === "oldest")
-        return (
-          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-        );
-      if (sortBy === "a_z") return a.name.localeCompare(b.name);
-      if (sortBy === "z_a") return b.name.localeCompare(a.name);
-      return 0;
-    });
+  // 🔥 L11 FIX: memoize the filter+sort pipeline. previously these recomputed
+  // on every render (e.g. every keystroke in unrelated inputs would re-sort
+  // the entire trip list). negligible at 5-10 trips, real at scale, and the
+  // hook is free.
+  const processedTrips = useMemo(
+    () =>
+      trips
+        .filter((t) => (includeSettled ? true : t.status !== "finished"))
+        .filter((t) => t.name.toLowerCase().includes(searchQuery.toLowerCase()))
+        .filter((t) => (showOnlyMine ? t.owner_id === user?.id : true))
+        .sort((a, b) => {
+          if (sortBy === "newest")
+            return (
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+          if (sortBy === "oldest")
+            return (
+              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+            );
+          if (sortBy === "a_z") return a.name.localeCompare(b.name);
+          if (sortBy === "z_a") return b.name.localeCompare(a.name);
+          return 0;
+        }),
+    [trips, includeSettled, searchQuery, showOnlyMine, sortBy, user?.id],
+  );
 
-  const displayedTrips = processedTrips.slice(0, visibleCount);
+  const displayedTrips = useMemo(
+    () => processedTrips.slice(0, visibleCount),
+    [processedTrips, visibleCount],
+  );
   const hasMoreTrips = visibleCount < processedTrips.length;
 
-  const processedQuickSplits = quickSplits
-    .filter((exp) =>
-      exp.title.toLowerCase().includes(searchQuery.toLowerCase()),
-    )
-    .sort((a, b) => {
-      if (sortBy === "newest")
-        return (
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-      if (sortBy === "oldest")
-        return (
-          new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
-        );
-      if (sortBy === "a_z") return a.title.localeCompare(b.title);
-      if (sortBy === "z_a") return b.title.localeCompare(a.title);
-      return 0;
-    });
+  const processedQuickSplits = useMemo(
+    () =>
+      quickSplits
+        .filter((exp) =>
+          exp.title.toLowerCase().includes(searchQuery.toLowerCase()),
+        )
+        .sort((a, b) => {
+          if (sortBy === "newest")
+            return (
+              new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+            );
+          if (sortBy === "oldest")
+            return (
+              new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+            );
+          if (sortBy === "a_z") return a.title.localeCompare(b.title);
+          if (sortBy === "z_a") return b.title.localeCompare(a.title);
+          return 0;
+        }),
+    [quickSplits, searchQuery, sortBy],
+  );
 
-  const displayedQuickSplits = processedQuickSplits.slice(0, visibleCount);
+  const displayedQuickSplits = useMemo(
+    () => processedQuickSplits.slice(0, visibleCount),
+    [processedQuickSplits, visibleCount],
+  );
   const hasMoreQuick = visibleCount < processedQuickSplits.length;
 
   const avatarUrl = user?.user_metadata?.avatar_url;
@@ -238,6 +264,7 @@ function HomeContent() {
           </h1>
           <button
             onClick={() => setIsInfoModalOpen(true)}
+            aria-label="how nest works"
             className="w-10 h-10 flex items-center justify-center rounded-full bg-white border-2 border-stone-100 text-stone-400 hover:text-emerald-500 hover:border-emerald-200 transition-all shadow-sm active:scale-95"
           >
             <svg
@@ -245,6 +272,7 @@ function HomeContent() {
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"
@@ -271,6 +299,7 @@ function HomeContent() {
                           setSearchQuery(e.target.value);
                           setVisibleCount(5);
                         }}
+                        aria-label="search receipts"
                         className="w-full pl-11 pr-4 py-4 text-sm font-bold border-2 border-stone-100 shadow-sm rounded-2xl focus:outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 transition-all bg-white text-stone-700 placeholder:text-stone-300"
                       />
                       <svg
@@ -278,6 +307,7 @@ function HomeContent() {
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
+                        aria-hidden="true"
                       >
                         <path
                           strokeLinecap="round"
@@ -290,6 +320,8 @@ function HomeContent() {
 
                     <button
                       onClick={() => setIsFilterOpen(!isFilterOpen)}
+                      aria-label="filter and sort"
+                      aria-expanded={isFilterOpen}
                       className={`shrink-0 w-14 h-14 rounded-2xl border-2 flex items-center justify-center transition-all shadow-sm relative active:scale-95 ${
                         isFilterOpen || hasActiveQuickFilters
                           ? "bg-emerald-50 border-emerald-300 text-emerald-600"
@@ -301,6 +333,7 @@ function HomeContent() {
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
+                        aria-hidden="true"
                       >
                         <path
                           strokeLinecap="round"
@@ -310,7 +343,10 @@ function HomeContent() {
                         />
                       </svg>
                       {hasActiveQuickFilters && (
-                        <div className="absolute top-3 right-3 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-emerald-50"></div>
+                        <div
+                          className="absolute top-3 right-3 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-emerald-50"
+                          aria-hidden="true"
+                        ></div>
                       )}
                     </button>
 
@@ -357,15 +393,17 @@ function HomeContent() {
               )}
 
               {isLoadingQuick ? (
-                <div className="text-center py-20">
-                  <div className="w-10 h-10 border-4 border-emerald-200 border-t-emerald-500 rounded-full animate-spin mx-auto mb-4"></div>
-                  <p className="text-sm font-bold text-stone-400">
-                    finding receipts...
-                  </p>
+                <div className="py-20">
+                  <LoadingState label="finding receipts..." />
                 </div>
               ) : processedQuickSplits.length === 0 ? (
                 <div className="text-center py-16 bg-white rounded-4xl shadow-sm border-2 border-dashed border-stone-200 relative">
-                  <div className="text-5xl mb-4 inline-block">📸</div>
+                  <div
+                    className="text-5xl mb-4 inline-block"
+                    aria-hidden="true"
+                  >
+                    📸
+                  </div>
                   <h3 className="text-lg font-extrabold text-stone-800 mb-1">
                     {searchQuery ? "no receipts found" : "no quick splits"}
                   </h3>
@@ -398,13 +436,10 @@ function HomeContent() {
                           </h3>
                           <div className="flex items-center flex-wrap gap-2 text-[10px] font-black uppercase tracking-widest">
                             <span className="text-stone-400">
-                              {new Date(expense.expenseDate.replace(" ", "T"))
-                                .toLocaleDateString("en-US", {
-                                  month: "short",
-                                  day: "numeric",
-                                  year: "numeric",
-                                })
-                                .toUpperCase()}
+                              {/* 🔥 U10: locale-aware date display */}
+                              {formatDisplayDate(
+                                expense.expenseDate.replace(" ", "T"),
+                              ).toUpperCase()}
                             </span>
                             <span className="text-stone-300">•</span>
                             <span
@@ -423,6 +458,19 @@ function HomeContent() {
                                 e,
                               )
                             }
+                            role="button"
+                            tabIndex={0}
+                            aria-label={`delete ${expense.title}`}
+                            onKeyDown={(e) => {
+                              if (e.key === "Enter" || e.key === " ") {
+                                e.preventDefault();
+                                handleDeleteQuickSplit(
+                                  expense.id,
+                                  expense.title,
+                                  e as unknown as React.MouseEvent,
+                                );
+                              }
+                            }}
                             className="shrink-0 w-10 h-10 rounded-full bg-stone-50 flex items-center justify-center text-stone-400 hover:bg-rose-500 hover:text-white transition-colors"
                           >
                             <svg
@@ -430,6 +478,7 @@ function HomeContent() {
                               fill="none"
                               stroke="currentColor"
                               viewBox="0 0 24 24"
+                              aria-hidden="true"
                             >
                               <path
                                 strokeLinecap="round"
@@ -439,7 +488,10 @@ function HomeContent() {
                               />
                             </svg>
                           </div>
-                          <div className="shrink-0 w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+                          <div
+                            className="shrink-0 w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-colors"
+                            aria-hidden="true"
+                          >
                             <svg
                               className="w-5 h-5 group-hover:translate-x-0.5 transition-transform"
                               fill="none"
@@ -483,6 +535,7 @@ function HomeContent() {
                           setSearchQuery(e.target.value);
                           setVisibleCount(5);
                         }}
+                        aria-label="search trips"
                         className="w-full pl-11 pr-4 py-4 text-sm font-bold border-2 border-stone-100 shadow-sm rounded-2xl focus:outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 transition-all bg-white text-stone-700 placeholder:text-stone-300"
                       />
                       <svg
@@ -490,6 +543,7 @@ function HomeContent() {
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
+                        aria-hidden="true"
                       >
                         <path
                           strokeLinecap="round"
@@ -502,6 +556,8 @@ function HomeContent() {
 
                     <button
                       onClick={() => setIsFilterOpen(!isFilterOpen)}
+                      aria-label="filter and sort"
+                      aria-expanded={isFilterOpen}
                       className={`shrink-0 w-14 h-14 rounded-2xl border-2 flex items-center justify-center transition-all shadow-sm relative active:scale-95 ${
                         isFilterOpen || hasActiveTripFilters
                           ? "bg-emerald-50 border-emerald-300 text-emerald-600"
@@ -513,6 +569,7 @@ function HomeContent() {
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
+                        aria-hidden="true"
                       >
                         <path
                           strokeLinecap="round"
@@ -522,7 +579,10 @@ function HomeContent() {
                         />
                       </svg>
                       {hasActiveTripFilters && (
-                        <div className="absolute top-3 right-3 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-emerald-50"></div>
+                        <div
+                          className="absolute top-3 right-3 w-2.5 h-2.5 bg-emerald-500 rounded-full border-2 border-emerald-50"
+                          aria-hidden="true"
+                        ></div>
                       )}
                     </button>
 
@@ -542,44 +602,50 @@ function HomeContent() {
                               <span className="text-sm font-bold text-stone-600 group-hover:text-stone-800 transition-colors">
                                 created by me
                               </span>
+                              <input
+                                type="checkbox"
+                                role="switch"
+                                checked={showOnlyMine}
+                                aria-checked={showOnlyMine}
+                                onChange={() => {
+                                  setShowOnlyMine(!showOnlyMine);
+                                  setVisibleCount(5);
+                                }}
+                                className="sr-only peer"
+                              />
                               <div
                                 className={`w-11 h-6 rounded-full p-1 transition-colors duration-300 ${showOnlyMine ? "bg-emerald-500" : "bg-stone-200"}`}
+                                aria-hidden="true"
                               >
                                 <div
                                   className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-300 ${showOnlyMine ? "translate-x-5" : "translate-x-0"}`}
                                 ></div>
                               </div>
-                              <input
-                                type="checkbox"
-                                className="hidden"
-                                checked={showOnlyMine}
-                                onChange={() => {
-                                  setShowOnlyMine(!showOnlyMine);
-                                  setVisibleCount(5);
-                                }}
-                              />
                             </label>
 
                             <label className="flex items-center justify-between cursor-pointer group">
                               <span className="text-sm font-bold text-stone-600 group-hover:text-stone-800 transition-colors">
                                 include settled
                               </span>
+                              <input
+                                type="checkbox"
+                                role="switch"
+                                checked={includeSettled}
+                                aria-checked={includeSettled}
+                                onChange={() => {
+                                  setIncludeSettled(!includeSettled);
+                                  setVisibleCount(5);
+                                }}
+                                className="sr-only peer"
+                              />
                               <div
                                 className={`w-11 h-6 rounded-full p-1 transition-colors duration-300 ${includeSettled ? "bg-emerald-500" : "bg-stone-200"}`}
+                                aria-hidden="true"
                               >
                                 <div
                                   className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-300 ${includeSettled ? "translate-x-5" : "translate-x-0"}`}
                                 ></div>
                               </div>
-                              <input
-                                type="checkbox"
-                                className="hidden"
-                                checked={includeSettled}
-                                onChange={() => {
-                                  setIncludeSettled(!includeSettled);
-                                  setVisibleCount(5);
-                                }}
-                              />
                             </label>
                           </div>
 
@@ -619,19 +685,17 @@ function HomeContent() {
               )}
 
               {isLoading && trips.length === 0 ? (
-                <div className="text-center py-20">
-                  <div className="relative w-16 h-16 flex items-center justify-center mx-auto mb-6">
-                    <div className="absolute inset-0 border-4 border-emerald-100 rounded-full"></div>
-                    <div className="absolute inset-0 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-                    <span className="text-xl animate-pulse">🐣</span>
-                  </div>
-                  <p className="text-sm text-stone-500 font-bold tracking-wide">
-                    warming up the nest...
-                  </p>
+                <div className="py-20">
+                  <LoadingState />
                 </div>
               ) : processedTrips.length === 0 ? (
                 <div className="text-center py-16 bg-white rounded-4xl shadow-sm border-2 border-dashed border-stone-200 relative">
-                  <div className="text-5xl mb-4 inline-block">🕊️</div>
+                  <div
+                    className="text-5xl mb-4 inline-block"
+                    aria-hidden="true"
+                  >
+                    🕊️
+                  </div>
                   <h3 className="text-lg font-extrabold text-stone-800 mb-1">
                     {searchQuery ? "no trips found" : "clean slate!"}
                   </h3>
@@ -690,13 +754,8 @@ function HomeContent() {
                             )}
                             <span>•</span>
                             <span className="shrink-0">
-                              {new Date(trip.createdAt)
-                                .toLocaleDateString("en-US", {
-                                  month: "short",
-                                  day: "numeric",
-                                  year: "numeric",
-                                })
-                                .toUpperCase()}
+                              {/* 🔥 U10: locale-aware */}
+                              {formatDisplayDate(trip.createdAt).toUpperCase()}
                             </span>
                           </div>
                         </div>
@@ -707,6 +766,7 @@ function HomeContent() {
                             ? "bg-stone-50 border-stone-100 text-stone-300"
                             : "bg-stone-50 border-stone-100 text-stone-400 group-hover:bg-emerald-100 group-hover:text-emerald-600 group-hover:border-emerald-200 group-hover:-rotate-45"
                         }`}
+                        aria-hidden="true"
                       >
                         <svg
                           className="w-5 h-5 sm:w-6 sm:h-6"
@@ -738,7 +798,6 @@ function HomeContent() {
           )}
         </div>
 
-        {/* modals */}
         <CreateTripModal
           isOpen={isCreating}
           onClose={() => setIsCreating(false)}
@@ -753,14 +812,23 @@ function HomeContent() {
         />
 
         {isInfoModalOpen && (
-          <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-70 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300">
+          <div
+            className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-70 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="how-nest-works-title"
+          >
             <div className="bg-[#fdfbf7] w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500 overflow-hidden relative pb-8 sm:pb-0">
               <div className="px-6 py-5 pt-8 sm:pt-6 border-b-2 border-stone-100 flex justify-between items-center bg-white z-10 shadow-sm">
-                <h2 className="text-2xl font-black text-stone-800">
+                <h2
+                  id="how-nest-works-title"
+                  className="text-2xl font-black text-stone-800"
+                >
                   how nest works 🐣
                 </h2>
                 <button
                   onClick={() => setIsInfoModalOpen(false)}
+                  aria-label="close"
                   className="w-10 h-10 bg-stone-100 rounded-full flex items-center justify-center text-stone-500 hover:bg-stone-200 active:scale-90 transition-all font-bold text-lg"
                 >
                   ×
@@ -768,7 +836,9 @@ function HomeContent() {
               </div>
               <div className="p-6 space-y-4 bg-stone-50">
                 <div className="bg-white p-5 rounded-3xl border-2 border-stone-100 shadow-sm">
-                  <div className="text-3xl mb-2">🎒</div>
+                  <div className="text-3xl mb-2" aria-hidden="true">
+                    🎒
+                  </div>
                   <h3 className="font-extrabold text-lg text-stone-800">
                     trips
                   </h3>
@@ -779,7 +849,9 @@ function HomeContent() {
                   </p>
                 </div>
                 <div className="bg-white p-5 rounded-3xl border-2 border-stone-100 shadow-sm">
-                  <div className="text-3xl mb-2">🧾</div>
+                  <div className="text-3xl mb-2" aria-hidden="true">
+                    🧾
+                  </div>
                   <h3 className="font-extrabold text-lg text-stone-800">
                     receipts
                   </h3>
@@ -794,22 +866,31 @@ function HomeContent() {
           </div>
         )}
 
-        {/* action menu (intent modal) */}
         {isActionMenuOpen && (
-          <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-60 flex items-end justify-center animate-in fade-in duration-300">
+          <div
+            className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-60 flex items-end justify-center animate-in fade-in duration-300"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="action-menu-title"
+          >
             <div
               className="fixed inset-0"
               onClick={() => setIsActionMenuOpen(false)}
+              aria-hidden="true"
             ></div>
 
             <div className="bg-[#fdfbf7] w-full max-w-md rounded-t-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full duration-500 p-6 pt-8 pb-12 relative">
               <button
                 onClick={() => setIsActionMenuOpen(false)}
+                aria-label="close"
                 className="absolute top-6 right-6 w-10 h-10 bg-stone-100 rounded-full flex items-center justify-center text-stone-500 hover:bg-stone-200 active:scale-90 transition-all font-bold"
               >
                 ×
               </button>
-              <h2 className="text-2xl font-black text-stone-800 mb-2">
+              <h2
+                id="action-menu-title"
+                className="text-2xl font-black text-stone-800 mb-2"
+              >
                 what&apos;s the plan?
               </h2>
               <p className="text-sm font-bold text-stone-400 mb-8">
@@ -824,7 +905,10 @@ function HomeContent() {
                   }}
                   className="w-full flex items-center gap-4 bg-white border-2 border-stone-100 p-4 rounded-2xl hover:border-emerald-200 hover:shadow-[0_8px_30px_rgb(16,185,129,0.1)] active:scale-95 transition-all text-left group"
                 >
-                  <div className="w-14 h-14 bg-stone-50 rounded-2xl flex items-center justify-center text-stone-500 text-2xl shadow-inner shrink-0 group-hover:bg-emerald-50 group-hover:text-emerald-500 transition-colors">
+                  <div
+                    className="w-14 h-14 bg-stone-50 rounded-2xl flex items-center justify-center text-stone-500 text-2xl shadow-inner shrink-0 group-hover:bg-emerald-50 group-hover:text-emerald-500 transition-colors"
+                    aria-hidden="true"
+                  >
                     🎒
                   </div>
                   <div className="flex flex-col">
@@ -838,11 +922,17 @@ function HomeContent() {
                 </button>
 
                 <div className="flex items-center gap-4 py-2">
-                  <div className="h-0.5 w-full bg-stone-100 rounded-full"></div>
+                  <div
+                    className="h-0.5 w-full bg-stone-100 rounded-full"
+                    aria-hidden="true"
+                  ></div>
                   <span className="text-[10px] font-black text-stone-300 uppercase tracking-widest shrink-0">
                     quick splits
                   </span>
-                  <div className="h-0.5 w-full bg-stone-100 rounded-full"></div>
+                  <div
+                    className="h-0.5 w-full bg-stone-100 rounded-full"
+                    aria-hidden="true"
+                  ></div>
                 </div>
 
                 <button
@@ -852,7 +942,10 @@ function HomeContent() {
                   }}
                   className="w-full flex items-center gap-4 bg-emerald-50 border-2 border-emerald-100 p-4 rounded-2xl hover:bg-emerald-100 hover:border-emerald-300 active:scale-95 transition-all text-left"
                 >
-                  <div className="w-14 h-14 bg-emerald-500 rounded-2xl flex items-center justify-center text-white text-2xl shadow-sm shrink-0 relative overflow-hidden">
+                  <div
+                    className="w-14 h-14 bg-emerald-500 rounded-2xl flex items-center justify-center text-white text-2xl shadow-sm shrink-0 relative overflow-hidden"
+                    aria-hidden="true"
+                  >
                     <div className="absolute inset-0 bg-emerald-400 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center font-black tracking-widest text-[8px] uppercase">
                       AI ✨
                     </div>
@@ -875,7 +968,10 @@ function HomeContent() {
                   }}
                   className="w-full flex items-center gap-4 bg-white border-2 border-stone-100 p-4 rounded-2xl hover:bg-stone-50 hover:border-stone-200 active:scale-95 transition-all text-left"
                 >
-                  <div className="w-14 h-14 bg-stone-50 border-2 border-stone-100 rounded-2xl flex items-center justify-center text-stone-400 text-2xl shadow-sm shrink-0">
+                  <div
+                    className="w-14 h-14 bg-stone-50 border-2 border-stone-100 rounded-2xl flex items-center justify-center text-stone-400 text-2xl shadow-sm shrink-0"
+                    aria-hidden="true"
+                  >
                     ✍️
                   </div>
                   <div className="flex flex-col">
@@ -898,6 +994,8 @@ function HomeContent() {
           <div className="flex items-center gap-4 sm:gap-6">
             <button
               onClick={() => setViewMode("trips")}
+              aria-label="view trips"
+              aria-pressed={viewMode === "trips"}
               className={`flex flex-col items-center gap-1 transition-all active:scale-90 w-12 ${viewMode === "trips" ? "text-emerald-500 scale-105" : "text-stone-400 hover:text-stone-600"}`}
             >
               <svg
@@ -905,6 +1003,7 @@ function HomeContent() {
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"
@@ -918,6 +1017,8 @@ function HomeContent() {
 
             <button
               onClick={() => setViewMode("quick")}
+              aria-label="view receipts"
+              aria-pressed={viewMode === "quick"}
               className={`flex flex-col items-center gap-1 transition-all active:scale-90 w-12 ${viewMode === "quick" ? "text-emerald-500 scale-105" : "text-stone-400 hover:text-stone-600"}`}
             >
               <svg
@@ -925,6 +1026,7 @@ function HomeContent() {
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"
@@ -941,6 +1043,7 @@ function HomeContent() {
             <div className="w-24 h-24 bg-[#fdfbf7] rounded-full p-2 flex items-center justify-center">
               <button
                 onClick={() => setIsActionMenuOpen(true)}
+                aria-label="add new"
                 className={`w-full h-full rounded-full border-4 border-white flex items-center justify-center text-white bg-emerald-500 transition-all duration-300 active:scale-90 shadow-[0_10px_30px_rgba(16,185,129,0.3)] hover:bg-emerald-600 ${isActionMenuOpen ? "rotate-45 bg-stone-800" : ""}`}
               >
                 <svg
@@ -948,6 +1051,7 @@ function HomeContent() {
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
@@ -963,6 +1067,7 @@ function HomeContent() {
           <div className="flex items-center gap-4 sm:gap-6">
             <button
               onClick={() => setIsAboutOpen(true)}
+              aria-label="about nest"
               className="flex flex-col items-center gap-1 transition-all active:scale-90 w-12 text-stone-400 hover:text-stone-600"
             >
               <svg
@@ -970,6 +1075,7 @@ function HomeContent() {
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"
@@ -983,6 +1089,7 @@ function HomeContent() {
 
             <button
               onClick={() => setIsProfileOpen(true)}
+              aria-label="profile"
               className="flex flex-col items-center gap-1 transition-all active:scale-90 w-12 text-stone-400 hover:text-stone-600 group"
             >
               <div className="w-6 h-6 rounded-full overflow-hidden transition-all bg-stone-200 flex items-center justify-center shrink-0 group-hover:opacity-80">
@@ -1015,7 +1122,7 @@ export default function HomePage() {
     <Suspense
       fallback={
         <div className="flex min-h-screen items-center justify-center bg-[#fdfbf7]">
-          <div className="w-10 h-10 border-4 border-emerald-200 border-t-emerald-500 rounded-full animate-spin mx-auto"></div>
+          <LoadingState size="md" label={null} />
         </div>
       }
     >
