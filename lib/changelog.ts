@@ -2,6 +2,18 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
+    version: "2.3.2",
+    date: "apr 29, 2026",
+    title: "nicknames ✨",
+    badge: "patch",
+    badgeColor: "bg-teal-100 text-teal-700 border-teal-200",
+    features: [
+      "added nicknames. pick how you want to be seen across nest, separate from your google account name.",
+      "refined trip ownership labels to use your nickname automatically when you change it.",
+      "refined quick split creation to seed the first member from your nickname instead of your google name.",
+    ],
+  },
+  {
     version: "2.3.1",
     date: "apr 29, 2026",
     title: "snapshots & sharing polish 📸",

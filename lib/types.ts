@@ -98,3 +98,8 @@ export interface ExpenseFormProps {
   onCancel: () => void;
   currencySymbol?: string;
 }
+
+export interface Profile {
+  user_id: string;
+  nickname: string;
+}

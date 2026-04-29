@@ -35,6 +35,7 @@ function HomeContent() {
   const showConfirm = useAlertStore((s) => s.showConfirm);
 
   const user = useTripStore((s) => s.user);
+  const profile = useTripStore((s) => s.profile);
   const trips = useTripStore((s) => s.trips);
   const fetchTrips = useTripStore((s) => s.fetchTrips);
   const isLoading = useTripStore((s) => s.isLoading);
@@ -252,7 +253,10 @@ function HomeContent() {
 
   const avatarUrl = user?.user_metadata?.avatar_url;
   const fullName =
-    user?.user_metadata?.full_name || user?.email?.split("@")[0] || "User";
+    profile?.nickname ||
+    user?.user_metadata?.full_name ||
+    user?.email?.split("@")[0] ||
+    "User";
   const initial = fullName.charAt(0).toUpperCase();
 
   return (

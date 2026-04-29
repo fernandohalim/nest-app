@@ -283,6 +283,7 @@ function QuickSplitContent() {
 
   // 🔥 L1: individual selectors
   const user = useTripStore((s) => s.user);
+  const profile = useTripStore((s) => s.profile);
   const showAlert = useAlertStore((s) => s.showAlert);
   const showConfirm = useAlertStore((s) => s.showConfirm);
 
@@ -301,11 +302,14 @@ function QuickSplitContent() {
 
   useEffect(() => {
     if (user && members.length === 0 && !editId) {
-      const fullName =
-        user.user_metadata?.full_name || user.email?.split("@")[0] || "Me";
-      setMembers([{ id: user.id, name: fullName.toLowerCase() }]);
+      const seed =
+        profile?.nickname ||
+        user.user_metadata?.full_name ||
+        user.email?.split("@")[0] ||
+        "Me";
+      setMembers([{ id: user.id, name: seed.toLowerCase() }]);
     }
-  }, [user, members.length, editId]);
+  }, [user, profile?.nickname, members.length, editId]);
 
   useEffect(() => {
     const fetchExistingExpense = async () => {

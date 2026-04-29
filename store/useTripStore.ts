@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { supabase } from "@/lib/supabase";
-import { Trip, Expense, Member, ExpenseItem } from "@/lib/types";
+import { Trip, Expense, Member, ExpenseItem, Profile } from "@/lib/types";
+import { sanitizeNickname } from "@/lib/nickname";
 import { User } from "@supabase/supabase-js";
 
 interface SupabaseExpenseRow {
@@ -50,6 +51,10 @@ interface TripStore {
   user: User | null;
   setUser: (user: User | null) => void;
 
+  profile: Profile | null;
+  fetchOrCreateProfile: (user: User) => Promise<void>;
+  updateNickname: (newNickname: string) => Promise<void>;
+
   trips: Trip[];
   isLoading: boolean;
   isSyncing: boolean;
@@ -96,7 +101,92 @@ interface TripStore {
 
 export const useTripStore = create<TripStore>((set, get) => ({
   user: null,
-  setUser: (user) => set({ user }),
+  setUser: (user) => {
+    set({ user });
+    if (!user) set({ profile: null });
+  },
+
+  profile: null,
+
+  fetchOrCreateProfile: async (user: User) => {
+    const { data: existing } = await supabase
+      .from("profiles")
+      .select("user_id, nickname")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (existing) {
+      set({ profile: existing as Profile });
+      return;
+    }
+
+    const seed = sanitizeNickname(
+      user.user_metadata?.full_name || user.email?.split("@")[0],
+    );
+
+    const { data: created, error } = await supabase
+      .from("profiles")
+      .insert({ user_id: user.id, nickname: seed })
+      .select("user_id, nickname")
+      .single();
+
+    if (created && !error) {
+      set({ profile: created as Profile });
+    } else {
+      const { data: refetched } = await supabase
+        .from("profiles")
+        .select("user_id, nickname")
+        .eq("user_id", user.id)
+        .maybeSingle();
+      if (refetched) set({ profile: refetched as Profile });
+    }
+  },
+
+  updateNickname: async (newNickname: string) => {
+    const user = get().user;
+    if (!user) return;
+
+    set({ isSyncing: true });
+
+    try {
+      const { data, error: profErr } = await supabase
+        .from("profiles")
+        .update({ nickname: newNickname })
+        .eq("user_id", user.id)
+        .select("user_id, nickname")
+        .single();
+
+      if (profErr || !data) {
+        throw profErr || new Error("profile update returned nothing");
+      }
+
+      // optimistic local update
+      set({ profile: data as Profile });
+
+      const { error: tripsErr } = await supabase
+        .from("trips")
+        .update({ owner_name: newNickname })
+        .eq("owner_id", user.id);
+
+      if (tripsErr) {
+        console.warn(
+          "nickname updated on profile but trip propagation failed:",
+          tripsErr,
+        );
+        // don't throw — profile is the source of truth, trips will reconcile
+        // on next fetch. user-visible state on this client is already correct
+        // via the local update below.
+      }
+
+      set((state) => ({
+        trips: state.trips.map((t) =>
+          t.owner_id === user.id ? { ...t, owner_name: newNickname } : t,
+        ),
+      }));
+    } finally {
+      set({ isSyncing: false });
+    }
+  },
 
   trips: [],
   isLoading: false,
@@ -232,7 +322,10 @@ export const useTripStore = create<TripStore>((set, get) => ({
     }
 
     set((state) => ({ trips: [trip, ...state.trips] }));
+
+    const profile = get().profile;
     const displayName =
+      profile?.nickname ||
       currentUser.user_metadata?.full_name ||
       currentUser.email?.split("@")[0] ||
       "someone";

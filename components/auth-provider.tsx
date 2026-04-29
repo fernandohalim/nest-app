@@ -12,16 +12,22 @@ export default function AuthProvider({
 }) {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, setUser } = useTripStore();
+  const user = useTripStore((s) => s.user);
+  const setUser = useTripStore((s) => s.setUser);
+  const fetchOrCreateProfile = useTripStore((s) => s.fetchOrCreateProfile);
   const [isInitializing, setIsInitializing] = useState(true);
 
-  // hook 1: talks to supabase and keeps our global store updated.
   useEffect(() => {
     const initSession = async () => {
       const {
         data: { session },
       } = await supabase.auth.getSession();
       setUser(session?.user || null);
+
+      if (session?.user) {
+        await fetchOrCreateProfile(session.user);
+      }
+
       setIsInitializing(false);
     };
 
@@ -31,16 +37,19 @@ export default function AuthProvider({
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
       setUser(session?.user || null);
+      // fire-and-forget — components that depend on profile will re-render
+      // when it lands. blocking here would cause UI jitter on tab focus etc.
+      if (session?.user) {
+        fetchOrCreateProfile(session.user);
+      }
     });
 
     return () => subscription.unsubscribe();
-  }, [setUser]);
+  }, [setUser, fetchOrCreateProfile]);
 
-  // hook 2: watches where the user is going and acts as a bouncer.
   useEffect(() => {
     if (isInitializing) return;
 
-    // define our safe zones
     const isPublicRoute =
       pathname.startsWith("/trip/") ||
       pathname === "/changelog" ||
@@ -48,15 +57,12 @@ export default function AuthProvider({
     const isAuthRoute = pathname === "/login" || pathname === "/auth/callback";
 
     if (!user && !isAuthRoute && !isPublicRoute) {
-      // not logged in
       router.replace("/login");
     } else if (user && isAuthRoute) {
-      // logged in but trying to view the login page
       router.replace("/");
     }
   }, [user, pathname, isInitializing, router]);
 
-  // prevent accidentally flash the dashboard to a logged-out user
   if (isInitializing) {
     return (
       <div className="min-h-screen bg-[#fdfbf7] flex flex-col items-center justify-center p-6 selection:bg-emerald-200 selection:text-emerald-900">
