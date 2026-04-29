@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { useAlertStore } from "@/store/useAlertStore";
-import { toPng } from "html-to-image";
+import { toPng, toBlob } from "html-to-image";
 import { Expense, Member } from "@/lib/types";
 import { useTripStore } from "@/store/useTripStore";
 import LoadingState from "@/components/loading-state";
@@ -27,6 +27,7 @@ export default function UnifiedExpensePage() {
 
   const [isLoading, setIsLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
+  const [isSharing, setIsSharing] = useState(false); // 🔥 NEW
   const [expense, setExpense] = useState<Expense | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [tripData, setTripData] = useState<{
@@ -113,23 +114,57 @@ export default function UnifiedExpensePage() {
 
   const handleShare = async () => {
     const url = window.location.href;
+    const shareTitle = `nest: ${expense?.title}`;
+    const shareText = `here's the receipt for ${expense?.title} 🧾`;
 
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: `nest: ${expense?.title}`,
-          text: `here's the receipt for ${expense?.title} 🧾`,
-          url: url,
+    try {
+      setIsSharing(true);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      let fileToShare: File | null = null;
+
+      if (receiptRef.current) {
+        const blob = await toBlob(receiptRef.current, {
+          cacheBust: true,
+          pixelRatio: 3,
+          backgroundColor: "#fdfbf7",
         });
-      } catch (err) {
-        if ((err as Error).name !== "AbortError") {
-          navigator.clipboard.writeText(url);
-          showAlert("link copied! send it to the group 📱", "copied! 🔗");
+
+        if (blob) {
+          fileToShare = new File(
+            [blob],
+            `nest-${expense?.title?.replace(/\s+/g, "-").toLowerCase() || "receipt"}.png`,
+            { type: "image/png" },
+          );
         }
       }
-    } else {
-      navigator.clipboard.writeText(url);
-      showAlert("link copied! send it to the group 📱", "copied! 🔗");
+
+      const shareData: ShareData = {
+        title: shareTitle,
+        text: shareText,
+        url: url,
+      };
+
+      if (
+        fileToShare &&
+        navigator.canShare &&
+        navigator.canShare({ files: [fileToShare] })
+      ) {
+        shareData.files = [fileToShare];
+      }
+
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        throw new Error("web share not supported");
+      }
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        navigator.clipboard.writeText(url);
+        showAlert("link copied! send it to the group 📱", "copied! 🔗");
+      }
+    } finally {
+      setIsSharing(false);
     }
   };
 
@@ -182,10 +217,6 @@ export default function UnifiedExpensePage() {
   const baseAdjustmentSubtotal = expense.totalAmount - totalExtraAdjustments;
 
   const payersEntries = Object.entries(expense.paidBy);
-  const payerDisplay =
-    payersEntries.length > 1
-      ? "multiple people"
-      : getMemberName(payersEntries[0][0]);
 
   const isOwner =
     user &&
@@ -258,23 +289,31 @@ export default function UnifiedExpensePage() {
 
           <button
             onClick={handleShare}
+            disabled={isSharing}
             aria-label="share receipt"
-            className="w-11 h-11 flex items-center justify-center rounded-full bg-white shadow-sm border border-stone-100 text-stone-500 hover:text-emerald-600 hover:scale-110 hover:-translate-y-0.5 active:scale-95 transition-all"
+            className="w-11 h-11 flex items-center justify-center rounded-full bg-white shadow-sm border border-stone-100 text-stone-500 hover:text-emerald-600 hover:scale-110 hover:-translate-y-0.5 active:scale-95 transition-all disabled:opacity-70 disabled:hover:scale-100 disabled:active:scale-100"
           >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2.5}
-                d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8m-4-6l-4-4m0 0L8 6m4-4v13"
-              />
-            </svg>
+            {isSharing ? (
+              <div
+                className="w-5 h-5 border-2 border-stone-200 border-t-emerald-500 rounded-full animate-spin"
+                aria-hidden="true"
+              ></div>
+            ) : (
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2.5}
+                  d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8m-4-6l-4-4m0 0L8 6m4-4v13"
+                />
+              </svg>
+            )}
           </button>
         </div>
       </div>
@@ -465,13 +504,31 @@ export default function UnifiedExpensePage() {
 
           {/* SECTION 3: THE SETTLEMENT */}
           <div className="flex flex-col gap-4 bg-stone-50 rounded-2xl p-5 border-2 border-stone-100">
-            <div className="flex justify-between items-center text-sm border-b-2 border-stone-200/60 pb-4 mb-2">
-              <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">
+            <div
+              className={`flex ${payersEntries.length > 2 ? "flex-col items-start gap-3" : "justify-between items-center gap-4"} text-sm border-b-2 border-stone-200/60 pb-4 mb-2`}
+            >
+              <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest shrink-0">
                 paid by
               </span>
-              <span className="font-extrabold text-stone-800 bg-white px-3 py-1 rounded-lg border border-stone-200 shadow-sm">
-                {payerDisplay}
-              </span>
+
+              {/* 🔥 NEW: Payer Pills mapping */}
+              <div
+                className={`flex flex-wrap gap-2 ${payersEntries.length > 2 ? "justify-start" : "justify-end"}`}
+              >
+                {payersEntries.map(([memberId, amount]) => (
+                  <div
+                    key={memberId}
+                    className="font-extrabold text-stone-800 bg-white px-3 py-1.5 rounded-lg border border-stone-200 shadow-sm flex items-center gap-1.5 leading-none"
+                  >
+                    <span>{getMemberName(memberId)}</span>
+                    {payersEntries.length > 1 && (
+                      <span className="font-bold text-stone-400 text-xs">
+                        {formatMoney(amount, currencyCode)}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
 
             <div className="flex flex-col gap-4">

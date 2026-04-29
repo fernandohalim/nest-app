@@ -23,6 +23,7 @@ import {
 } from "@/lib/format";
 import { formatDisplayDateTime, timeAgo } from "@/lib/datetime";
 import { getAvatarColor, getInitials } from "@/lib/avatars";
+import { toBlob } from "html-to-image";
 
 export { getCurrencySymbol };
 
@@ -30,6 +31,8 @@ export default function TripDetail() {
   const params = useParams();
   const router = useRouter();
   const tripId = params.id as string;
+  const shareCardRef = useRef<HTMLDivElement>(null);
+  const [isSharing, setIsSharing] = useState(false);
 
   const showAlert = useAlertStore((s) => s.showAlert);
   const showConfirm = useAlertStore((s) => s.showConfirm);
@@ -187,25 +190,60 @@ export default function TripDetail() {
   };
 
   const handleShare = async () => {
+    if (!trip) return;
     const url = window.location.href;
+    const shareTitle = `nest: ${trip.name}`;
+    const shareText = `check out our trip to ${trip.name} 🎒`;
 
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: `nest: ${trip?.name}`,
-          text: `i created a trip named ${trip?.name}! view it on nest. 🧾`,
-          url: url,
+    try {
+      setIsSharing(true);
+      // give react a tick to render the spinner
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      let fileToShare: File | null = null;
+
+      if (shareCardRef.current) {
+        const blob = await toBlob(shareCardRef.current, {
+          cacheBust: true,
+          pixelRatio: 3,
+          backgroundColor: "transparent",
         });
-      } catch (err) {
-        // L8: only fall back to clipboard on real errors, not on user cancel
-        if ((err as Error).name !== "AbortError") {
-          navigator.clipboard.writeText(url);
-          showAlert("link copied! send it to the group 📱", "copied! 🔗");
+
+        if (blob) {
+          fileToShare = new File(
+            [blob],
+            `nest-trip-${trip.name.replace(/\s+/g, "-").toLowerCase()}.png`,
+            { type: "image/png" },
+          );
         }
       }
-    } else {
-      navigator.clipboard.writeText(url);
-      showAlert("link copied! send it to the group 📱", "copied! 🔗");
+
+      const shareData: ShareData = {
+        title: shareTitle,
+        text: shareText,
+        url: url,
+      };
+
+      if (
+        fileToShare &&
+        navigator.canShare &&
+        navigator.canShare({ files: [fileToShare] })
+      ) {
+        shareData.files = [fileToShare];
+      }
+
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        throw new Error("web share not supported");
+      }
+    } catch (err) {
+      if ((err as Error).name !== "AbortError") {
+        navigator.clipboard.writeText(url);
+        showAlert("link copied! send it to the group 📱", "copied! 🔗");
+      }
+    } finally {
+      setIsSharing(false);
     }
   };
 
@@ -583,23 +621,31 @@ export default function TripDetail() {
             )}
             <button
               onClick={handleShare}
+              disabled={isSharing}
               aria-label="share trip"
-              className="w-11 h-11 flex items-center justify-center rounded-full bg-white border border-stone-100 shadow-sm text-stone-400 hover:text-emerald-600 hover:scale-110 hover:-translate-y-0.5 active:scale-95 transition-all"
+              className="w-11 h-11 flex items-center justify-center rounded-full bg-white border border-stone-100 shadow-sm text-stone-400 hover:text-emerald-600 hover:scale-110 hover:-translate-y-0.5 active:scale-95 transition-all disabled:opacity-70 disabled:hover:scale-100 disabled:active:scale-100"
             >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2.5}
-                  d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8m-4-6l-4-4m0 0L8 6m4-4v13"
-                />
-              </svg>
+              {isSharing ? (
+                <div
+                  className="w-5 h-5 border-2 border-stone-200 border-t-emerald-500 rounded-full animate-spin"
+                  aria-hidden="true"
+                ></div>
+              ) : (
+                <svg
+                  className="w-5 h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                  aria-hidden="true"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2.5}
+                    d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8m-4-6l-4-4m0 0L8 6m4-4v13"
+                  />
+                </svg>
+              )}
             </button>
             {isOwner && (
               <button
@@ -2010,6 +2056,75 @@ export default function TripDetail() {
             processReceiptFile(file);
           }}
         />
+      )}
+
+      {/* off-screen trip snapshot for exporting */}
+      {trip && (
+        <div className="overflow-hidden absolute -left-2499.75 top-0 pointer-events-none">
+          <div
+            ref={shareCardRef}
+            className="w-112.5 bg-emerald-50 p-10 flex flex-col relative font-sans"
+          >
+            {/* decorative background blobs */}
+            <div className="absolute top-0 right-0 w-36 h-36 bg-emerald-200/40 rounded-bl-full mix-blend-multiply"></div>
+            <div className="absolute bottom-0 left-0 w-28 h-28 bg-emerald-200/40 rounded-tr-full mix-blend-multiply"></div>
+
+            <div className="bg-white border-2 border-emerald-100 rounded-[2.5rem] p-8 shadow-xl relative z-10 flex flex-col items-center text-center">
+              <div className="w-16 h-16 bg-emerald-50 border-2 border-emerald-100 rounded-2xl flex items-center justify-center text-3xl mb-6 shadow-sm">
+                🎒
+              </div>
+
+              <h1 className="text-3xl font-black text-stone-800 leading-tight mb-2">
+                {trip.name}
+              </h1>
+
+              <span className="font-bold text-stone-400 text-[10px] uppercase tracking-widest mb-8 border-b-2 border-stone-100 pb-2 px-4">
+                trip snapshot
+              </span>
+
+              <div className="w-full bg-[#fdfbf7] rounded-3xl p-6 mb-8 border-2 border-stone-100 shadow-inner">
+                <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest block mb-2">
+                  total group spend
+                </span>
+                <span className="text-5xl font-black text-emerald-500 flex items-start justify-center">
+                  <span className="text-2xl mt-1.5 mr-1">{currencySymbol}</span>
+                  {Number(totalTripCost).toLocaleString(undefined, {
+                    maximumFractionDigits: isZeroDecimalCurrency(currencyCode)
+                      ? 0
+                      : 2,
+                  })}
+                </span>
+              </div>
+
+              <div className="flex flex-col items-center gap-3 mb-8 w-full">
+                <span className="text-[9px] font-black text-stone-300 uppercase tracking-widest">
+                  the crew
+                </span>
+                <div className="flex gap-2 flex-wrap justify-center">
+                  {trip.members.slice(0, 6).map((m) => (
+                    <span
+                      key={m.id}
+                      className="text-[11px] font-extrabold bg-stone-100 border border-stone-200/60 text-stone-500 px-3 py-1.5 rounded-lg"
+                    >
+                      {m.name}
+                    </span>
+                  ))}
+                  {trip.members.length > 6 && (
+                    <span className="text-[11px] font-extrabold bg-stone-100 border border-stone-200/60 text-stone-400 px-3 py-1.5 rounded-lg">
+                      +{trip.members.length - 6} more
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <div className="w-full border-t-2 border-dashed border-stone-200 mb-6"></div>
+
+              <span className="text-[10px] font-black text-emerald-600/40 uppercase tracking-widest">
+                powered by nest.
+              </span>
+            </div>
+          </div>
+        </div>
       )}
     </main>
   );

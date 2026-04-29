@@ -2,6 +2,17 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
+    version: "2.3.1",
+    date: "apr 29, 2026",
+    title: "snapshots & sharing polish 📸",
+    badge: "patch",
+    badgeColor: "bg-teal-100 text-teal-700 border-teal-200",
+    features: [
+      "added trip snapshots, high-res exportable postcard that generates instantly when you share a trip.",
+      "refined the receipt export to beautifully display multiple payers side-by-side with exact amounts.",
+    ],
+  },
+  {
     version: "2.3",
     date: "apr 29, 2026",
     title: "the real receipt & bulletproof math update 🧾",
