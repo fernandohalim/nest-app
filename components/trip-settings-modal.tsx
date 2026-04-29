@@ -21,9 +21,10 @@ export default function TripSettingsModal({
 }: TripSettingsModalProps) {
   const router = useRouter();
 
-  // Perfectly typed! No "any" needed anymore!
-  const { updateTripDetails, deleteTrip, updateTripStatus } = useTripStore();
-  const { showConfirm } = useAlertStore();
+  const updateTripDetails = useTripStore((s) => s.updateTripDetails);
+  const deleteTrip = useTripStore((s) => s.deleteTrip);
+  const updateTripStatus = useTripStore((s) => s.updateTripStatus);
+  const showConfirm = useAlertStore((s) => s.showConfirm);
 
   const [editTripName, setEditTripName] = useState(trip.name);
   const [editCurrency, setEditCurrency] = useState(trip.currency || "IDR");
@@ -40,6 +41,7 @@ export default function TripSettingsModal({
     onClose();
   };
 
+  // 🔥 U5 follow-through: explicit destructive severity for the nuke action.
   const handleFullTripDelete = () => {
     showConfirm(
       "whoa there! are you sure you want to delete this whole trip and all its expenses? this can't be undone.",
@@ -47,8 +49,11 @@ export default function TripSettingsModal({
         await deleteTrip(trip.id);
         router.push("/");
       },
-      "nuke entire trip? 🧨",
-      "yes, destroy it",
+      {
+        title: "nuke entire trip? 🧨",
+        confirmText: "yes, destroy it",
+        severity: "destructive",
+      },
     );
   };
 
@@ -60,16 +65,31 @@ export default function TripSettingsModal({
     onClose();
   };
 
+  const isFinished = trip.status === "finished";
+
   return (
-    <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
-      <div className="absolute inset-0" onClick={onClose}></div>
+    <div
+      className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-300"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="trip-settings-title"
+    >
+      <div
+        className="absolute inset-0"
+        onClick={onClose}
+        aria-hidden="true"
+      ></div>
       <div className="relative z-10 bg-white rounded-[2.5rem] p-8 w-full max-w-sm shadow-2xl animate-in zoom-in-95 slide-in-from-bottom-8 duration-300">
         <div className="flex justify-between items-center mb-8">
-          <h3 className="text-2xl font-black text-stone-800">
+          <h3
+            id="trip-settings-title"
+            className="text-2xl font-black text-stone-800"
+          >
             trip settings ⚙️
           </h3>
           <button
             onClick={onClose}
+            aria-label="close"
             className="w-10 h-10 bg-stone-100 rounded-full flex items-center justify-center text-stone-500 hover:bg-stone-200 active:scale-90 transition-all text-xl"
           >
             ×
@@ -77,10 +97,14 @@ export default function TripSettingsModal({
         </div>
         <form onSubmit={handleSaveDetails} className="mb-8 flex flex-col gap-4">
           <div>
-            <label className="block text-sm font-bold text-stone-500 mb-2 ml-1">
+            <label
+              htmlFor="trip-rename-input"
+              className="block text-sm font-bold text-stone-500 mb-2 ml-1"
+            >
               rename trip
             </label>
             <input
+              id="trip-rename-input"
               type="text"
               value={editTripName}
               onChange={(e) => setEditTripName(e.target.value)}
@@ -114,19 +138,29 @@ export default function TripSettingsModal({
                 mark trip as settled 🔒
               </h4>
               <p className="text-xs font-bold text-stone-500 mt-1">
-                {trip.status === "finished"
-                  ? "re-open the trip?"
-                  : "mark as late trip?"}
+                {isFinished ? "re-open the trip?" : "mark as late trip?"}
               </p>
             </div>
-            <button
-              onClick={toggleStatus}
-              className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors active:scale-95 ${trip.status === "finished" ? "bg-emerald-500" : "bg-stone-300"}`}
-            >
-              <span
-                className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-sm transition-transform ${trip.status === "finished" ? "translate-x-7" : "translate-x-1"}`}
+            {/* 🔥 A2: real switch input */}
+            <label className="cursor-pointer shrink-0">
+              <input
+                type="checkbox"
+                role="switch"
+                checked={isFinished}
+                aria-checked={isFinished}
+                aria-label="mark trip as settled"
+                onChange={toggleStatus}
+                className="sr-only peer"
               />
-            </button>
+              <span
+                className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors active:scale-95 peer-focus-visible:ring-4 peer-focus-visible:ring-emerald-100 ${isFinished ? "bg-emerald-500" : "bg-stone-300"}`}
+                aria-hidden="true"
+              >
+                <span
+                  className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-sm transition-transform ${isFinished ? "translate-x-7" : "translate-x-1"}`}
+                />
+              </span>
+            </label>
           </div>
         </div>
         <div className="border-t-2 border-rose-100 pt-8">

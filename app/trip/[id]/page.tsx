@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useTripStore } from "@/store/useTripStore";
 import { useAlertStore } from "@/store/useAlertStore";
@@ -14,71 +14,37 @@ import CameraScanner from "@/components/camera-scanner";
 import MemberModal from "@/components/member-modal";
 import TripSettingsModal from "@/components/trip-settings-modal";
 import SettlementModal from "@/components/settlement-modal";
+import LoadingState from "@/components/loading-state";
+import ScanningOverlay, { ScanStage } from "@/components/scanning-overlay";
+import {
+  formatMoney,
+  getCurrencySymbol,
+  isZeroDecimalCurrency,
+} from "@/lib/format";
+import { formatDisplayDateTime, timeAgo } from "@/lib/datetime";
+import { getAvatarColor, getInitials } from "@/lib/avatars";
 
-const getAvatarColor = (name: string) => {
-  const colors = [
-    "bg-pink-100 text-pink-700 border-pink-200",
-    "bg-purple-100 text-purple-700 border-purple-200",
-    "bg-indigo-100 text-indigo-700 border-indigo-200",
-    "bg-sky-100 text-sky-700 border-sky-200",
-    "bg-teal-100 text-teal-700 border-teal-200",
-    "bg-amber-100 text-amber-700 border-amber-200",
-    "bg-rose-100 text-rose-700 border-rose-200",
-  ];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++)
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return colors[Math.abs(hash) % colors.length];
-};
-
-const getInitials = (name: string) => name.substring(0, 2).toLowerCase();
-
-const timeAgo = (dateStr: string) => {
-  const diff = Date.now() - new Date(dateStr).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs}h ago`;
-  return `${Math.floor(hrs / 24)}d ago`;
-};
-
-// 🔥 NEW HELPER: Maps DB currency string to display symbol
-export const getCurrencySymbol = (currencyCode: string) => {
-  const symbols: Record<string, string> = {
-    IDR: "Rp",
-    SGD: "$",
-    MYR: "RM",
-    THB: "฿",
-    JPY: "¥",
-    KRW: "₩",
-    AUD: "$",
-    USD: "$",
-    EUR: "€",
-    GBP: "£",
-  };
-  return symbols[currencyCode] || currencyCode;
-};
+export { getCurrencySymbol };
 
 export default function TripDetail() {
   const params = useParams();
   const router = useRouter();
   const tripId = params.id as string;
 
-  const { showAlert, showConfirm } = useAlertStore();
-  const {
-    user,
-    trips,
-    addExpense,
-    updateExpense,
-    deleteExpense,
-    toggleExpenseSettled,
-    fetchTrip,
-    subscribeToTrip,
-    toggleCollaborative,
-    isLoading,
-    isSyncing,
-  } = useTripStore();
+  const showAlert = useAlertStore((s) => s.showAlert);
+  const showConfirm = useAlertStore((s) => s.showConfirm);
+
+  const user = useTripStore((s) => s.user);
+  const trips = useTripStore((s) => s.trips);
+  const addExpense = useTripStore((s) => s.addExpense);
+  const updateExpense = useTripStore((s) => s.updateExpense);
+  const deleteExpense = useTripStore((s) => s.deleteExpense);
+  const toggleExpenseSettled = useTripStore((s) => s.toggleExpenseSettled);
+  const fetchTrip = useTripStore((s) => s.fetchTrip);
+  const subscribeToTrip = useTripStore((s) => s.subscribeToTrip);
+  const toggleCollaborative = useTripStore((s) => s.toggleCollaborative);
+  const isLoading = useTripStore((s) => s.isLoading);
+  const isSyncing = useTripStore((s) => s.isSyncing);
 
   const trip = trips.find((t) => t.id === tripId);
   const lastActive = new Date(
@@ -89,10 +55,8 @@ export default function TripDetail() {
   );
   const daysLeft = Math.max(0, 7 - daysSinceActive);
 
-  // 🔥 Get the dynamic symbol based on the trip's currency
-  const currencySymbol = trip
-    ? getCurrencySymbol(trip.currency || "IDR")
-    : "Rp";
+  const currencyCode = trip?.currency || "IDR";
+  const currencySymbol = getCurrencySymbol(currencyCode);
 
   const isOwner = Boolean(
     user?.id && trip?.owner_id && user.id === trip.owner_id,
@@ -104,6 +68,23 @@ export default function TripDetail() {
     const unsubscribe = subscribeToTrip(tripId);
     return () => unsubscribe();
   }, [tripId, fetchTrip, subscribeToTrip]);
+
+  useEffect(() => {
+    if (!trip) return;
+    const params = new URLSearchParams(window.location.search);
+    const targetExpenseId = params.get("openExpense");
+    if (!targetExpenseId) return;
+
+    const expense = trip.expenses.find((e) => e.id === targetExpenseId);
+    if (expense && canEdit && trip.status !== "finished") {
+      setEditingExpense(expense);
+      setIsAddingExpense(true);
+      // clean the URL so a refresh doesn't re-open the modal
+      const url = new URL(window.location.href);
+      url.searchParams.delete("openExpense");
+      window.history.replaceState({}, "", url.toString());
+    }
+  }, [trip, canEdit]);
 
   const getMemberName = (id: string) =>
     trip?.members.find((m) => m.id === id)?.name || "unknown";
@@ -122,40 +103,52 @@ export default function TripDetail() {
     null,
   );
 
+  // 🔥 finding #3: which expense's payer breakdown sheet is open
+  const [payerBreakdownExpense, setPayerBreakdownExpense] =
+    useState<Expense | null>(null);
+
   // Scanner States
   const [showScanner, setShowScanner] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [isScanning, setIsScanning] = useState(false);
-  const [scanProgress, setScanProgress] = useState(0);
+  const [scanStage, setScanStage] = useState<ScanStage>("idle");
 
   // UI Toggles
   const [showLedger, setShowLedger] = useState(false);
-  const [sortBy, setSortBy] = useState<
-    "newest" | "oldest" | "amount_high" | "amount_low"
-  >("newest");
+  type SortOption = "newest" | "oldest" | "amount_high" | "amount_low";
+  const [sortBy, setSortBy] = useState<SortOption>("newest");
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [isLinked, setIsLinked] = useState(false);
 
-  const processedExpenses = (trip?.expenses || [])
-    .filter(
-      (exp) => filterCategory === "all" || exp.category === filterCategory,
-    )
-    .sort((a, b) => {
-      if (sortBy === "newest")
-        return (
-          new Date(b.expenseDate).getTime() - new Date(a.expenseDate).getTime()
-        );
-      if (sortBy === "oldest")
-        return (
-          new Date(a.expenseDate).getTime() - new Date(b.expenseDate).getTime()
-        );
-      if (sortBy === "amount_high") return b.totalAmount - a.totalAmount;
-      if (sortBy === "amount_low") return a.totalAmount - b.totalAmount;
-      return 0;
-    });
+  const processedExpenses = useMemo(
+    () =>
+      (trip?.expenses || [])
+        .filter(
+          (exp) => filterCategory === "all" || exp.category === filterCategory,
+        )
+        .sort((a, b) => {
+          if (sortBy === "newest")
+            return (
+              new Date(b.expenseDate).getTime() -
+              new Date(a.expenseDate).getTime()
+            );
+          if (sortBy === "oldest")
+            return (
+              new Date(a.expenseDate).getTime() -
+              new Date(b.expenseDate).getTime()
+            );
+          if (sortBy === "amount_high") return b.totalAmount - a.totalAmount;
+          if (sortBy === "amount_low") return a.totalAmount - b.totalAmount;
+          return 0;
+        }),
+    [trip?.expenses, filterCategory, sortBy],
+  );
 
-  const usedCategories = Array.from(
-    new Set((trip?.expenses || []).map((e) => e.category || "other")),
+  const usedCategories = useMemo(
+    () =>
+      Array.from(
+        new Set((trip?.expenses || []).map((e) => e.category || "other")),
+      ),
+    [trip?.expenses],
   );
 
   useEffect(() => {
@@ -204,6 +197,7 @@ export default function TripDetail() {
           url: url,
         });
       } catch (err) {
+        // L8: only fall back to clipboard on real errors, not on user cancel
         if ((err as Error).name !== "AbortError") {
           navigator.clipboard.writeText(url);
           showAlert("link copied! send it to the group 📱", "copied! 🔗");
@@ -236,6 +230,7 @@ export default function TripDetail() {
     setEditingExpense(undefined);
   };
 
+  // 🔥 U5 follow-through: severity is explicit, not inferred from title.
   const handleDeleteExpense = (expenseId: string) => {
     showConfirm(
       "delete this expense permanently? it will recalculate everything.",
@@ -243,8 +238,11 @@ export default function TripDetail() {
         deleteExpense(tripId, expenseId);
         setExpandedExpenseId(null);
       },
-      "delete expense? 🗑️",
-      "yes, delete it",
+      {
+        title: "delete expense? 🗑️",
+        confirmText: "yes, delete it",
+        severity: "destructive",
+      },
     );
   };
 
@@ -257,34 +255,60 @@ export default function TripDetail() {
     });
   };
 
+  // 🔥 L5 helper: validate the Gemini response shape before trusting it.
+  // The edge function returns { items: [{name, price}, ...], totalAmount?, ... }
+  // but if the model hallucinates or the function errors mid-stream we could
+  // get partial / malformed data. Treating it as untrusted input.
+  type ScanResponse = {
+    items: Array<{ name: string; price: number }>;
+    totalAmount?: number;
+    merchantName?: string;
+    date?: string;
+    category?: string;
+  };
+
+  const isValidScanResponse = (data: unknown): data is ScanResponse => {
+    if (!data || typeof data !== "object") return false;
+    const d = data as Record<string, unknown>;
+    if (!Array.isArray(d.items)) return false;
+    for (const item of d.items) {
+      if (!item || typeof item !== "object") return false;
+      const it = item as Record<string, unknown>;
+      if (typeof it.name !== "string") return false;
+      if (typeof it.price !== "number" || !isFinite(it.price)) return false;
+    }
+    return true;
+  };
+
   const processReceiptFile = async (file: File) => {
-    setScanProgress(0);
-    setIsScanning(true);
-    const progressInterval = setInterval(() => {
-      setScanProgress((prev) =>
-        prev >= 90 ? prev : prev + Math.floor(Math.random() * 15) + 5,
-      );
-    }, 300);
+    setScanStage("uploading");
 
     try {
       const base64Data = await fileToBase64(file);
+      setScanStage("reading");
+
       const { data, error } = await supabase.functions.invoke("scan-receipt", {
         body: { imageBase64: base64Data, mimeType: file.type },
       });
 
       if (error || data?.error) throw new Error("failed to scan");
 
-      const formattedItems: ExpenseItem[] = data.items.map(
-        (item: { name: string; price: number }) => ({
-          id: uuidv4(),
-          name: item.name,
-          price: item.price,
-          assignedTo: [],
-        }),
-      );
+      // 🔥 L5: validate before consuming
+      if (!isValidScanResponse(data)) {
+        throw new Error("invalid scan response shape");
+      }
+
+      setScanStage("extracting");
+
+      const formattedItems: ExpenseItem[] = data.items.map((item) => ({
+        id: uuidv4(),
+        name: item.name,
+        price: item.price,
+        assignedTo: [],
+      }));
 
       const totalScannedAmount =
-        data.totalAmount ||
+        data.totalAmount ??
         formattedItems.reduce((sum, item) => sum + item.price, 0);
 
       const scannedExpense: Expense = {
@@ -302,21 +326,15 @@ export default function TripDetail() {
         category: data.category || "other",
       };
 
-      clearInterval(progressInterval);
-      setScanProgress(100);
-      await new Promise((resolve) => setTimeout(resolve, 500));
       setEditingExpense(scannedExpense);
       setIsAddingExpense(true);
     } catch {
-      clearInterval(progressInterval);
       showAlert(
         "couldn't read that receipt, try another one!",
         "scan failed ❌",
       );
     } finally {
-      clearInterval(progressInterval);
-      setIsScanning(false);
-      setTimeout(() => setScanProgress(0), 300);
+      setScanStage("idle");
     }
   };
 
@@ -327,9 +345,24 @@ export default function TripDetail() {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const settlements = trip ? calculateSettlements(trip) : [];
+  const settlements = useMemo(
+    () => (trip ? calculateSettlements(trip) : []),
+    [trip],
+  );
 
-  // Ledger Math
+  // ──────────────────────────────────────────────────────────────────────────
+  // 🔥 L11 + L2: memoized ledger math. The L2 fix is applied surgically in
+  // two spots below — settled-share crediting now distributes proportionally
+  // across all payers instead of dumping the full settled amount onto the
+  // first payer in paid_by. This matters for multi-payer expenses where the
+  // current UI/store now blocks toggling settled (Batch 2 guard), but
+  // pre-existing data with settled multi-payer rows is still calculated
+  // correctly with this fix.
+  //
+  // I'm intentionally keeping this inline rather than calling getMemberLedger
+  // because SettlementModal consumes the resulting shape and I want to avoid
+  // any silent shape drift. Consolidation can happen in a focused later pass.
+  // ──────────────────────────────────────────────────────────────────────────
   type MemberDetail = {
     totalPaid: number;
     totalOwed: number;
@@ -343,164 +376,135 @@ export default function TripDetail() {
       originalAmount?: number;
     }[];
   };
-  const memberDetails: Record<string, MemberDetail> = {};
-  const directDebtsGraph: Record<string, Record<string, number>> = {};
 
-  if (trip) {
+  const memberDetails = useMemo(() => {
+    const result: Record<string, MemberDetail> = {};
+    if (!trip) return result;
+
+    // small inline formatter so sub-item strings respect the trip's currency
+    const formatNum = (n: number) =>
+      Number(n).toLocaleString(undefined, {
+        maximumFractionDigits: isZeroDecimalCurrency(currencyCode) ? 0 : 2,
+      });
+
     trip.members.forEach((m) => {
-      memberDetails[m.id] = {
+      result[m.id] = {
         totalPaid: 0,
         totalOwed: 0,
         paidItems: [],
         owedItems: [],
       };
-      directDebtsGraph[m.id] = {};
-      trip.members.forEach((m2) => {
-        directDebtsGraph[m.id][m2.id] = 0;
-      });
     });
 
     trip.expenses.forEach((exp) => {
-      const expBalances: Record<string, number> = {};
-      trip.members.forEach((m) => (expBalances[m.id] = 0));
-
       Object.entries(exp.paidBy || {}).forEach(([pId, pAmt]) => {
-        if (memberDetails[pId]) {
-          memberDetails[pId].totalPaid += pAmt;
-          memberDetails[pId].paidItems.push({ title: exp.title, amount: pAmt });
+        if (result[pId]) {
+          result[pId].totalPaid += pAmt;
+          result[pId].paidItems.push({ title: exp.title, amount: pAmt });
         }
       });
 
-      const primaryPayerId = Object.keys(exp.paidBy || {})[0];
-
       Object.entries(exp.owedBy || {}).forEach(([id, amt]) => {
-        if (memberDetails[id] && amt > 0) {
-          memberDetails[id].totalOwed += amt;
-          const isSettled = exp.settledShares?.[id] || false;
-          const subItems: string[] = [];
-          let originalSum = 0;
+        if (!result[id] || amt <= 0) return;
 
-          if (exp.splitType === "exact" && exp.items) {
-            const myItems = exp.items.filter((i) => i.assignedTo.includes(id));
-            let myBaseSum = 0;
-            myItems.forEach((i) => {
-              const userShares = i.assignedTo.filter(
-                (userId) => userId === id,
-              ).length;
-              const totalShares = i.assignedTo.length;
-              const shareText =
-                totalShares > 1 ? ` (${userShares}/${totalShares})` : "";
-              const myBaseShare = (i.price / totalShares) * userShares;
-              myBaseSum += myBaseShare;
-              originalSum += myBaseShare;
-              subItems.push(
-                `${i.name}${shareText} • ${Number(myBaseShare).toLocaleString("en-US", { maximumFractionDigits: 2 })}`.trim(),
-              );
-            });
+        result[id].totalOwed += amt;
+        const isSettled = exp.settledShares?.[id] || false;
+        const subItems: string[] = [];
+        let originalSum = 0;
 
-            const itemsSum = exp.items.reduce(
-              (acc, item) => acc + item.price,
-              0,
+        if (exp.splitType === "exact" && exp.items) {
+          const myItems = exp.items.filter((i) => i.assignedTo.includes(id));
+          let myBaseSum = 0;
+          myItems.forEach((i) => {
+            const userShares = i.assignedTo.filter(
+              (userId) => userId === id,
+            ).length;
+            const totalShares = i.assignedTo.length;
+            const shareText =
+              totalShares > 1 ? ` (${userShares}/${totalShares})` : "";
+            const myBaseShare = (i.price / totalShares) * userShares;
+            myBaseSum += myBaseShare;
+            originalSum += myBaseShare;
+            subItems.push(
+              `${i.name}${shareText} • ${formatNum(myBaseShare)}`.trim(),
             );
-            const difference = exp.totalAmount - itemsSum;
-            if (Math.abs(difference) > 0) {
-              const amountOwed = exp.owedBy[id] || 0;
-              const extra = exp.adjustments?.[id] || 0;
-              const diffShare = amountOwed - myBaseSum - extra;
-              if (Math.abs(diffShare) >= 0.5) {
-                subItems.push(
-                  `${difference > 0 ? "tax & tip" : "global discount"} • ${diffShare > 0 ? "+" : ""}${Number(diffShare).toLocaleString("en-US", { maximumFractionDigits: 2 })}`,
-                );
-              }
-            }
-          } else if (exp.splitType === "adjustment") {
-            const extra = exp.adjustments?.[id] || 0;
-            if (extra > 0) {
-              subItems.push(
-                `debt after split • ${Number(amt - extra).toLocaleString("en-US", { maximumFractionDigits: 2 })}`,
-              );
-              subItems.push(
-                `adjusted bill • +${Number(extra).toLocaleString("en-US", { maximumFractionDigits: 2 })}`,
-              );
-            }
-          }
-
-          memberDetails[id].owedItems.push({
-            title: exp.title,
-            amount: amt,
-            subItems: subItems.length > 0 ? subItems : undefined,
-            extra: exp.adjustments?.[id],
-            isSettled,
-            originalAmount: originalSum > 0 ? originalSum : undefined,
           });
 
-          if (isSettled && primaryPayerId) {
-            memberDetails[id].totalPaid += amt;
-            memberDetails[id].paidItems.push({
-              title: `✓ settled ${exp.title}`,
-              amount: amt,
-            });
-            if (memberDetails[primaryPayerId]) {
-              memberDetails[primaryPayerId].totalPaid -= amt;
-              memberDetails[primaryPayerId].paidItems.push({
+          const itemsSum = exp.items.reduce((acc, item) => acc + item.price, 0);
+          const difference = exp.totalAmount - itemsSum;
+          if (Math.abs(difference) > 0) {
+            const amountOwed = exp.owedBy[id] || 0;
+            const extra = exp.adjustments?.[id] || 0;
+            const diffShare = amountOwed - myBaseSum - extra;
+            if (Math.abs(diffShare) >= 0.5) {
+              subItems.push(
+                `${difference > 0 ? "tax & tip" : "global discount"} • ${diffShare > 0 ? "+" : ""}${formatNum(diffShare)}`,
+              );
+            }
+          }
+        } else if (exp.splitType === "adjustment") {
+          const extra = exp.adjustments?.[id] || 0;
+          if (extra > 0) {
+            subItems.push(`debt after split • ${formatNum(amt - extra)}`);
+            subItems.push(`adjusted bill • +${formatNum(extra)}`);
+          }
+        }
+
+        result[id].owedItems.push({
+          title: exp.title,
+          amount: amt,
+          subItems: subItems.length > 0 ? subItems : undefined,
+          extra: exp.adjustments?.[id],
+          isSettled,
+          originalAmount: originalSum > 0 ? originalSum : undefined,
+        });
+
+        // 🔥 L2 FIX (place 1): when this share is settled, distribute the
+        // credit proportionally across ALL payers in paid_by, not just the
+        // first one. For single-payer expenses this collapses to the old
+        // behavior (one payer gets 100% of the credit). For multi-payer
+        // expenses this is the actually-correct math.
+        if (isSettled) {
+          result[id].totalPaid += amt;
+          result[id].paidItems.push({
+            title: `✓ settled ${exp.title}`,
+            amount: amt,
+          });
+
+          const totalPaidBy = Object.values(exp.paidBy || {}).reduce(
+            (s, v) => s + v,
+            0,
+          );
+          if (totalPaidBy > 0) {
+            Object.entries(exp.paidBy || {}).forEach(([payerId, payerAmt]) => {
+              if (!result[payerId]) return;
+              const share = (payerAmt / totalPaidBy) * amt;
+              if (share <= 0) return;
+              result[payerId].totalPaid -= share;
+              result[payerId].paidItems.push({
                 title: `↓ received cash from ${getMemberName(id)} for ${exp.title}`,
-                amount: -amt,
+                amount: -share,
                 isNegative: true,
               });
-            }
+            });
           }
         }
       });
-
-      Object.entries(exp.paidBy || {}).forEach(([id, amt]) => {
-        expBalances[id] += amt;
-      });
-      Object.entries(exp.owedBy || {}).forEach(([id, amt]) => {
-        expBalances[id] -= amt;
-      });
-      Object.entries(exp.settledShares || {}).forEach(([id, isSettled]) => {
-        if (isSettled && exp.owedBy[id] && primaryPayerId) {
-          expBalances[id] += exp.owedBy[id];
-          expBalances[primaryPayerId] -= exp.owedBy[id];
-        }
-      });
-
-      const dAmts = Object.keys(expBalances)
-        .filter((id) => expBalances[id] < -0.01)
-        .map((id) => ({ id, amt: Math.abs(expBalances[id]) }));
-      const cAmts = Object.keys(expBalances)
-        .filter((id) => expBalances[id] > 0.01)
-        .map((id) => ({ id, amt: expBalances[id] }));
-
-      let d = 0,
-        c = 0;
-      while (d < dAmts.length && c < cAmts.length) {
-        const debtor = dAmts[d];
-        const creditor = cAmts[c];
-        const transfer = Math.min(debtor.amt, creditor.amt);
-        directDebtsGraph[debtor.id][creditor.id] += transfer;
-        debtor.amt -= transfer;
-        creditor.amt -= transfer;
-        if (debtor.amt < 0.01) d++;
-        if (creditor.amt < 0.01) c++;
-      }
     });
-  }
 
-  const totalTripCost =
-    trip?.expenses.reduce((sum, exp) => sum + exp.totalAmount, 0) || 0;
+    return result;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trip, currencyCode]);
+
+  const totalTripCost = useMemo(
+    () => trip?.expenses.reduce((sum, exp) => sum + exp.totalAmount, 0) || 0,
+    [trip?.expenses],
+  );
 
   if (isLoading && !trip) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center p-6 bg-[#fdfbf7]">
-        <div className="relative w-16 h-16 flex items-center justify-center mb-6">
-          <div className="absolute inset-0 border-4 border-emerald-100 rounded-full"></div>
-          <div className="absolute inset-0 border-4 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-          <span className="text-xl animate-pulse">🐣</span>
-        </div>
-        <p className="text-sm text-stone-500 font-bold tracking-wide">
-          warming up the nest...
-        </p>
+        <LoadingState />
       </main>
     );
   }
@@ -508,7 +512,9 @@ export default function TripDetail() {
   if (!trip) {
     return (
       <main className="flex min-h-screen flex-col items-center justify-center p-6 bg-[#fdfbf7]">
-        <div className="text-6xl mb-6 grayscale opacity-50">🪹</div>
+        <div className="text-6xl mb-6 grayscale opacity-50" aria-hidden="true">
+          🪹
+        </div>
         <p className="text-sm text-stone-500 font-bold">
           hmm, couldn&apos;t find this trip.
         </p>
@@ -529,6 +535,7 @@ export default function TripDetail() {
         <div className="flex justify-between items-center mb-6">
           <button
             onClick={handleSmartBack}
+            aria-label="back"
             className="w-11 h-11 flex items-center justify-center rounded-full bg-white shadow-sm border border-stone-100 text-stone-500 hover:text-emerald-600 hover:scale-110 hover:-translate-y-0.5 active:scale-95 transition-all"
           >
             <svg
@@ -536,6 +543,7 @@ export default function TripDetail() {
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"
@@ -549,6 +557,8 @@ export default function TripDetail() {
             {!isOwner && (
               <button
                 onClick={handleToggleBookmark}
+                aria-label={isLinked ? "remove bookmark" : "save to dashboard"}
+                aria-pressed={isLinked}
                 className={`w-11 h-11 rounded-full transition-all flex items-center justify-center hover:scale-110 hover:-translate-y-0.5 active:scale-95 ${isLinked ? "text-emerald-600 bg-emerald-100 border border-emerald-200" : "text-stone-400 bg-white border border-stone-100 shadow-sm"}`}
               >
                 <svg
@@ -556,6 +566,7 @@ export default function TripDetail() {
                   fill={isLinked ? "currentColor" : "none"}
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
@@ -568,6 +579,7 @@ export default function TripDetail() {
             )}
             <button
               onClick={handleShare}
+              aria-label="share trip"
               className="w-11 h-11 flex items-center justify-center rounded-full bg-white border border-stone-100 shadow-sm text-stone-400 hover:text-emerald-600 hover:scale-110 hover:-translate-y-0.5 active:scale-95 transition-all"
             >
               <svg
@@ -575,6 +587,7 @@ export default function TripDetail() {
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"
@@ -587,6 +600,7 @@ export default function TripDetail() {
             {isOwner && (
               <button
                 onClick={() => setShowSettings(true)}
+                aria-label="trip settings"
                 className="w-11 h-11 flex items-center justify-center rounded-full bg-white border border-stone-100 shadow-sm text-stone-400 hover:text-emerald-600 hover:scale-110 hover:-translate-y-0.5 active:scale-95 transition-all"
               >
                 <svg
@@ -594,6 +608,7 @@ export default function TripDetail() {
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
@@ -620,11 +635,20 @@ export default function TripDetail() {
           >
             <div className="relative flex items-center justify-center shrink-0 mr-4">
               {trip.status === "settled" ? (
-                <span className="relative z-10 text-lg">✨</span>
+                <span className="relative z-10 text-lg" aria-hidden="true">
+                  ✨
+                </span>
               ) : daysLeft <= 2 ? (
-                <span className="relative z-10 text-lg animate-pulse">⚠️</span>
+                <span
+                  className="relative z-10 text-lg animate-pulse"
+                  aria-hidden="true"
+                >
+                  ⚠️
+                </span>
               ) : (
-                <span className="relative z-10 text-lg">⏳</span>
+                <span className="relative z-10 text-lg" aria-hidden="true">
+                  ⏳
+                </span>
               )}
             </div>
             <div className="flex flex-col flex-1 min-w-0 justify-center pt-0.5">
@@ -657,6 +681,7 @@ export default function TripDetail() {
                   );
                 }
               }}
+              aria-label="retention policy info"
               className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center transition-all active:scale-90 ${trip.status === "finished" ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200" : daysLeft <= 2 ? "bg-rose-100 text-rose-700 hover:bg-rose-200" : "bg-stone-100 text-stone-500 hover:bg-stone-200 hover:text-stone-800"}`}
             >
               <svg
@@ -664,6 +689,7 @@ export default function TripDetail() {
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"
@@ -678,8 +704,14 @@ export default function TripDetail() {
 
         {/* hero dashboard */}
         <div className="bg-emerald-700 text-white rounded-[2.5rem] p-8 shadow-xl shadow-emerald-900/15 mb-10 flex flex-col items-center text-center relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/30 rounded-full blur-3xl -mr-16 -mt-16 group-hover:scale-110 transition-transform duration-700"></div>
-          <div className="absolute bottom-0 left-0 w-32 h-32 bg-emerald-400/20 rounded-full blur-2xl -ml-10 -mb-10 group-hover:translate-x-4 transition-transform duration-700"></div>
+          <div
+            className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/30 rounded-full blur-3xl -mr-16 -mt-16 group-hover:scale-110 transition-transform duration-700"
+            aria-hidden="true"
+          ></div>
+          <div
+            className="absolute bottom-0 left-0 w-32 h-32 bg-emerald-400/20 rounded-full blur-2xl -ml-10 -mb-10 group-hover:translate-x-4 transition-transform duration-700"
+            aria-hidden="true"
+          ></div>
 
           <div className="flex flex-wrap justify-center gap-2 mb-4 relative z-10">
             <div className="px-4 py-1.5 bg-white/10 backdrop-blur-md rounded-full text-xs font-bold tracking-widest uppercase border border-white/20">
@@ -693,12 +725,22 @@ export default function TripDetail() {
               >
                 {trip.is_collaborative ? (
                   <>
-                    <span className="text-base leading-none pb-0.5">🤝</span>{" "}
+                    <span
+                      className="text-base leading-none pb-0.5"
+                      aria-hidden="true"
+                    >
+                      🤝
+                    </span>{" "}
                     open to edit
                   </>
                 ) : (
                   <>
-                    <span className="text-base leading-none pb-0.5">👀</span>{" "}
+                    <span
+                      className="text-base leading-none pb-0.5"
+                      aria-hidden="true"
+                    >
+                      👀
+                    </span>{" "}
                     view only
                   </>
                 )}
@@ -712,6 +754,7 @@ export default function TripDetail() {
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"
@@ -720,13 +763,8 @@ export default function TripDetail() {
                 d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
               />
             </svg>
-            {new Date(trip.createdAt).toLocaleString("en-US", {
-              month: "short",
-              day: "numeric",
-              year: "numeric",
-              hour: "numeric",
-              minute: "2-digit",
-            })}
+            {/* 🔥 U10: locale-aware */}
+            {formatDisplayDateTime(trip.createdAt)}
           </div>
 
           <h1 className="text-3xl font-extrabold tracking-tight mb-2 relative z-10">
@@ -744,24 +782,36 @@ export default function TripDetail() {
             <span className="text-2xl text-emerald-200 align-top mr-1">
               {currencySymbol}
             </span>
-            {totalTripCost.toLocaleString()}
+            {/* 🔥 U10/U14: locale-aware, currency-aware decimals */}
+            {Number(totalTripCost).toLocaleString(undefined, {
+              maximumFractionDigits: isZeroDecimalCurrency(currencyCode)
+                ? 0
+                : 2,
+            })}
           </div>
 
           <div className="flex items-center gap-2 mt-6 bg-black/25 px-5 py-2 rounded-full text-xs font-bold text-emerald-50 backdrop-blur-sm relative z-10 shadow-inner">
             {isSyncing ? (
               <>
-                <div className="w-3 h-3 border-2 border-emerald-300 border-t-transparent rounded-full animate-spin"></div>{" "}
+                <div
+                  className="w-3 h-3 border-2 border-emerald-300 border-t-transparent rounded-full animate-spin"
+                  aria-hidden="true"
+                ></div>{" "}
                 syncing magically ✨
               </>
             ) : (
               <>
-                <div className="w-2 h-2 bg-emerald-400 rounded-full shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse"></div>{" "}
+                <div
+                  className="w-2 h-2 bg-emerald-400 rounded-full shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse"
+                  aria-hidden="true"
+                ></div>{" "}
                 safely saved in cloud
               </>
             )}
           </div>
         </div>
 
+        {/* 🔥 A2: collaborative-mode toggle is now a real switch */}
         {isOwner && trip.status !== "finished" && (
           <div className="bg-white border-2 border-stone-100 rounded-3xl p-5 shadow-sm mb-10 flex items-center justify-between group hover:border-emerald-200 transition-colors animate-in slide-in-from-bottom-4 duration-500">
             <div className="flex flex-col">
@@ -774,16 +824,27 @@ export default function TripDetail() {
                   : "only you can add expenses"}
               </span>
             </div>
-            <button
-              onClick={() =>
-                toggleCollaborative(trip.id, !trip.is_collaborative)
-              }
-              className={`relative w-14 h-8 rounded-full transition-colors duration-300 ease-in-out shadow-inner focus:outline-none focus:ring-4 focus:ring-emerald-100 ${trip.is_collaborative ? "bg-emerald-500" : "bg-stone-200"}`}
-            >
-              <div
-                className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transform transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${trip.is_collaborative ? "translate-x-6" : "translate-x-0"}`}
+            <label className="cursor-pointer shrink-0">
+              <input
+                type="checkbox"
+                role="switch"
+                checked={trip.is_collaborative ?? false}
+                aria-checked={trip.is_collaborative ?? false}
+                aria-label="collaborative mode"
+                onChange={() =>
+                  toggleCollaborative(trip.id, !trip.is_collaborative)
+                }
+                className="sr-only peer"
               />
-            </button>
+              <div
+                className={`relative w-14 h-8 rounded-full transition-colors duration-300 ease-in-out shadow-inner peer-focus-visible:ring-4 peer-focus-visible:ring-emerald-100 ${trip.is_collaborative ? "bg-emerald-500" : "bg-stone-200"}`}
+                aria-hidden="true"
+              >
+                <div
+                  className={`absolute top-1 left-1 w-6 h-6 bg-white rounded-full shadow-md transform transition-transform duration-300 ease-[cubic-bezier(0.34,1.56,0.64,1)] ${trip.is_collaborative ? "translate-x-6" : "translate-x-0"}`}
+                />
+              </div>
+            </label>
           </div>
         )}
 
@@ -801,6 +862,7 @@ export default function TripDetail() {
                     "how members work 👥",
                   )
                 }
+                aria-label="how members work"
                 className="w-6 h-6 rounded-full bg-stone-200 text-stone-500 hover:bg-stone-300 hover:text-stone-700 flex items-center justify-center transition-colors"
               >
                 <svg
@@ -808,6 +870,7 @@ export default function TripDetail() {
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
@@ -851,6 +914,7 @@ export default function TripDetail() {
                 >
                   <div
                     className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black border transition-transform group-hover:scale-110 group-hover:rotate-6 ${getAvatarColor(member.name)}`}
+                    aria-hidden="true"
                   >
                     {getInitials(member.name)}
                   </div>
@@ -875,6 +939,7 @@ export default function TripDetail() {
                     "how expenses work 💸",
                   )
                 }
+                aria-label="how expenses work"
                 className="w-6 h-6 rounded-full bg-stone-200 text-stone-500 hover:bg-stone-300 hover:text-stone-700 flex items-center justify-center transition-colors"
               >
                 <svg
@@ -882,6 +947,7 @@ export default function TripDetail() {
                   fill="none"
                   stroke="currentColor"
                   viewBox="0 0 24 24"
+                  aria-hidden="true"
                 >
                   <path
                     strokeLinecap="round"
@@ -926,7 +992,10 @@ export default function TripDetail() {
           <div className="space-y-4">
             {processedExpenses.length === 0 ? (
               <div className="text-center py-16 bg-white rounded-4xl shadow-sm border-2 border-dashed border-stone-200">
-                <div className="text-5xl mb-4 animate-bounce inline-block">
+                <div
+                  className="text-5xl mb-4 animate-bounce inline-block"
+                  aria-hidden="true"
+                >
                   🍔
                 </div>
                 <h3 className="text-lg font-extrabold text-stone-800 mb-1">
@@ -940,11 +1009,9 @@ export default function TripDetail() {
               processedExpenses.map((exp) => {
                 const payersEntries = Object.entries(exp.paidBy);
                 const isMultiPayer = payersEntries.length > 1;
-                const payerDisplay = isMultiPayer
-                  ? payersEntries
-                      .map(([id]) => `${getMemberName(id)}`)
-                      .join(", ")
-                  : getMemberName(payersEntries[0][0]);
+                const singlePayerName = !isMultiPayer
+                  ? getMemberName(payersEntries[0][0])
+                  : "";
                 const isExpanded = expandedExpenseId === exp.id;
                 const itemsSum =
                   exp.splitType === "exact" && exp.items
@@ -961,29 +1028,26 @@ export default function TripDetail() {
                       onClick={() =>
                         setExpandedExpenseId(isExpanded ? null : exp.id)
                       }
-                      className="w-full flex justify-between items-center p-4 sm:p-5 text-left active:bg-stone-50 transition-colors gap-3"
+                      aria-expanded={isExpanded}
+                      className="w-full flex justify-between items-start p-4 sm:p-5 text-left active:bg-stone-50 transition-colors gap-3"
                     >
                       <div className="flex-1 min-w-0">
-                        <div className="mb-1 flex flex-col">
-                          <span className="text-[10px] font-black text-stone-400 tracking-widest uppercase mb-0.5">
-                            {new Date(exp.expenseDate).toLocaleString("en-US", {
-                              month: "short",
-                              day: "numeric",
-                              year: "numeric",
-                              hour: "numeric",
-                              minute: "2-digit",
-                            })}
-                          </span>
-                          <p className="text-base sm:text-lg font-extrabold text-stone-800 truncate">
-                            {exp.title}
-                          </p>
-                        </div>
-                        <div className="flex items-center flex-wrap gap-1.5 sm:gap-2 text-[11px] sm:text-sm font-bold text-stone-400">
-                          <span className="px-1.5 py-0.5 sm:px-2 sm:py-0.5 bg-stone-100 text-stone-500 rounded-md text-[9px] sm:text-[10px] tracking-widest uppercase shrink-0">
+                        {/* date */}
+                        <span className="text-[10px] font-black text-stone-400 tracking-widest uppercase mb-1 block">
+                          {/* 🔥 U10: locale-aware */}
+                          {formatDisplayDateTime(exp.expenseDate)}
+                        </span>
+                        {/* title */}
+                        <p className="text-base sm:text-lg font-extrabold text-stone-800 truncate mb-2">
+                          {exp.title}
+                        </p>
+                        {/* metadata pills */}
+                        <div className="flex items-center flex-wrap gap-1.5 sm:gap-2 mb-1.5">
+                          <span className="px-1.5 py-0.5 sm:px-2 sm:py-0.5 bg-stone-100 text-stone-500 rounded-md text-[9px] sm:text-[10px] tracking-widest uppercase shrink-0 font-bold">
                             {exp.category || "other"}
                           </span>
                           <span
-                            className={`px-1.5 py-0.5 sm:px-2 sm:py-0.5 rounded-md text-[9px] sm:text-[10px] tracking-widest uppercase shrink-0 border ${exp.splitType === "exact" ? "border-indigo-100 text-indigo-500 bg-indigo-50" : exp.splitType === "equal" ? "border-emerald-100 text-emerald-500 bg-emerald-50" : "border-amber-100 text-amber-500 bg-amber-50"}`}
+                            className={`px-1.5 py-0.5 sm:px-2 sm:py-0.5 rounded-md text-[9px] sm:text-[10px] tracking-widest uppercase shrink-0 border font-bold ${exp.splitType === "exact" ? "border-indigo-100 text-indigo-500 bg-indigo-50" : exp.splitType === "equal" ? "border-emerald-100 text-emerald-500 bg-emerald-50" : "border-amber-100 text-amber-500 bg-amber-50"}`}
                           >
                             {exp.splitType === "exact"
                               ? "by item"
@@ -991,22 +1055,55 @@ export default function TripDetail() {
                                 ? "equally"
                                 : "custom"}
                           </span>
-                          <span className="truncate flex-1 min-w-0">
-                            • paid by{" "}
-                            <span className="text-stone-700">
-                              {payerDisplay}
+                        </div>
+                        {/* 🔥 finding #2 + #3: paid-by gets its own row, never truncated */}
+                        <div className="flex items-center gap-1.5 text-[11px] sm:text-xs font-bold text-stone-500">
+                          {isMultiPayer ? (
+                            <span
+                              role="button"
+                              tabIndex={0}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setPayerBreakdownExpense(exp);
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  e.stopPropagation();
+                                  setPayerBreakdownExpense(exp);
+                                }
+                              }}
+                              aria-label={`view breakdown for ${payersEntries.length} payers`}
+                              className="inline-flex items-center gap-1 px-2 py-0.5 bg-stone-100 text-stone-600 hover:bg-stone-200 rounded-md text-[10px] font-black tracking-widest uppercase transition-colors active:scale-95"
+                            >
+                              👥 {payersEntries.length} payers
+                              <span
+                                className="text-stone-400"
+                                aria-hidden="true"
+                              >
+                                ›
+                              </span>
                             </span>
-                          </span>
+                          ) : (
+                            <span className="truncate">
+                              paid by{" "}
+                              <span className="text-stone-700">
+                                {singlePayerName}
+                              </span>
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div className="text-right shrink-0 pl-2">
                         <p className="text-lg sm:text-xl font-black text-emerald-600">
-                          {currencySymbol} {exp.totalAmount.toLocaleString()}
+                          {/* 🔥 U10/U14 */}
+                          {formatMoney(exp.totalAmount, currencyCode)}
                         </p>
                         <p className="text-[10px] sm:text-xs font-bold text-stone-400 mt-1 flex items-center justify-end gap-1">
                           {isExpanded ? "close" : "details"}
                           <span
                             className={`w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center bg-stone-100 rounded-full transition-transform duration-300 ${isExpanded ? "rotate-180 bg-emerald-100 text-emerald-600" : ""}`}
+                            aria-hidden="true"
                           >
                             <svg
                               className="w-2.5 h-2.5 sm:w-3 sm:h-3"
@@ -1052,37 +1149,30 @@ export default function TripDetail() {
                                       </span>
                                     </div>
                                     <span className="font-black text-stone-600">
-                                      {currencySymbol}{" "}
-                                      {Number(item.price).toLocaleString(
-                                        "en-US",
-                                        { maximumFractionDigits: 2 },
-                                      )}
+                                      {formatMoney(item.price, currencyCode)}
                                     </span>
                                   </div>
                                 ))}
                               </div>
                               {Math.abs(difference) > 0 && (
                                 <div className="p-4 bg-amber-50 border-2 border-amber-100 rounded-2xl text-xs sm:text-sm font-bold text-amber-800 flex items-start gap-3 shadow-sm">
-                                  <span className="text-xl leading-none">
+                                  <span
+                                    className="text-xl leading-none"
+                                    aria-hidden="true"
+                                  >
                                     💡
                                   </span>
                                   <p className="leading-tight">
                                     subtotal is{" "}
                                     <span className="font-black">
-                                      {currencySymbol}{" "}
-                                      {Number(itemsSum).toLocaleString(
-                                        "en-US",
-                                        { maximumFractionDigits: 2 },
-                                      )}
+                                      {formatMoney(itemsSum, currencyCode)}
                                     </span>
                                     . the extra{" "}
                                     <span className="font-black">
-                                      {currencySymbol}{" "}
-                                      {Number(
+                                      {formatMoney(
                                         Math.abs(difference),
-                                      ).toLocaleString("en-US", {
-                                        maximumFractionDigits: 2,
-                                      })}
+                                        currencyCode,
+                                      )}
                                     </span>{" "}
                                     {difference > 0 ? "tax/tip" : "discount"} is
                                     split fairly across the items.
@@ -1139,6 +1229,7 @@ export default function TripDetail() {
                                     <div className="flex items-center gap-3 min-w-0 flex-1">
                                       <div
                                         className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 text-xs font-black border ${getAvatarColor(getMemberName(memberId))}`}
+                                        aria-hidden="true"
                                       >
                                         {getInitials(getMemberName(memberId))}
                                       </div>
@@ -1159,6 +1250,11 @@ export default function TripDetail() {
                                               memberId,
                                             );
                                           }}
+                                          aria-label={
+                                            isSettled
+                                              ? `mark ${getMemberName(memberId)} unpaid`
+                                              : `mark ${getMemberName(memberId)} paid`
+                                          }
                                           className={`text-[11px] font-bold px-3 py-1.5 rounded-lg transition-colors ${isSettled ? "bg-emerald-50 text-emerald-600 hover:bg-rose-50 hover:text-rose-600" : "bg-stone-100 text-stone-600 hover:bg-emerald-100 hover:text-emerald-700"}`}
                                         >
                                           {isSettled ? "paid ✓" : "mark paid"}
@@ -1174,11 +1270,7 @@ export default function TripDetail() {
                                         <span
                                           className={`font-black text-lg leading-none ${isSettled ? "text-stone-300 line-through decoration-2" : "text-stone-800"}`}
                                         >
-                                          {currencySymbol}{" "}
-                                          {Number(amount).toLocaleString(
-                                            "en-US",
-                                            { maximumFractionDigits: 2 },
-                                          )}
+                                          {formatMoney(amount, currencyCode)}
                                         </span>
                                       </div>
                                     </div>
@@ -1217,14 +1309,9 @@ export default function TripDetail() {
                                                       {shareText}
                                                     </span>
                                                     <span className="shrink-0 text-stone-300">
-                                                      {currencySymbol}{" "}
-                                                      {Number(
+                                                      {formatMoney(
                                                         myBaseShare,
-                                                      ).toLocaleString(
-                                                        "en-US",
-                                                        {
-                                                          maximumFractionDigits: 2,
-                                                        },
+                                                        currencyCode,
                                                       )}
                                                     </span>
                                                   </span>
@@ -1246,12 +1333,10 @@ export default function TripDetail() {
                                                     {memberDiffShare > 0
                                                       ? "+"
                                                       : ""}
-                                                    {currencySymbol}{" "}
-                                                    {Number(
+                                                    {formatMoney(
                                                       Math.abs(memberDiffShare),
-                                                    ).toLocaleString("en-US", {
-                                                      maximumFractionDigits: 2,
-                                                    })}
+                                                      currencyCode,
+                                                    )}
                                                   </span>
                                                 </span>
                                               )}
@@ -1265,12 +1350,10 @@ export default function TripDetail() {
                                                 ↳ debt after split
                                               </span>
                                               <span className="shrink-0 text-stone-300">
-                                                {currencySymbol}{" "}
-                                                {Number(
+                                                {formatMoney(
                                                   amount - extra,
-                                                ).toLocaleString("en-US", {
-                                                  maximumFractionDigits: 2,
-                                                })}
+                                                  currencyCode,
+                                                )}
                                               </span>
                                             </span>
                                             <span className="text-[11px] font-bold text-amber-500/80 leading-tight flex justify-between gap-3">
@@ -1281,10 +1364,10 @@ export default function TripDetail() {
                                                 adjusted bill
                                               </span>
                                               <span className="shrink-0 text-amber-500">
-                                                +{currencySymbol}{" "}
-                                                {Number(extra).toLocaleString(
-                                                  "en-US",
-                                                  { maximumFractionDigits: 2 },
+                                                +
+                                                {formatMoney(
+                                                  extra,
+                                                  currencyCode,
                                                 )}
                                               </span>
                                             </span>
@@ -1298,11 +1381,8 @@ export default function TripDetail() {
                                               extra adjustment
                                             </span>
                                             <span className="shrink-0 text-amber-500">
-                                              +{currencySymbol}{" "}
-                                              {Number(extra).toLocaleString(
-                                                "en-US",
-                                                { maximumFractionDigits: 2 },
-                                              )}
+                                              +
+                                              {formatMoney(extra, currencyCode)}
                                             </span>
                                           </span>
                                         )
@@ -1321,14 +1401,15 @@ export default function TripDetail() {
                                 onClick={() =>
                                   router.push(`/expense/${exp.id}`)
                                 }
+                                aria-label="share expense"
                                 className="w-12 sm:w-14 shrink-0 flex items-center justify-center bg-white border-2 border-stone-200 text-stone-500 hover:border-emerald-400 hover:text-emerald-500 rounded-2xl transition-all active:scale-95 shadow-sm"
-                                title="Share Expense"
                               >
                                 <svg
                                   className="w-5 h-5 sm:w-6 sm:h-6"
                                   fill="none"
                                   stroke="currentColor"
                                   viewBox="0 0 24 24"
+                                  aria-hidden="true"
                                 >
                                   <path
                                     strokeLinecap="round"
@@ -1365,6 +1446,7 @@ export default function TripDetail() {
                                 fill="none"
                                 stroke="currentColor"
                                 viewBox="0 0 24 24"
+                                aria-hidden="true"
                               >
                                 <path
                                   strokeLinecap="round"
@@ -1406,7 +1488,9 @@ export default function TripDetail() {
             {/* who pays who */}
             {settlements.length === 0 ? (
               <div className="bg-emerald-50 border-2 border-emerald-200 rounded-3xl p-6 text-center transform hover:rotate-1 transition-transform">
-                <div className="text-4xl mb-2">⚖️</div>
+                <div className="text-4xl mb-2" aria-hidden="true">
+                  ⚖️
+                </div>
                 <span className="text-emerald-800 font-extrabold text-base">
                   everything is perfectly balanced!
                 </span>
@@ -1416,13 +1500,17 @@ export default function TripDetail() {
               </div>
             ) : (
               <div className="space-y-4 relative">
-                <div className="absolute left-6 top-6 bottom-6 w-1 bg-stone-200 rounded-full z-0"></div>
+                <div
+                  className="absolute left-6 top-6 bottom-6 w-1 bg-stone-200 rounded-full z-0"
+                  aria-hidden="true"
+                ></div>
                 {settlements.map((settlement, index) => (
                   <div key={index} className="relative z-10 flex flex-col">
                     <div className="flex justify-between items-center p-4 sm:p-5 bg-stone-900 text-white rounded-4xl shadow-xl shadow-stone-900/10 hover:-translate-y-1 transition-all text-left w-full gap-2 relative z-20 group">
                       <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
                         <div
                           className={`w-8 h-8 sm:w-10 sm:h-10 shrink-0 rounded-full flex items-center justify-center text-xs sm:text-sm font-black border-2 border-white ${getAvatarColor(settlement.from.name)}`}
+                          aria-hidden="true"
                         >
                           {getInitials(settlement.from.name)}
                         </div>
@@ -1439,10 +1527,7 @@ export default function TripDetail() {
                       <div className="flex items-center gap-2 sm:gap-4 text-right flex-1 min-w-0 justify-end">
                         <div className="flex flex-col min-w-0 items-end">
                           <span className="font-extrabold text-base sm:text-lg text-emerald-400 truncate max-w-full">
-                            {currencySymbol}{" "}
-                            {Number(settlement.amount).toLocaleString("en-US", {
-                              maximumFractionDigits: 2,
-                            })}
+                            {formatMoney(settlement.amount, currencyCode)}
                           </span>
                           <span className="text-stone-400 font-bold text-[9px] sm:text-xs tracking-widest uppercase truncate max-w-full">
                             to {settlement.to.name}
@@ -1450,6 +1535,7 @@ export default function TripDetail() {
                         </div>
                         <div
                           className={`w-8 h-8 sm:w-10 sm:h-10 shrink-0 rounded-full flex items-center justify-center text-xs sm:text-sm font-black border-2 border-white ${getAvatarColor(settlement.to.name)}`}
+                          aria-hidden="true"
                         >
                           {getInitials(settlement.to.name)}
                         </div>
@@ -1463,6 +1549,7 @@ export default function TripDetail() {
             <div className="mt-8">
               <button
                 onClick={() => setShowLedger(!showLedger)}
+                aria-expanded={showLedger}
                 className="w-full py-4 bg-white border-2 border-stone-200 rounded-2xl text-sm font-extrabold text-stone-600 hover:bg-stone-50 hover:border-stone-300 transition-all shadow-sm active:scale-[0.98]"
               >
                 {showLedger ? "hide ledger details ↑" : "show ledger details ↓"}
@@ -1484,7 +1571,10 @@ export default function TripDetail() {
                         key={member.id}
                         className="p-6 bg-white border-2 border-stone-100 rounded-4xl shadow-sm relative overflow-hidden hover:border-emerald-200 transition-colors"
                       >
-                        <div className="absolute top-0 left-0 right-0 h-1.5 flex justify-around opacity-20">
+                        <div
+                          className="absolute top-0 left-0 right-0 h-1.5 flex justify-around opacity-20"
+                          aria-hidden="true"
+                        >
                           {Array.from({ length: 30 }).map((_, i) => (
                             <div
                               key={i}
@@ -1500,10 +1590,7 @@ export default function TripDetail() {
                             className={`text-xs font-black px-3.5 py-1.5 rounded-xl uppercase tracking-widest border-2 ${net > 0 ? "bg-emerald-50 text-emerald-600 border-emerald-100" : "bg-stone-50 text-stone-500 border-stone-200"}`}
                           >
                             {net > 0 ? "gets " : net < 0 ? "owes " : "even "}
-                            {currencySymbol}{" "}
-                            {Number(Math.abs(net)).toLocaleString("en-US", {
-                              maximumFractionDigits: 2,
-                            })}
+                            {formatMoney(Math.abs(net), currencyCode)}
                           </span>
                         </div>
                         <div className="flex gap-3 mb-6">
@@ -1512,11 +1599,7 @@ export default function TripDetail() {
                               total paid out
                             </span>
                             <span className="font-black text-emerald-700">
-                              {currencySymbol}{" "}
-                              {Number(details.totalPaid).toLocaleString(
-                                "en-US",
-                                { maximumFractionDigits: 2 },
-                              )}
+                              {formatMoney(details.totalPaid, currencyCode)}
                             </span>
                           </div>
                           <div className="flex-1 bg-stone-50 border border-stone-100 rounded-2xl p-3 flex flex-col gap-1">
@@ -1524,15 +1607,14 @@ export default function TripDetail() {
                               total consumed
                             </span>
                             <span className="font-black text-stone-700">
-                              {currencySymbol}{" "}
-                              {Number(details.totalOwed).toLocaleString(
-                                "en-US",
-                                { maximumFractionDigits: 2 },
-                              )}
+                              {formatMoney(details.totalOwed, currencyCode)}
                             </span>
                           </div>
                         </div>
-                        <div className="w-full border-t-2 border-dashed border-stone-200 mb-6"></div>
+                        <div
+                          className="w-full border-t-2 border-dashed border-stone-200 mb-6"
+                          aria-hidden="true"
+                        ></div>
                         <div className="space-y-6">
                           {details.paidItems.length > 0 && (
                             <div className="flex flex-col gap-3">
@@ -1554,8 +1636,10 @@ export default function TripDetail() {
                                       className={`font-black shrink-0 ${item.isNegative ? "text-stone-400" : "text-emerald-700"}`}
                                     >
                                       {item.isNegative ? "-" : "+"}
-                                      {currencySymbol}{" "}
-                                      {Math.abs(item.amount).toLocaleString()}
+                                      {formatMoney(
+                                        Math.abs(item.amount),
+                                        currencyCode,
+                                      )}
                                     </span>
                                   </div>
                                 ))}
@@ -1583,10 +1667,9 @@ export default function TripDetail() {
                                         <span
                                           className={`font-black ${item.isSettled ? "text-stone-400 line-through decoration-2" : "text-stone-800"}`}
                                         >
-                                          {currencySymbol}{" "}
-                                          {Number(item.amount).toLocaleString(
-                                            "en-US",
-                                            { maximumFractionDigits: 2 },
+                                          {formatMoney(
+                                            item.amount,
+                                            currencyCode,
                                           )}
                                         </span>
                                         {item.isSettled && (
@@ -1628,7 +1711,10 @@ export default function TripDetail() {
                                                 className={`text-[11px] font-bold flex justify-between gap-3 leading-tight w-full ${textColor}`}
                                               >
                                                 <span className="truncate flex items-center gap-1.5">
-                                                  <span className={arrowColor}>
+                                                  <span
+                                                    className={arrowColor}
+                                                    aria-hidden="true"
+                                                  >
                                                     ↳
                                                   </span>
                                                   {namePart}
@@ -1667,8 +1753,10 @@ export default function TripDetail() {
         ref={fileInputRef}
         onChange={handleFileUpload}
         className="hidden"
+        aria-hidden="true"
       />
 
+      {/* 🔥 U15: subtle FAB stack — scan and manual now share visual weight */}
       {!isAddingExpense && canEdit && trip.status !== "finished" && (
         <div className="fixed bottom-8 right-8 lg:bottom-12 lg:right-12 flex flex-col gap-3 z-40 items-end animate-in slide-in-from-bottom-8 duration-500">
           <button
@@ -1682,35 +1770,36 @@ export default function TripDetail() {
                 setShowScanner(true);
               }
             }}
-            disabled={isScanning}
-            className="group relative active:scale-95 transition-all duration-300 disabled:opacity-50 disabled:active:scale-100"
+            disabled={scanStage !== "idle"}
+            aria-label="scan receipt"
+            className="flex items-center gap-2 pl-5 pr-2 py-2 bg-white border-2 border-stone-200 text-stone-700 rounded-full shadow-sm hover:border-emerald-300 hover:text-emerald-700 active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100"
           >
-            <div className="absolute -inset-0.5 rounded-full bg-linear-to-r from-emerald-400 via-teal-300 to-emerald-500 opacity-70 group-hover:opacity-100 blur-sm transition-opacity duration-500"></div>
-            <div className="relative flex items-center gap-3 pl-6 pr-2 py-2 bg-white/90 backdrop-blur-xl rounded-full border border-white/50 shadow-[0_8px_16px_rgb(0,0,0,0.05)]">
-              <span className="text-xs font-black tracking-widest bg-linear-to-r from-emerald-600 to-teal-600 bg-clip-text text-transparent uppercase group-hover:from-emerald-500 group-hover:to-teal-500 transition-all">
-                scan receipt
-              </span>
-              <div className="w-10 h-10 rounded-full bg-linear-to-tr from-emerald-50 to-teal-50 shadow-inner flex items-center justify-center text-emerald-600 group-hover:rotate-12 group-hover:scale-110 transition-all duration-300">
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2.5}
-                    d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
-                  />
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2.5}
-                    d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
-                  />
-                </svg>
-              </div>
+            <span className="text-[11px] font-black tracking-widest uppercase">
+              scan
+            </span>
+            <div
+              className="w-9 h-9 rounded-full bg-stone-100 flex items-center justify-center text-stone-500"
+              aria-hidden="true"
+            >
+              <svg
+                className="w-4 h-4"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2.5}
+                  d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"
+                />
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2.5}
+                  d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"
+                />
+              </svg>
             </div>
           </button>
           <button
@@ -1724,12 +1813,16 @@ export default function TripDetail() {
                 setIsAddingExpense(true);
               }
             }}
+            aria-label="add expense"
             className="flex items-center gap-3 pl-6 pr-2 py-2 bg-stone-900 text-white rounded-full shadow-[0_10px_40px_rgba(0,0,0,0.3)] hover:bg-emerald-600 active:scale-95 transition-all duration-300 group"
           >
             <span className="text-xs font-black tracking-widest uppercase">
               manual
             </span>
-            <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center group-hover:bg-white/30 transition-colors shadow-inner">
+            <div
+              className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center group-hover:bg-white/30 transition-colors shadow-inner"
+              aria-hidden="true"
+            >
               <svg
                 className="w-6 h-6 group-hover:rotate-90 transition-transform duration-300"
                 fill="none"
@@ -1748,41 +1841,105 @@ export default function TripDetail() {
         </div>
       )}
 
-      {isScanning && (
-        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-4 animate-in fade-in duration-300">
-          <div className="w-20 h-20 bg-white rounded-3xl shadow-2xl flex items-center justify-center mb-6 relative overflow-hidden">
-            <div className="text-4xl relative z-10">📝</div>
+      {/* 🔥 U12: honest stage-based scanning overlay (no Math.random) */}
+      <ScanningOverlay stage={scanStage} />
+
+      {/* 🔥 finding #3: payer breakdown sheet */}
+      {payerBreakdownExpense && (
+        <div
+          className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-60 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="payer-breakdown-title"
+          onClick={() => setPayerBreakdownExpense(null)}
+        >
+          <div
+            className="bg-[#fdfbf7] w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500 overflow-hidden relative pb-8 sm:pb-6"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div
-              className="absolute left-0 w-full h-1 bg-emerald-400 shadow-[0_0_15px_rgba(52,211,153,1)] z-20"
-              style={{ animation: "scan 1.5s ease-in-out infinite" }}
-            >
-              <style>{`@keyframes scan { 0% { top: 0; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { top: 100%; opacity: 0; } }`}</style>
+              className="absolute top-3 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-stone-300 rounded-full sm:hidden"
+              aria-hidden="true"
+            ></div>
+            <div className="px-6 py-5 pt-8 sm:pt-6 border-b-2 border-stone-100 flex justify-between items-center bg-white z-10 shadow-sm">
+              <h2
+                id="payer-breakdown-title"
+                className="text-xl font-black text-stone-800 flex items-center gap-2"
+              >
+                <span aria-hidden="true">👥</span>
+                payers
+              </h2>
+              <button
+                onClick={() => setPayerBreakdownExpense(null)}
+                aria-label="close"
+                className="w-9 h-9 bg-stone-100 rounded-full flex items-center justify-center text-stone-500 hover:bg-stone-200 active:scale-90 transition-all font-bold"
+              >
+                ×
+              </button>
+            </div>
+            <div className="p-6">
+              <p className="text-sm font-bold text-stone-500 mb-4 truncate">
+                {payerBreakdownExpense.title}
+              </p>
+              <div className="space-y-2">
+                {Object.entries(payerBreakdownExpense.paidBy).map(
+                  ([id, amt]) => {
+                    const name = getMemberName(id);
+                    const pct =
+                      payerBreakdownExpense.totalAmount > 0
+                        ? Math.round(
+                            (amt / payerBreakdownExpense.totalAmount) * 100,
+                          )
+                        : 0;
+                    return (
+                      <div
+                        key={id}
+                        className="flex items-center justify-between p-3 bg-white border-2 border-stone-100 rounded-2xl"
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div
+                            className={`w-9 h-9 rounded-full flex items-center justify-center shrink-0 text-xs font-black border ${getAvatarColor(name)}`}
+                            aria-hidden="true"
+                          >
+                            {getInitials(name)}
+                          </div>
+                          <div className="flex flex-col min-w-0">
+                            <span className="font-extrabold text-stone-800 truncate">
+                              {name}
+                            </span>
+                            <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">
+                              {pct}% of total
+                            </span>
+                          </div>
+                        </div>
+                        <span className="font-black text-emerald-600 shrink-0">
+                          {formatMoney(amt, currencyCode)}
+                        </span>
+                      </div>
+                    );
+                  },
+                )}
+              </div>
+              <div className="mt-4 pt-4 border-t-2 border-stone-100 flex justify-between items-center">
+                <span className="text-xs font-black text-stone-400 uppercase tracking-widest">
+                  total
+                </span>
+                <span className="font-black text-stone-800 text-lg">
+                  {formatMoney(payerBreakdownExpense.totalAmount, currencyCode)}
+                </span>
+              </div>
             </div>
           </div>
-          <h3 className="text-xl font-black text-white tracking-wide mb-4">
-            reading receipt...
-          </h3>
-          <div className="w-48 sm:w-64 bg-stone-800 rounded-full h-2.5 mb-2 overflow-hidden shadow-inner border border-stone-700">
-            <div
-              className="bg-emerald-400 h-full rounded-full transition-all duration-300 ease-out relative"
-              style={{ width: `${scanProgress}%` }}
-            >
-              <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
-            </div>
-          </div>
-          <p className="text-emerald-400 font-black text-sm mb-1 tracking-widest drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]">
-            {scanProgress}%
-          </p>
-          <p className="text-stone-400 font-bold text-xs mt-2 uppercase tracking-widest">
-            crunching the numbers
-          </p>
         </div>
       )}
 
       {isAddingExpense && (
         <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300">
           <div className="bg-[#fdfbf7] w-full max-w-md h-[92vh] sm:h-auto sm:max-h-[92vh] rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500 overflow-hidden relative">
-            <div className="absolute top-3 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-stone-300 rounded-full sm:hidden"></div>
+            <div
+              className="absolute top-3 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-stone-300 rounded-full sm:hidden"
+              aria-hidden="true"
+            ></div>
             <div className="px-6 py-5 pt-8 sm:pt-6 border-b-2 border-stone-100 flex justify-between items-center bg-white z-10 shadow-sm">
               <h2 className="text-2xl font-black text-stone-800">
                 {editingExpense ? "edit expense ✏️" : "new expense 💸"}
@@ -1792,6 +1949,7 @@ export default function TripDetail() {
                   setIsAddingExpense(false);
                   setEditingExpense(undefined);
                 }}
+                aria-label="close"
                 className="w-10 h-10 bg-stone-100 rounded-full flex items-center justify-center text-stone-500 hover:bg-rose-100 hover:text-rose-500 hover:rotate-90 active:scale-90 transition-all font-bold text-lg"
               >
                 ×
@@ -1807,13 +1965,13 @@ export default function TripDetail() {
                   setEditingExpense(undefined);
                 }}
                 currencySymbol={currencySymbol}
+                currencyCode={currencyCode}
               />
             </div>
           </div>
         </div>
       )}
 
-      {/* EXTRACTED MODALS GO HERE! */}
       <TripSettingsModal
         key={showSettings ? "open" : "closed"}
         isOpen={showSettings}

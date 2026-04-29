@@ -5,6 +5,7 @@ import { useTripStore } from "@/store/useTripStore";
 import { useAlertStore } from "@/store/useAlertStore";
 import { Trip } from "@/lib/types";
 import { v4 as uuidv4 } from "uuid";
+import { getAvatarColor, getInitials } from "@/lib/avatars";
 
 interface MemberModalProps {
   isOpen: boolean;
@@ -12,31 +13,16 @@ interface MemberModalProps {
   trip: Trip;
 }
 
-const getAvatarColor = (name: string) => {
-  const colors = [
-    "bg-pink-100 text-pink-700 border-pink-200",
-    "bg-purple-100 text-purple-700 border-purple-200",
-    "bg-indigo-100 text-indigo-700 border-indigo-200",
-    "bg-sky-100 text-sky-700 border-sky-200",
-    "bg-teal-100 text-teal-700 border-teal-200",
-    "bg-amber-100 text-amber-700 border-amber-200",
-    "bg-rose-100 text-rose-700 border-rose-200",
-  ];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++)
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return colors[Math.abs(hash) % colors.length];
-};
-
-const getInitials = (name: string) => name.substring(0, 2).toLowerCase();
-
 export default function MemberModal({
   isOpen,
   onClose,
   trip,
 }: MemberModalProps) {
-  const { addMember, updateMember, deleteMember } = useTripStore();
-  const { showAlert, showConfirm } = useAlertStore();
+  const addMember = useTripStore((s) => s.addMember);
+  const updateMember = useTripStore((s) => s.updateMember);
+  const deleteMember = useTripStore((s) => s.deleteMember);
+  const showAlert = useAlertStore((s) => s.showAlert);
+  const showConfirm = useAlertStore((s) => s.showConfirm);
 
   const [newMemberName, setNewMemberName] = useState("");
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
@@ -60,6 +46,7 @@ export default function MemberModal({
     setEditingMemberId(null);
   };
 
+  // 🔥 U5 follow-through: severity is explicit, not inferred from title.
   const handleRemoveMember = (memberId: string, memberName: string) => {
     const isTiedToExpense = trip.expenses.some(
       (exp) =>
@@ -77,8 +64,11 @@ export default function MemberModal({
     showConfirm(
       `are you sure you want to remove ${memberName} from the trip?`,
       () => deleteMember(trip.id, memberId),
-      "remove friend? 👋",
-      "yes, remove them",
+      {
+        title: "remove friend? 👋",
+        confirmText: "yes, remove them",
+        severity: "destructive",
+      },
     );
   };
 
@@ -88,15 +78,24 @@ export default function MemberModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="member-modal-title"
+    >
       <div
         className="absolute inset-0 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200"
         onClick={closeAndReset}
+        aria-hidden="true"
       ></div>
       <div className="relative w-full max-w-md bg-white rounded-4xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200 border border-stone-100">
         <div className="flex items-center justify-between p-4 sm:p-5 border-b border-stone-100 bg-stone-50/50">
           <div>
-            <h3 className="text-xl font-black text-stone-800">
+            <h3
+              id="member-modal-title"
+              className="text-xl font-black text-stone-800"
+            >
               manage crew 👥
             </h3>
             <p className="text-xs font-bold text-stone-400 mt-1">
@@ -105,6 +104,7 @@ export default function MemberModal({
           </div>
           <button
             onClick={closeAndReset}
+            aria-label="close"
             className="w-10 h-10 flex items-center justify-center bg-white border-2 border-stone-100 rounded-full text-stone-400 hover:text-stone-800 hover:border-stone-300 transition-all active:scale-90"
           >
             ✕
@@ -114,7 +114,12 @@ export default function MemberModal({
         <div className="overflow-y-auto p-4 sm:p-5 space-y-3 bg-[#fdfbf7]">
           {trip.members.length === 0 ? (
             <div className="py-10 flex flex-col items-center justify-center text-center">
-              <div className="text-5xl mb-3 opacity-40 animate-bounce">👻</div>
+              <div
+                className="text-5xl mb-3 opacity-40 animate-bounce"
+                aria-hidden="true"
+              >
+                👻
+              </div>
               <p className="text-sm font-bold text-stone-400">
                 it&apos;s a ghost town in here!
               </p>
@@ -135,6 +140,7 @@ export default function MemberModal({
                       autoFocus
                       value={editMemberName}
                       onChange={(e) => setEditMemberName(e.target.value)}
+                      aria-label="rename member"
                       className="flex-1 bg-stone-50 border-2 border-stone-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:border-emerald-400 focus:bg-white transition-all"
                       onKeyDown={(e) => {
                         if (e.key === "Enter") handleRenameMember(member.id);
@@ -143,6 +149,7 @@ export default function MemberModal({
                     />
                     <button
                       onClick={() => handleRenameMember(member.id)}
+                      aria-label="save rename"
                       className="p-2 bg-emerald-100 text-emerald-600 rounded-xl hover:bg-emerald-500 hover:text-white transition-colors"
                     >
                       <svg
@@ -150,6 +157,7 @@ export default function MemberModal({
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
+                        aria-hidden="true"
                       >
                         <path
                           strokeLinecap="round"
@@ -165,6 +173,7 @@ export default function MemberModal({
                     <div className="flex items-center gap-3">
                       <div
                         className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-black border ${getAvatarColor(member.name)}`}
+                        aria-hidden="true"
                       >
                         {getInitials(member.name)}
                       </div>
@@ -178,6 +187,7 @@ export default function MemberModal({
                           setEditingMemberId(member.id);
                           setEditMemberName(member.name);
                         }}
+                        aria-label={`rename ${member.name}`}
                         className="w-8 h-8 flex items-center justify-center rounded-xl bg-stone-100 text-stone-500 hover:bg-amber-100 hover:text-amber-600 transition-colors"
                       >
                         ✏️
@@ -186,6 +196,7 @@ export default function MemberModal({
                         onClick={() =>
                           handleRemoveMember(member.id, member.name)
                         }
+                        aria-label={`remove ${member.name}`}
                         className="w-8 h-8 flex items-center justify-center rounded-xl bg-stone-100 text-stone-500 hover:bg-rose-100 hover:text-rose-600 transition-colors"
                       >
                         🗑️
@@ -205,6 +216,7 @@ export default function MemberModal({
               value={newMemberName}
               onChange={(e) => setNewMemberName(e.target.value)}
               placeholder="type a new name..."
+              aria-label="new member name"
               className="flex-1 bg-stone-50 border-2 border-stone-100 shadow-inner rounded-2xl px-5 py-3.5 text-sm font-bold focus:outline-none focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100 transition-all placeholder:font-medium placeholder:text-stone-300"
             />
             <button

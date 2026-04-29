@@ -7,29 +7,39 @@ import { useAlertStore } from "@/store/useAlertStore";
 import { v4 as uuidv4 } from "uuid";
 import { Expense, ExpenseItem, Member } from "@/lib/types";
 import { supabase } from "@/lib/supabase";
-import { User } from "@supabase/supabase-js"; // 🔥 imported to replace "any"
+import { User } from "@supabase/supabase-js";
 import ExpenseForm from "@/components/expense-form";
 import CameraScanner from "@/components/camera-scanner";
+import LoadingState from "@/components/loading-state";
+import ScanningOverlay, { ScanStage } from "@/components/scanning-overlay";
+import { getAvatarColor, getInitials } from "@/lib/avatars";
 
-const getAvatarColor = (name: string) => {
-  const colors = [
-    "bg-pink-100 text-pink-700 border-pink-200",
-    "bg-purple-100 text-purple-700 border-purple-200",
-    "bg-indigo-100 text-indigo-700 border-indigo-200",
-    "bg-sky-100 text-sky-700 border-sky-200",
-    "bg-teal-100 text-teal-700 border-teal-200",
-    "bg-amber-100 text-amber-700 border-amber-200",
-    "bg-rose-100 text-rose-700 border-rose-200",
-  ];
-  let hash = 0;
-  for (let i = 0; i < name.length; i++)
-    hash = name.charCodeAt(i) + ((hash << 5) - hash);
-  return colors[Math.abs(hash) % colors.length];
+// 🔥 L5 helper (mirrors the one in app/trip/[id]/page.tsx). Keeping a copy here
+// rather than exporting from a shared module — it's small enough that
+// duplication is cheaper than figuring out where in the project a "scan-types"
+// module should live. If we need a third copy in the future, that's the
+// signal to extract it.
+type ScanResponse = {
+  items: Array<{ name: string; price: number }>;
+  totalAmount?: number;
+  merchantName?: string;
+  date?: string;
+  category?: string;
 };
 
-const getInitials = (name: string) => name.substring(0, 2).toLowerCase();
+const isValidScanResponse = (data: unknown): data is ScanResponse => {
+  if (!data || typeof data !== "object") return false;
+  const d = data as Record<string, unknown>;
+  if (!Array.isArray(d.items)) return false;
+  for (const item of d.items) {
+    if (!item || typeof item !== "object") return false;
+    const it = item as Record<string, unknown>;
+    if (typeof it.name !== "string") return false;
+    if (typeof it.price !== "number" || !isFinite(it.price)) return false;
+  }
+  return true;
+};
 
-// 🔥 No more "any" keyword for currentUser!
 function QuickSplitMemberModal({
   isOpen,
   onClose,
@@ -43,7 +53,8 @@ function QuickSplitMemberModal({
   setMembers: (m: Member[]) => void;
   currentUser: User | null;
 }) {
-  const { showAlert, showConfirm } = useAlertStore();
+  const showAlert = useAlertStore((s) => s.showAlert);
+  const showConfirm = useAlertStore((s) => s.showConfirm);
 
   const [newMemberName, setNewMemberName] = useState("");
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
@@ -76,6 +87,7 @@ function QuickSplitMemberModal({
     setEditingMemberId(null);
   };
 
+  // 🔥 U5 follow-through: severity is explicit, not inferred from title.
   const handleRemoveMember = (memberId: string, memberName: string) => {
     if (memberId === currentUser?.id) {
       showAlert(
@@ -87,8 +99,11 @@ function QuickSplitMemberModal({
     showConfirm(
       `are you sure you want to remove ${memberName} from this receipt?`,
       () => setMembers(members.filter((m) => m.id !== memberId)),
-      "remove friend? 👋",
-      "yes, remove them",
+      {
+        title: "remove friend? 👋",
+        confirmText: "yes, remove them",
+        severity: "destructive",
+      },
     );
   };
 
@@ -98,15 +113,24 @@ function QuickSplitMemberModal({
   };
 
   return (
-    <div className="fixed inset-0 z-70 flex items-center justify-center p-4">
+    <div
+      className="fixed inset-0 z-70 flex items-center justify-center p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="member-modal-title"
+    >
       <div
         className="absolute inset-0 bg-stone-900/40 backdrop-blur-sm animate-in fade-in duration-200"
         onClick={closeAndReset}
+        aria-hidden="true"
       ></div>
       <div className="relative w-full max-w-md bg-white rounded-4xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200 border border-stone-100">
         <div className="flex items-center justify-between p-4 sm:p-5 border-b border-stone-100 bg-stone-50/50">
           <div>
-            <h3 className="text-xl font-black text-stone-800">
+            <h3
+              id="member-modal-title"
+              className="text-xl font-black text-stone-800"
+            >
               manage crew 👥
             </h3>
             <p className="text-xs font-bold text-stone-400 mt-1">
@@ -115,6 +139,7 @@ function QuickSplitMemberModal({
           </div>
           <button
             onClick={closeAndReset}
+            aria-label="close"
             className="w-10 h-10 flex items-center justify-center bg-white border-2 border-stone-100 rounded-full text-stone-400 hover:text-stone-800 hover:border-stone-300 transition-all active:scale-90"
           >
             ✕
@@ -124,7 +149,12 @@ function QuickSplitMemberModal({
         <div className="overflow-y-auto p-4 sm:p-5 space-y-3 bg-[#fdfbf7]">
           {members.length === 0 ? (
             <div className="py-10 flex flex-col items-center justify-center text-center">
-              <div className="text-5xl mb-3 opacity-40 animate-bounce">👻</div>
+              <div
+                className="text-5xl mb-3 opacity-40 animate-bounce"
+                aria-hidden="true"
+              >
+                👻
+              </div>
               <p className="text-sm font-bold text-stone-400">
                 it&apos;s a ghost town in here!
               </p>
@@ -145,6 +175,7 @@ function QuickSplitMemberModal({
                       autoFocus
                       value={editMemberName}
                       onChange={(e) => setEditMemberName(e.target.value)}
+                      aria-label="rename member"
                       className="flex-1 bg-stone-50 border-2 border-stone-200 rounded-xl px-3 py-2 text-sm font-bold focus:outline-none focus:border-emerald-400 focus:bg-white transition-all"
                       onKeyDown={(e) => {
                         if (e.key === "Enter") handleRenameMember(member.id);
@@ -153,6 +184,7 @@ function QuickSplitMemberModal({
                     />
                     <button
                       onClick={() => handleRenameMember(member.id)}
+                      aria-label="save rename"
                       className="p-2 bg-emerald-100 text-emerald-600 rounded-xl hover:bg-emerald-500 hover:text-white transition-colors"
                     >
                       <svg
@@ -160,6 +192,7 @@ function QuickSplitMemberModal({
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
+                        aria-hidden="true"
                       >
                         <path
                           strokeLinecap="round"
@@ -175,6 +208,7 @@ function QuickSplitMemberModal({
                     <div className="flex items-center gap-3">
                       <div
                         className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-black border ${getAvatarColor(member.name)}`}
+                        aria-hidden="true"
                       >
                         {getInitials(member.name)}
                       </div>
@@ -182,7 +216,9 @@ function QuickSplitMemberModal({
                         {member.name}
                       </span>
                       {member.id === currentUser?.id && (
-                        <span className="ml-1">👑</span>
+                        <span className="ml-1" aria-label="you">
+                          👑
+                        </span>
                       )}
                     </div>
                     <div className="flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
@@ -191,6 +227,7 @@ function QuickSplitMemberModal({
                           setEditingMemberId(member.id);
                           setEditMemberName(member.name);
                         }}
+                        aria-label={`rename ${member.name}`}
                         className="w-8 h-8 flex items-center justify-center rounded-xl bg-stone-100 text-stone-500 hover:bg-amber-100 hover:text-amber-600 transition-colors"
                       >
                         ✏️
@@ -200,6 +237,7 @@ function QuickSplitMemberModal({
                           onClick={() =>
                             handleRemoveMember(member.id, member.name)
                           }
+                          aria-label={`remove ${member.name}`}
                           className="w-8 h-8 flex items-center justify-center rounded-xl bg-stone-100 text-stone-500 hover:bg-rose-100 hover:text-rose-600 transition-colors"
                         >
                           🗑️
@@ -220,6 +258,7 @@ function QuickSplitMemberModal({
               value={newMemberName}
               onChange={(e) => setNewMemberName(e.target.value)}
               placeholder="type a new name..."
+              aria-label="new member name"
               className="flex-1 bg-stone-50 border-2 border-stone-100 shadow-inner rounded-2xl px-5 py-3.5 text-sm font-bold focus:outline-none focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100 transition-all placeholder:font-medium placeholder:text-stone-300"
             />
             <button
@@ -242,14 +281,16 @@ function QuickSplitContent() {
   const action = searchParams.get("action");
   const editId = searchParams.get("edit");
 
-  const { user } = useTripStore();
-  const showAlert = useAlertStore((state) => state.showAlert);
+  // 🔥 L1: individual selectors
+  const user = useTripStore((s) => s.user);
+  const showAlert = useAlertStore((s) => s.showAlert);
+  const showConfirm = useAlertStore((s) => s.showConfirm);
 
   const [members, setMembers] = useState<Member[]>([]);
   const [isMemberModalOpen, setIsMemberModalOpen] = useState(false);
 
-  const [isScanning, setIsScanning] = useState(false);
-  const [scanProgress, setScanProgress] = useState(0);
+  // 🔥 U12: stage-based progress instead of Math.random
+  const [scanStage, setScanStage] = useState<ScanStage>("idle");
   const [editingExpense, setEditingExpense] = useState<Expense | undefined>(
     undefined,
   );
@@ -313,33 +354,34 @@ function QuickSplitContent() {
   };
 
   const processReceiptFile = async (file: File) => {
-    setScanProgress(0);
-    setIsScanning(true);
-    const progressInterval = setInterval(() => {
-      setScanProgress((prev) =>
-        prev >= 90 ? prev : prev + Math.floor(Math.random() * 15) + 5,
-      );
-    }, 300);
+    setScanStage("uploading");
 
     try {
       const base64Data = await fileToBase64(file);
+      setScanStage("reading");
+
       const { data, error } = await supabase.functions.invoke("scan-receipt", {
         body: { imageBase64: base64Data, mimeType: file.type },
       });
 
       if (error || data?.error) throw new Error("failed to scan");
 
-      const formattedItems: ExpenseItem[] = data.items.map(
-        (item: { name: string; price: number }) => ({
-          id: uuidv4(),
-          name: item.name,
-          price: item.price,
-          assignedTo: [],
-        }),
-      );
+      // 🔥 L5: validate the Gemini response shape before trusting it
+      if (!isValidScanResponse(data)) {
+        throw new Error("invalid scan response shape");
+      }
+
+      setScanStage("extracting");
+
+      const formattedItems: ExpenseItem[] = data.items.map((item) => ({
+        id: uuidv4(),
+        name: item.name,
+        price: item.price,
+        assignedTo: [],
+      }));
 
       const totalScannedAmount =
-        data.totalAmount ||
+        data.totalAmount ??
         formattedItems.reduce((sum, item) => sum + item.price, 0);
 
       const scannedExpense: Expense = {
@@ -357,21 +399,14 @@ function QuickSplitContent() {
         category: data.category || "food & bev",
       };
 
-      clearInterval(progressInterval);
-      setScanProgress(100);
-      await new Promise((resolve) => setTimeout(resolve, 500));
-
       setEditingExpense(scannedExpense);
     } catch {
-      clearInterval(progressInterval);
       showAlert(
         "couldn't read that receipt, try another one!",
         "scan failed ❌",
       );
     } finally {
-      clearInterval(progressInterval);
-      setIsScanning(false);
-      setTimeout(() => setScanProgress(0), 300);
+      setScanStage("idle");
     }
   };
 
@@ -383,6 +418,11 @@ function QuickSplitContent() {
   };
 
   const handleSaveReceipt = async (expense: Expense) => {
+    if (!user) {
+      showAlert("you need to be signed in to save a receipt.", "uh oh 🔒");
+      return;
+    }
+
     try {
       const payload = {
         title: expense.title,
@@ -399,22 +439,50 @@ function QuickSplitContent() {
       };
 
       if (editId) {
+        // updates leave created_by alone — preserves the original creator
         await supabase.from("expenses").update(payload).eq("id", editId);
       } else {
+        // 🔥 created_by is required for the receipts tab to find this row
+        // (see app/page.tsx — the home page filters by created_by = user.id).
+        // without this, new quick-splits would save successfully but
+        // immediately disappear from the user's view.
         await supabase.from("expenses").insert({
           id: expense.id,
           trip_id: null,
           created_at: expense.createdAt,
+          created_by: user.id,
           ...payload,
         });
       }
 
       showAlert("receipt saved perfectly to your dashboard!", "saved ✨");
-      // 🔥 directly pushes back to the unified expense page, but appends ?from=quick so it knows!
       router.push(`/expense/${expense.id}?from=quick`);
     } catch (err) {
       console.error(err);
       showAlert("failed to save the receipt. please try again.", "error ❌");
+    }
+  };
+
+  // 🔥 U9: confirm-on-back when there's an in-flight expense.
+  //
+  // Honest caveat: we can't see ExpenseForm's internal dirty state from here,
+  // so this guard fires whenever there's a non-trivial editingExpense in
+  // play. for a brand-new manual session (no editingExpense yet) the back
+  // button stays instant, which feels right — there's nothing to lose. for
+  // edit sessions and post-scan sessions, the user gets a confirm.
+  const handleBack = () => {
+    if (editingExpense) {
+      showConfirm(
+        "your changes haven't been saved. leave anyway?",
+        () => router.push("/?tab=quick"),
+        {
+          title: "leave receipt? 👋",
+          confirmText: "yes, discard",
+          severity: "destructive",
+        },
+      );
+    } else {
+      router.push("/?tab=quick");
     }
   };
 
@@ -425,8 +493,8 @@ function QuickSplitContent() {
       <div className="w-full max-w-md relative">
         <div className="flex justify-between items-center mb-8 pt-4">
           <button
-            // 🔥 if they cancel, push them strictly back to the home page's receipts tab
-            onClick={() => router.push("/?tab=quick")}
+            onClick={handleBack}
+            aria-label="back"
             className="w-11 h-11 flex items-center justify-center rounded-full bg-white shadow-sm border border-stone-100 text-stone-500 hover:text-emerald-600 hover:scale-110 hover:-translate-y-0.5 active:scale-95 transition-all"
           >
             <svg
@@ -434,6 +502,7 @@ function QuickSplitContent() {
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
+              aria-hidden="true"
             >
               <path
                 strokeLinecap="round"
@@ -446,15 +515,12 @@ function QuickSplitContent() {
           <span className="text-sm font-black text-stone-400 uppercase tracking-widest">
             {editId ? "edit receipt ✏️" : "quick split ⚡"}
           </span>
-          <div className="w-11 h-11"></div>
+          <div className="w-11 h-11" aria-hidden="true"></div>
         </div>
 
         {isWarmingUp ? (
-          <div className="flex flex-col items-center justify-center py-32">
-            <div className="w-10 h-10 border-4 border-emerald-200 border-t-emerald-500 rounded-full animate-spin mb-4"></div>
-            <span className="text-sm font-bold text-stone-400 uppercase tracking-widest">
-              fetching receipt...
-            </span>
+          <div className="py-32">
+            <LoadingState label="fetching receipt..." />
           </div>
         ) : (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -497,6 +563,7 @@ function QuickSplitContent() {
                     >
                       <div
                         className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-black border transition-transform group-hover:scale-110 group-hover:rotate-6 ${getAvatarColor(member.name)}`}
+                        aria-hidden="true"
                       >
                         {getInitials(member.name)}
                       </div>
@@ -508,27 +575,35 @@ function QuickSplitContent() {
             </section>
 
             <div className="relative">
-              {!editingExpense && !showScanner && !isScanning && !editId && (
-                <div className="flex flex-col gap-3 mb-6">
-                  <button
-                    onClick={() => setShowScanner(true)}
-                    className="w-full py-5 bg-stone-900 text-white rounded-3xl text-lg font-black hover:bg-emerald-600 transition-all shadow-xl shadow-stone-900/20 hover:shadow-emerald-600/30 active:scale-95 flex justify-center items-center gap-3"
-                  >
-                    <span className="text-2xl">📸</span> scan a receipt
-                  </button>
-                  <div className="text-center text-xs font-bold text-stone-400 py-2 uppercase tracking-widest">
-                    — or type it manually —
+              {!editingExpense &&
+                !showScanner &&
+                scanStage === "idle" &&
+                !editId && (
+                  <div className="flex flex-col gap-3 mb-6">
+                    <button
+                      onClick={() => setShowScanner(true)}
+                      aria-label="scan a receipt"
+                      className="w-full py-5 bg-stone-900 text-white rounded-3xl text-lg font-black hover:bg-emerald-600 transition-all shadow-xl shadow-stone-900/20 hover:shadow-emerald-600/30 active:scale-95 flex justify-center items-center gap-3"
+                    >
+                      <span className="text-2xl" aria-hidden="true">
+                        📸
+                      </span>{" "}
+                      scan a receipt
+                    </button>
+                    <div className="text-center text-xs font-bold text-stone-400 py-2 uppercase tracking-widest">
+                      — or type it manually —
+                    </div>
                   </div>
-                </div>
-              )}
+                )}
 
               <ExpenseForm
                 key={editingExpense?.id || (editId ? `edit-${editId}` : "new")}
                 members={members}
                 initialExpense={editingExpense}
                 onSave={handleSaveReceipt}
-                onCancel={() => router.push("/?tab=quick")} // 🔥 strictly push back to the receipts tab
+                onCancel={() => router.push("/?tab=quick")}
                 currencySymbol="Rp"
+                currencyCode="IDR"
               />
             </div>
           </div>
@@ -549,6 +624,7 @@ function QuickSplitContent() {
         ref={fileInputRef}
         onChange={handleFileUpload}
         className="hidden"
+        aria-hidden="true"
       />
 
       {showScanner && (
@@ -570,36 +646,8 @@ function QuickSplitContent() {
         />
       )}
 
-      {isScanning && (
-        <div className="fixed inset-0 bg-stone-900/60 backdrop-blur-sm z-50 flex flex-col items-center justify-center p-4 animate-in fade-in duration-300">
-          <div className="w-20 h-20 bg-white rounded-3xl shadow-2xl flex items-center justify-center mb-6 relative overflow-hidden">
-            <div className="text-4xl relative z-10">📝</div>
-            <div
-              className="absolute left-0 w-full h-1 bg-emerald-400 shadow-[0_0_15px_rgba(52,211,153,1)] z-20"
-              style={{ animation: "scan 1.5s ease-in-out infinite" }}
-            >
-              <style>{`@keyframes scan { 0% { top: 0; opacity: 0; } 10% { opacity: 1; } 90% { opacity: 1; } 100% { top: 100%; opacity: 0; } }`}</style>
-            </div>
-          </div>
-          <h3 className="text-xl font-black text-white tracking-wide mb-4">
-            reading receipt...
-          </h3>
-          <div className="w-48 sm:w-64 bg-stone-800 rounded-full h-2.5 mb-2 overflow-hidden shadow-inner border border-stone-700">
-            <div
-              className="bg-emerald-400 h-full rounded-full transition-all duration-300 ease-out relative"
-              style={{ width: `${scanProgress}%` }}
-            >
-              <div className="absolute inset-0 bg-white/20 animate-pulse"></div>
-            </div>
-          </div>
-          <p className="text-emerald-400 font-black text-sm mb-1 tracking-widest drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]">
-            {scanProgress}%
-          </p>
-          <p className="text-stone-400 font-bold text-xs mt-2 uppercase tracking-widest">
-            letting gemini do the math
-          </p>
-        </div>
-      )}
+      {/* 🔥 U12: honest stage-based scanning overlay (no Math.random) */}
+      <ScanningOverlay stage={scanStage} />
     </main>
   );
 }
@@ -608,8 +656,8 @@ export default function QuickSplitPage() {
   return (
     <Suspense
       fallback={
-        <div className="flex min-h-screen items-center justify-center bg-[#fdfbf7] text-stone-400 font-bold text-sm tracking-widest uppercase">
-          warming up...
+        <div className="flex min-h-screen items-center justify-center bg-[#fdfbf7]">
+          <LoadingState size="md" label={null} />
         </div>
       }
     >

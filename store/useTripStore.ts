@@ -355,6 +355,7 @@ export const useTripStore = create<TripStore>((set, get) => ({
         return t;
       }),
     }));
+    const { user } = get();
     await supabase.from("expenses").insert({
       id: expense.id,
       trip_id: tripId,
@@ -369,6 +370,7 @@ export const useTripStore = create<TripStore>((set, get) => ({
       expense_date: expense.expenseDate,
       created_at: expense.createdAt,
       category: expense.category || "other",
+      created_by: user?.id ?? null,
     });
     set({ isSyncing: false });
   },
