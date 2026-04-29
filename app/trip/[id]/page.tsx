@@ -206,7 +206,7 @@ export default function TripDetail() {
         const blob = await toBlob(shareCardRef.current, {
           cacheBust: true,
           pixelRatio: 3,
-          backgroundColor: "transparent",
+          backgroundColor: "#fdfbf7",
         });
 
         if (blob) {

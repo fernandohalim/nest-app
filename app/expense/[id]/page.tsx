@@ -696,8 +696,7 @@ export default function UnifiedExpensePage() {
         save receipt image
       </button>
 
-      {/* 🛠️ ON-SCREEN TESTING MODE (scroll to bottom!) */}
-      {/* swap this back to: className="overflow-hidden absolute -left-[9999px] top-0 pointer-events-none" when done */}
+      {/* off-screen receipt snapshot for exporting */}
       <div className="overflow-hidden absolute -left-2499.75 top-0 pointer-events-none">
         <div
           ref={compactReceiptRef}
