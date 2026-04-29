@@ -193,7 +193,7 @@ export default function TripDetail() {
     if (!trip) return;
     const url = window.location.href;
     const shareTitle = `nest: ${trip.name}`;
-    const shareText = `check out our trip to ${trip.name} 🎒`;
+    const shareText = `check out our trip titled: ${trip.name} 🎒`;
 
     try {
       setIsSharing(true);

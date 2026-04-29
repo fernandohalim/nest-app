@@ -24,10 +24,11 @@ export default function UnifiedExpensePage() {
   const showAlert = useAlertStore((s) => s.showAlert);
 
   const receiptRef = useRef<HTMLDivElement>(null);
+  const compactReceiptRef = useRef<HTMLDivElement>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
-  const [isSharing, setIsSharing] = useState(false); // 🔥 NEW
+  const [isSharing, setIsSharing] = useState(false);
   const [expense, setExpense] = useState<Expense | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [tripData, setTripData] = useState<{
@@ -123,8 +124,8 @@ export default function UnifiedExpensePage() {
 
       let fileToShare: File | null = null;
 
-      if (receiptRef.current) {
-        const blob = await toBlob(receiptRef.current, {
+      if (compactReceiptRef.current) {
+        const blob = await toBlob(compactReceiptRef.current, {
           cacheBust: true,
           pixelRatio: 3,
           backgroundColor: "#fdfbf7",
@@ -694,6 +695,118 @@ export default function UnifiedExpensePage() {
         )}
         save receipt image
       </button>
+
+      {/* 🛠️ ON-SCREEN TESTING MODE (scroll to bottom!) */}
+      {/* swap this back to: className="overflow-hidden absolute -left-[9999px] top-0 pointer-events-none" when done */}
+      <div className="overflow-hidden absolute -left-2499.75 top-0 pointer-events-none">
+        <div
+          ref={compactReceiptRef}
+          className="w-112.5 bg-emerald-50 p-10 flex flex-col relative font-sans shrink-0 shadow-2xl scale-100"
+        >
+          {/* decorative background blobs */}
+          <div className="absolute top-0 right-0 w-36 h-36 bg-emerald-200/40 rounded-bl-full mix-blend-multiply"></div>
+          <div className="absolute bottom-0 left-0 w-28 h-28 bg-emerald-200/40 rounded-tr-full mix-blend-multiply"></div>
+
+          <div className="bg-white border-2 border-emerald-100 rounded-[2.5rem] p-8 shadow-xl relative z-10 flex flex-col items-center text-center">
+            {/* icon */}
+            <div className="w-16 h-16 bg-emerald-50 border-2 border-emerald-100 rounded-2xl flex items-center justify-center text-3xl mb-6 shadow-sm">
+              🧾
+            </div>
+
+            {/* title & date */}
+            <h1 className="text-3xl font-black text-stone-800 leading-tight mb-2">
+              {expense.title}
+            </h1>
+            <p className="font-bold text-stone-400 text-[10px] uppercase tracking-widest mb-3">
+              {formatDisplayDateTime(expense.expenseDate)}
+            </p>
+            <span className="font-bold px-3 py-1 bg-emerald-50 text-emerald-600 rounded-md text-[9px] uppercase tracking-widest mb-8 border border-emerald-100">
+              {expense.category}
+            </span>
+
+            {/* hero amount */}
+            <div className="w-full bg-[#fdfbf7] rounded-3xl p-6 mb-8 border-2 border-stone-100 shadow-inner">
+              <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest block mb-2">
+                total expense
+              </span>
+              <span className="text-5xl font-black text-emerald-500 flex items-start justify-center">
+                <span className="text-2xl mt-1.5 mr-1">{currencySymbol}</span>
+                {formatMoney(expense.totalAmount, currencyCode)
+                  .replace(currencySymbol, "")
+                  .trim()}
+              </span>
+            </div>
+
+            {/* math breakdown & paid by */}
+            <div className="w-full flex flex-col items-center gap-4 mb-8">
+              {/* subtotal / adjustments (only shows if there's a difference) */}
+              {expense.splitType === "exact" && Math.abs(difference) > 0 && (
+                <div className="w-full flex flex-col gap-2 bg-stone-50 p-4 rounded-2xl border border-stone-100">
+                  <div className="flex justify-between text-xs font-bold text-stone-500">
+                    <span>subtotal</span>
+                    <span className="text-stone-700">
+                      {formatMoney(itemsSum, currencyCode)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-xs font-bold text-stone-500">
+                    <span>{difference > 0 ? "tax & fees" : "discount"}</span>
+                    <span className="text-stone-700">
+                      {difference > 0 ? "+" : "-"}
+                      {formatMoney(Math.abs(difference), currencyCode)}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {expense.splitType === "adjustment" &&
+                totalExtraAdjustments > 0 && (
+                  <div className="w-full flex flex-col gap-2 bg-stone-50 p-4 rounded-2xl border border-stone-100">
+                    <div className="flex justify-between text-xs font-bold text-stone-500">
+                      <span>base subtotal</span>
+                      <span className="text-stone-700">
+                        {formatMoney(baseAdjustmentSubtotal, currencyCode)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-xs font-bold text-stone-500">
+                      <span>adjustments</span>
+                      <span className="text-stone-700">
+                        +{formatMoney(totalExtraAdjustments, currencyCode)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+              {/* paid by chips */}
+              <div className="mt-2 flex flex-col items-center w-full">
+                <span className="text-[9px] font-black text-stone-300 uppercase tracking-widest mb-3">
+                  paid by
+                </span>
+                <div className="flex flex-wrap gap-2 justify-center">
+                  {payersEntries.map(([id, amt]) => (
+                    <span
+                      key={id}
+                      className="text-[11px] font-extrabold bg-stone-100 border border-stone-200/60 text-stone-500 px-3 py-1.5 rounded-lg flex items-center gap-1.5"
+                    >
+                      {getMemberName(id)}
+                      {payersEntries.length > 1 && (
+                        <span className="text-stone-400">
+                          ({formatMoney(amt, currencyCode)})
+                        </span>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="w-full border-t-2 border-dashed border-stone-200 mb-6"></div>
+
+            <span className="text-[10px] font-black text-emerald-600/40 uppercase tracking-widest">
+              powered by nest.
+            </span>
+          </div>
+        </div>
+      </div>
     </main>
   );
 }
