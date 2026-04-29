@@ -11,11 +11,6 @@ import LoadingState from "@/components/loading-state";
 import { formatMoney, getCurrencySymbol } from "@/lib/format";
 import { formatDisplayDateTime } from "@/lib/datetime";
 
-// 🔥 L9 (revised): pixel widths, applied via inline style. Tailwind's JIT
-// scanner can't see template-literal class names like `w-${n}`, but it CAN
-// see literal strings like "w-1.5". Either way, inline styles are immune to
-// purge concerns and don't depend on the Tailwind config including arbitrary
-// values. Numbers below are roughly equivalent to the previous "w-0.5"…"w-2".
 const BARCODE_WIDTHS = [
   4, 8, 2, 4, 6, 8, 2, 6, 4, 8, 2, 6, 4, 4, 8, 2, 4, 6, 8, 2, 4,
 ];
@@ -25,7 +20,6 @@ export default function UnifiedExpensePage() {
   const router = useRouter();
   const expenseId = params.id as string;
 
-  // 🔥 L1: individual selector
   const user = useTripStore((s) => s.user);
   const showAlert = useAlertStore((s) => s.showAlert);
 
@@ -72,8 +66,6 @@ export default function UnifiedExpensePage() {
       };
       setExpense(mappedExp);
 
-      // if there's a trip, fetch the trip and its members.
-      // if it's a quick split, use the ephemeral members from the row.
       if (expData.trip_id) {
         const [tripRes, membersRes] = await Promise.all([
           supabase
@@ -202,7 +194,6 @@ export default function UnifiedExpensePage() {
       (expense.owedBy && expense.owedBy[user.id] !== undefined) ||
       members.some((m) => m.id === user.id));
 
-  // 🔥 U2: countdown for quick-splits (no associated trip)
   const isQuickSplit = !tripData;
   const createdAtMs = new Date(expense.createdAt).getTime();
   const daysSinceCreated = Math.floor(
@@ -213,7 +204,6 @@ export default function UnifiedExpensePage() {
 
   return (
     <main className="flex min-h-screen flex-col items-center p-4 sm:p-6 bg-[#fdfbf7] pb-10 font-sans selection:bg-emerald-200 selection:text-emerald-900">
-      {/* top navigation */}
       <div className="w-full max-w-md flex justify-between items-center mb-6">
         <button
           onClick={() => {
@@ -244,7 +234,6 @@ export default function UnifiedExpensePage() {
         </button>
 
         <div className="flex items-center gap-2">
-          {/* 🔥 U8: edit affordance branches by context */}
           {!tripData && isOwner && (
             <button
               onClick={() => router.push(`/quick-split?edit=${expense.id}`)}
@@ -290,7 +279,6 @@ export default function UnifiedExpensePage() {
         </div>
       </div>
 
-      {/* 🔥 U2: quick-split expiry banner */}
       {isQuickSplit && (
         <div
           className={`w-full max-w-md mb-6 animate-in slide-in-from-top-4 duration-500 z-10 rounded-2xl border-2 p-4 flex items-center gap-3 shadow-sm ${
@@ -327,7 +315,6 @@ export default function UnifiedExpensePage() {
         </div>
       )}
 
-      {/* nest-style trip redirect button */}
       {tripData && (
         <div className="w-full max-w-md mb-6 animate-in slide-in-from-top-4 duration-500 z-10">
           <button
@@ -369,6 +356,7 @@ export default function UnifiedExpensePage() {
         ref={receiptRef}
         className="w-full max-w-md bg-white rounded-3xl shadow-xl border-2 border-stone-100 flex flex-col font-sans text-stone-800 animate-in zoom-in-95 duration-500 overflow-hidden relative"
       >
+        {/* HEADER */}
         <div className="p-6 sm:p-8 border-b-2 border-dashed border-stone-200 flex flex-col items-center text-center bg-white relative z-10">
           <div className="text-4xl mb-4" aria-hidden="true">
             🧾
@@ -377,42 +365,129 @@ export default function UnifiedExpensePage() {
             {expense.title}
           </h1>
           <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest">
-            {/* 🔥 U10: locale-aware */}
             {formatDisplayDateTime(expense.expenseDate)}
           </p>
+          <span className="mt-3 font-bold px-3 py-1 bg-stone-50 border border-stone-100 text-stone-400 rounded-full text-[10px] uppercase tracking-widest">
+            {expense.category}
+          </span>
         </div>
 
         <div className="p-6 sm:p-8 bg-white relative z-10 flex flex-col">
+          {/* SECTION 1: THE ORDER (Only for exact splits with items) */}
+          {expense.splitType === "exact" &&
+            expense.items &&
+            expense.items.length > 0 && (
+              <div className="flex flex-col gap-4 mb-8">
+                <span className="text-[10px] font-black text-stone-300 uppercase tracking-widest border-b-2 border-stone-100 pb-2">
+                  the order
+                </span>
+                <div className="flex flex-col gap-4">
+                  {expense.items.map((item, idx) => (
+                    <div key={idx} className="flex flex-col gap-0.5">
+                      <div className="flex justify-between items-start text-sm">
+                        <span className="font-extrabold text-stone-800 pr-4 leading-tight">
+                          {item.name}
+                        </span>
+                        <span className="font-black text-stone-800 shrink-0">
+                          {formatMoney(item.price, currencyCode)}
+                        </span>
+                      </div>
+                      {item.assignedTo.length > 0 && (
+                        <div className="text-[11px] font-bold text-stone-400 leading-snug">
+                          item by:{" "}
+                          {item.assignedTo
+                            .map((id) => getMemberName(id))
+                            .join(", ")}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+          {/* SECTION 2: THE MATH */}
           <div className="flex flex-col gap-3 mb-8">
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">
-                paid by
+            <span className="text-[10px] font-black text-stone-300 uppercase tracking-widest border-b-2 border-stone-100 pb-2">
+              totals
+            </span>
+
+            {expense.splitType === "exact" && Math.abs(difference) > 0 && (
+              <>
+                <div className="flex justify-between text-sm text-stone-500">
+                  <span className="font-bold">subtotal</span>
+                  <span className="font-black">
+                    {formatMoney(itemsSum, currencyCode)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm text-stone-500">
+                  <span className="font-bold">
+                    {difference > 0 ? "tax & fees" : "discount"}
+                  </span>
+                  <span className="font-black">
+                    {difference > 0 ? "+" : "-"}
+                    {formatMoney(Math.abs(difference), currencyCode)}
+                  </span>
+                </div>
+              </>
+            )}
+
+            {expense.splitType === "adjustment" &&
+              totalExtraAdjustments > 0 && (
+                <>
+                  <div className="flex justify-between text-sm text-stone-500">
+                    <span className="font-bold">base subtotal</span>
+                    <span className="font-black">
+                      {formatMoney(baseAdjustmentSubtotal, currencyCode)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between text-sm text-stone-500">
+                    <span className="font-bold">adjustments</span>
+                    <span className="font-black">
+                      +{formatMoney(totalExtraAdjustments, currencyCode)}
+                    </span>
+                  </div>
+                </>
+              )}
+
+            <div className="flex justify-between items-end mt-2 p-4 bg-emerald-50 border-2 border-emerald-100 rounded-2xl">
+              <span className="text-[11px] font-black text-emerald-800 uppercase tracking-widest">
+                total
               </span>
-              <span className="font-extrabold text-stone-800">
-                {payerDisplay}
-              </span>
-            </div>
-            <div className="flex justify-between items-center text-sm">
-              <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">
-                category
-              </span>
-              <span className="font-bold px-2 py-0.5 bg-stone-100 text-stone-500 rounded-md text-[10px] uppercase tracking-widest">
-                {expense.category}
+              <span className="text-3xl font-black text-emerald-600">
+                {currencySymbol}{" "}
+                {formatMoney(expense.totalAmount, currencyCode)
+                  .replace(currencySymbol, "")
+                  .trim()}
               </span>
             </div>
           </div>
 
-          <div className="flex flex-col gap-5 mb-8">
-            <div className="flex flex-col gap-5">
+          {/* SECTION 3: THE SETTLEMENT */}
+          <div className="flex flex-col gap-4 bg-stone-50 rounded-2xl p-5 border-2 border-stone-100">
+            <div className="flex justify-between items-center text-sm border-b-2 border-stone-200/60 pb-4 mb-2">
+              <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">
+                paid by
+              </span>
+              <span className="font-extrabold text-stone-800 bg-white px-3 py-1 rounded-lg border border-stone-200 shadow-sm">
+                {payerDisplay}
+              </span>
+            </div>
+
+            <div className="flex flex-col gap-4">
+              <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-1">
+                split breakdown
+              </span>
               {Object.entries(expense.owedBy).map(([memberId, finalAmount]) => {
+                let baseShareTotal = 0;
                 const memberItems: {
                   name: string;
                   share: number;
                   count: number;
                   totalShares: number;
                 }[] = [];
-                let baseShareTotal = 0;
 
+                // Calculate their raw food cost
                 if (expense.splitType === "exact" && expense.items) {
                   expense.items.forEach((item) => {
                     const myShares = item.assignedTo.filter(
@@ -427,18 +502,28 @@ export default function UnifiedExpensePage() {
                         count: myShares,
                         totalShares: item.assignedTo.length,
                       });
-                      baseShareTotal += shareVal;
+                      baseShareTotal += shareVal; // Keep track of the raw cost!
                     }
                   });
                 }
 
-                const extra = expense.adjustments?.[memberId] || 0;
-                const diff = finalAmount - baseShareTotal - extra;
+                // 🔥 NEW: Find their exact slice of the tax/tip/discount
+                const exactDiff =
+                  expense.splitType === "exact"
+                    ? finalAmount - baseShareTotal
+                    : 0;
+                const adjustmentExtra =
+                  expense.splitType === "adjustment"
+                    ? expense.adjustments?.[memberId] || 0
+                    : 0;
 
                 return (
-                  <div key={memberId} className="flex flex-col gap-1.5">
+                  <div
+                    key={memberId}
+                    className="flex flex-col gap-1.5 border-b border-stone-200/50 pb-3 last:border-0 last:pb-0"
+                  >
                     <div className="flex justify-between items-center text-sm">
-                      <span className="font-extrabold text-stone-800">
+                      <span className="font-extrabold text-stone-700">
                         {getMemberName(memberId)}
                       </span>
                       <span className="font-black text-stone-800">
@@ -446,119 +531,60 @@ export default function UnifiedExpensePage() {
                       </span>
                     </div>
 
-                    {expense.splitType === "exact" &&
-                      memberItems.length > 0 && (
-                        <div className="flex flex-col gap-1.5 pl-3 border-l-2 border-stone-200 ml-1 mt-1">
-                          {memberItems.map((item, idx) => (
-                            <div
-                              key={idx}
-                              className="flex justify-between text-xs text-stone-500"
-                            >
-                              <span className="font-bold truncate pr-2">
-                                ↳ {item.name}{" "}
-                                {item.totalShares > 1
-                                  ? `(${item.count}/${item.totalShares})`
-                                  : ""}
-                              </span>
-                              <span className="font-bold truncate">
-                                {formatMoney(item.share, currencyCode)}
-                              </span>
-                            </div>
-                          ))}
-                          {Math.abs(diff) >= 0.5 && (
-                            <div className="flex justify-between text-xs text-stone-500 mt-0.5 pt-1.5 border-t border-stone-100/50">
+                    {/* Render the specific items they consumed + their tax slice */}
+                    {(memberItems.length > 0 ||
+                      Math.abs(exactDiff) > 0.005) && (
+                      <div className="flex flex-col gap-1 pl-3 mt-1 border-l-2 border-stone-200/80">
+                        {memberItems.map((item, idx) => (
+                          <div
+                            key={idx}
+                            className="flex justify-between items-start text-[11px] text-stone-500"
+                          >
+                            <span className="font-bold truncate pr-2 leading-tight">
+                              ↳ {item.name}{" "}
+                              {item.totalShares > 1
+                                ? `(${item.count}/${item.totalShares})`
+                                : ""}
+                            </span>
+                            <span className="font-bold shrink-0">
+                              {formatMoney(item.share, currencyCode)}
+                            </span>
+                          </div>
+                        ))}
+
+                        {/* 🔥 NEW: Display their personal share of tax/tip/discount */}
+                        {expense.splitType === "exact" &&
+                          Math.abs(exactDiff) > 0.005 && (
+                            <div className="flex justify-between items-start text-[11px] text-stone-400 mt-0.5 pt-1 border-t border-stone-200/50">
                               <span className="font-bold uppercase text-[9px] tracking-widest pt-0.5">
-                                {diff > 0 ? "tax & tip" : "discount"}
+                                {exactDiff > 0 ? "↳ tax & fees" : "↳ discount"}
                               </span>
-                              <span className="shrink-0">
-                                {diff > 0 ? "+" : "-"}
-                                {formatMoney(Math.abs(diff), currencyCode)}
+                              <span className="font-bold shrink-0">
+                                {exactDiff > 0 ? "+" : "-"}
+                                {formatMoney(Math.abs(exactDiff), currencyCode)}
                               </span>
                             </div>
                           )}
-                        </div>
-                      )}
-
-                    {expense.splitType === "adjustment" && extra !== 0 && (
-                      <div className="flex flex-col gap-1 pl-3 border-l-2 border-stone-200 ml-1 mt-1">
-                        <div className="flex justify-between text-xs text-stone-500">
-                          <span className="font-bold">↳ base split</span>
-                          <span>
-                            {formatMoney(finalAmount - extra, currencyCode)}
-                          </span>
-                        </div>
-                        <div className="flex justify-between text-xs text-stone-500">
-                          <span className="font-bold">↳ extra</span>
-                          <span>+{formatMoney(extra, currencyCode)}</span>
-                        </div>
                       </div>
                     )}
+
+                    {/* Adjustments text if applicable */}
+                    {expense.splitType === "adjustment" &&
+                      adjustmentExtra !== 0 && (
+                        <span className="text-[10px] font-bold text-stone-400 text-right mt-1">
+                          (includes {adjustmentExtra > 0 ? "+" : "-"}
+                          {formatMoney(Math.abs(adjustmentExtra), currencyCode)}
+                          )
+                        </span>
+                      )}
                   </div>
                 );
               })}
             </div>
           </div>
 
-          <div
-            className="w-full border-t-2 border-stone-200 mb-6 border-dashed"
-            aria-hidden="true"
-          ></div>
-
-          <div className="flex flex-col gap-2 mb-6 text-sm">
-            {expense.splitType === "exact" && Math.abs(difference) > 0 && (
-              <>
-                <div className="flex justify-between text-stone-500">
-                  <span className="font-bold">subtotal</span>
-                  <span className="font-black">
-                    {formatMoney(itemsSum, currencyCode)}
-                  </span>
-                </div>
-                <div className="flex justify-between text-stone-500">
-                  <span className="font-bold">
-                    {difference > 0 ? "tax & fees" : "discount"}
-                  </span>
-                  <span className="font-black">
-                    {difference > 0 ? "+" : "-"}
-                    {formatMoney(Math.abs(difference), currencyCode)}
-                  </span>
-                </div>
-              </>
-            )}
-            {expense.splitType === "adjustment" &&
-              totalExtraAdjustments > 0 && (
-                <>
-                  <div className="flex justify-between text-stone-500">
-                    <span className="font-bold">base subtotal</span>
-                    <span className="font-black">
-                      {formatMoney(baseAdjustmentSubtotal, currencyCode)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-stone-500">
-                    <span className="font-bold">adjustments</span>
-                    <span className="font-black">
-                      +{formatMoney(totalExtraAdjustments, currencyCode)}
-                    </span>
-                  </div>
-                </>
-              )}
-          </div>
-
-          <div className="flex justify-between items-end p-5 bg-emerald-50 border-2 border-emerald-100 rounded-2xl">
-            <span className="text-[11px] font-black text-emerald-800 uppercase tracking-widest">
-              total
-            </span>
-            <span className="text-3xl font-black text-emerald-600">
-              {currencySymbol}{" "}
-              {formatMoney(expense.totalAmount, currencyCode)
-                .replace(currencySymbol, "")
-                .trim()}
-            </span>
-          </div>
-
+          {/* FOOTER */}
           <div className="flex flex-col items-center mt-10 pt-6 border-t-2 border-dashed border-stone-200">
-            {/* 🔥 L9: numeric pixel widths via inline style. immune to tailwind
-                purge concerns and to changes in the tailwind config. also
-                fixes the previous broken `gap-0.75` (no such default util). */}
             <div
               className="flex mb-3 opacity-30 h-10 items-center justify-center"
               style={{ gap: "3px" }}

@@ -82,9 +82,9 @@ export default function TripDetail() {
       // clean the URL so a refresh doesn't re-open the modal
       const url = new URL(window.location.href);
       url.searchParams.delete("openExpense");
-      window.history.replaceState({}, "", url.toString());
+      router.replace(`/trip/${tripId}`, { scroll: false });
     }
-  }, [trip, canEdit]);
+  }, [trip, canEdit, router, tripId]);
 
   const getMemberName = (id: string) =>
     trip?.members.find((m) => m.id === id)?.name || "unknown";
@@ -287,8 +287,12 @@ export default function TripDetail() {
       const base64Data = await fileToBase64(file);
       setScanStage("reading");
 
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const clientLocalTime = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+
       const { data, error } = await supabase.functions.invoke("scan-receipt", {
-        body: { imageBase64: base64Data, mimeType: file.type },
+        body: { imageBase64: base64Data, mimeType: file.type, clientLocalTime },
       });
 
       if (error || data?.error) throw new Error("failed to scan");

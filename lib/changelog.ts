@@ -2,6 +2,20 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
+    version: "2.3",
+    date: "apr 29, 2026",
+    title: "the real receipt & bulletproof math update 🧾",
+    badge: "feature",
+    badgeColor: "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200",
+    features: [
+      "refined the exportable receipt, featuring a master order list and exact, per-person tax & tip slices.",
+      "refined settlement engine to handle multi-payer scenarios, distributing credit perfectly proportional to what was paid.",
+      "refined quick-splits, securely filtered at the database level before they ever reach your device.",
+      "refined codebase, centralizing all date and currency logic and setting the stage for a true native app wrap.",
+      "fixed 'penny drift' bug so exact-split receipts stay perfectly balanced, no matter how many times you edit them.",
+    ],
+  },
+  {
     version: "2.2.3",
     date: "apr 22, 2026",
     title: "relentless guard & quick split security 🛡️",

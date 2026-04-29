@@ -360,8 +360,12 @@ function QuickSplitContent() {
       const base64Data = await fileToBase64(file);
       setScanStage("reading");
 
+      const now = new Date();
+      const pad = (n: number) => String(n).padStart(2, "0");
+      const clientLocalTime = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
+
       const { data, error } = await supabase.functions.invoke("scan-receipt", {
-        body: { imageBase64: base64Data, mimeType: file.type },
+        body: { imageBase64: base64Data, mimeType: file.type, clientLocalTime },
       });
 
       if (error || data?.error) throw new Error("failed to scan");
