@@ -24,6 +24,8 @@ import {
 import { formatDisplayDateTime, timeAgo } from "@/lib/datetime";
 import { getAvatarColor, getInitials } from "@/lib/avatars";
 import { toBlob } from "html-to-image";
+import twemoji from "@twemoji/api";
+import Emoji from "@/components/emoji";
 
 export { getCurrencySymbol };
 
@@ -197,12 +199,15 @@ export default function TripDetail() {
 
     try {
       setIsSharing(true);
-      // give react a tick to render the spinner
       await new Promise((resolve) => setTimeout(resolve, 100));
 
       let fileToShare: File | null = null;
 
       if (shareCardRef.current) {
+        twemoji.parse(shareCardRef.current, {
+          callback: (icon: string) => `/emoji/${icon}.svg`,
+        });
+        await new Promise((resolve) => setTimeout(resolve, 400));
         const blob = await toBlob(shareCardRef.current, {
           cacheBust: true,
           pixelRatio: 3,
@@ -2070,8 +2075,8 @@ export default function TripDetail() {
             <div className="absolute bottom-0 left-0 w-28 h-28 bg-emerald-200/40 rounded-tr-full mix-blend-multiply"></div>
 
             <div className="bg-white border-2 border-emerald-100 rounded-[2.5rem] p-8 shadow-xl relative z-10 flex flex-col items-center text-center">
-              <div className="w-16 h-16 bg-emerald-50 border-2 border-emerald-100 rounded-2xl flex items-center justify-center text-3xl mb-6 shadow-sm">
-                🎒
+              <div className="w-16 h-16 bg-emerald-50 border-2 border-emerald-100 rounded-2xl flex items-center justify-center mb-6 shadow-sm">
+                <Emoji char="🎒" className="h-8! w-8!" />
               </div>
 
               <h1 className="text-3xl font-black text-stone-800 leading-tight mb-2">

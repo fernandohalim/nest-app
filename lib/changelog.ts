@@ -2,6 +2,17 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
+    version: "2.4.1",
+    date: "apr 30, 2026",
+    title: "global emoji push 🍃",
+    badge: "patch",
+    badgeColor: "bg-teal-100 text-teal-700 border-teal-200",
+    features: [
+      "added emoji assets using twemoji.",
+      "added new app icon and opengraph using global emoji.",
+    ],
+  },
+  {
     version: "2.4",
     date: "apr 30, 2026",
     title: "identities & pwa polish 🐣",

@@ -6,6 +6,7 @@ import AuthProvider from "@/components/auth-provider";
 import PlayfulAlert from "@/components/playful-alert";
 import VersionGuard from "@/components/version-guard";
 import OfflineScreen from "@/components/offline-screen";
+import TwemojiProvider from "@/components/twemoji-provider";
 
 export const viewport: Viewport = {
   themeColor: "#fdfbf7",
@@ -59,10 +60,12 @@ export default function RootLayout({
         <VersionGuard />
         <OfflineScreen />
 
-        <AuthProvider>
-          {children}
-          <PlayfulAlert />
-        </AuthProvider>
+        <TwemojiProvider>
+          <AuthProvider>
+            {children}
+            <PlayfulAlert />
+          </AuthProvider>
+        </TwemojiProvider>
       </body>
     </html>
   );

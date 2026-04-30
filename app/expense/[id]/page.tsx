@@ -10,6 +10,8 @@ import { useTripStore } from "@/store/useTripStore";
 import LoadingState from "@/components/loading-state";
 import { formatMoney, getCurrencySymbol } from "@/lib/format";
 import { formatDisplayDateTime } from "@/lib/datetime";
+import twemoji from "@twemoji/api";
+import Emoji from "@/components/emoji";
 
 const BARCODE_WIDTHS = [
   4, 8, 2, 4, 6, 8, 2, 6, 4, 8, 2, 6, 4, 4, 8, 2, 4, 6, 8, 2, 4,
@@ -92,7 +94,12 @@ export default function UnifiedExpensePage() {
     if (!receiptRef.current) return;
     try {
       setIsExporting(true);
-      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      twemoji.parse(receiptRef.current, {
+        callback: (icon: string) => `/emoji/${icon}.svg`,
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 400));
 
       const dataUrl = await toPng(receiptRef.current, {
         cacheBust: true,
@@ -125,6 +132,10 @@ export default function UnifiedExpensePage() {
       let fileToShare: File | null = null;
 
       if (compactReceiptRef.current) {
+        twemoji.parse(compactReceiptRef.current, {
+          callback: (icon: string) => `/emoji/${icon}.svg`,
+        });
+        await new Promise((resolve) => setTimeout(resolve, 400));
         const blob = await toBlob(compactReceiptRef.current, {
           cacheBust: true,
           pixelRatio: 3,
@@ -272,7 +283,7 @@ export default function UnifiedExpensePage() {
               aria-label="edit receipt"
               className="px-4 h-11 flex items-center justify-center rounded-full bg-white shadow-sm border border-stone-100 text-stone-500 font-bold text-sm hover:text-emerald-600 hover:border-emerald-200 active:scale-95 transition-all"
             >
-              ✏️ edit receipt
+              edit receipt
             </button>
           )}
 
@@ -284,7 +295,7 @@ export default function UnifiedExpensePage() {
               aria-label="edit in trip"
               className="px-4 h-11 flex items-center justify-center rounded-full bg-white shadow-sm border border-stone-100 text-stone-500 font-bold text-sm hover:text-emerald-600 hover:border-emerald-200 active:scale-95 transition-all"
             >
-              ✏️ edit in trip
+              edit in trip
             </button>
           )}
 
@@ -399,7 +410,7 @@ export default function UnifiedExpensePage() {
         {/* HEADER */}
         <div className="p-6 sm:p-8 border-b-2 border-dashed border-stone-200 flex flex-col items-center text-center bg-white relative z-10">
           <div className="text-4xl mb-4" aria-hidden="true">
-            🧾
+            <Emoji char="🧾" />
           </div>
           <h1 className="text-2xl font-black text-stone-800 leading-tight mb-2">
             {expense.title}
@@ -708,8 +719,8 @@ export default function UnifiedExpensePage() {
 
           <div className="bg-white border-2 border-emerald-100 rounded-[2.5rem] p-8 shadow-xl relative z-10 flex flex-col items-center text-center">
             {/* icon */}
-            <div className="w-16 h-16 bg-emerald-50 border-2 border-emerald-100 rounded-2xl flex items-center justify-center text-3xl mb-6 shadow-sm">
-              🧾
+            <div className="w-16 h-16 bg-emerald-50 border-2 border-emerald-100 rounded-2xl flex items-center justify-center mb-6 shadow-sm">
+              <Emoji char="🧾" className="h-8! w-8!" />
             </div>
 
             {/* title & date */}

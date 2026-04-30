@@ -26,3 +26,13 @@ body {
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
 }
+
+img.emoji {
+  display: inline-block;
+  height: 1em;
+  width: auto;
+  vertical-align: -0.125em;
+  user-select: none;
+  -webkit-user-drag: none;
+  margin: 0 0.05em;
+}

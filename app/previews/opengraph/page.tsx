@@ -2,6 +2,7 @@
 
 import { useRef, useCallback } from "react";
 import { toPng } from "html-to-image";
+import Emoji from "@/components/emoji";
 
 export default function OGPreviewSpatialUI() {
   const imageRef = useRef<HTMLDivElement>(null);
@@ -103,8 +104,8 @@ export default function OGPreviewSpatialUI() {
 
         <div className="absolute bottom-12 left-12 transform -rotate-6 z-20">
           <div className="bg-white p-4 rounded-4xl shadow-2xl border-2 border-stone-100 flex items-center gap-5 relative">
-            <div className="w-16 h-16 bg-orange-50 border border-orange-100 rounded-[1.25rem] flex items-center justify-center text-3xl shadow-inner">
-              🍜
+            <div className="w-16 h-16 bg-orange-50 border border-orange-100 rounded-[1.25rem] flex items-center justify-center shadow-inner">
+              <Emoji char="🍜" className="h-8! w-8!" />{" "}
             </div>
             <div className="flex flex-col pr-6 pb-2">
               <span className="text-xs font-black text-stone-400 uppercase tracking-widest mb-1">
@@ -125,7 +126,7 @@ export default function OGPreviewSpatialUI() {
 
         <div className="absolute bottom-16 right-24 transform rotate-6 bg-white shadow-2xl rounded-3xl p-2 border-2 border-emerald-100 z-20">
           <span className="font-bold px-6 py-3 bg-emerald-50 text-emerald-700 rounded-xl text-sm uppercase tracking-widest border border-emerald-200 block">
-            🌴 bali getaway
+            <Emoji char="🌴" /> bali getaway
           </span>
         </div>
 
@@ -138,8 +139,10 @@ export default function OGPreviewSpatialUI() {
 
           <div className="bg-white px-8 py-4 mt-4 rounded-full border-2 border-emerald-200 shadow-xl pointer-events-auto">
             <p className="text-xl font-bold text-stone-500 uppercase tracking-[0.3em]">
-              split expenses.{" "}
-              <span className="text-emerald-500">keep the peace.</span>
+              split expenses,{" "}
+              <span className="text-emerald-500">
+                keep the peace <Emoji char="🌱" />
+              </span>
             </p>
           </div>
         </div>

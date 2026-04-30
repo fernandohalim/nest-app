@@ -2,6 +2,7 @@
 
 import { useRef, useCallback } from "react";
 import { toPng } from "html-to-image";
+import Emoji from "@/components/emoji";
 
 export default function AppIconPreview() {
   const iconRef = useRef<HTMLDivElement>(null);
@@ -67,7 +68,7 @@ export default function AppIconPreview() {
           className="text-[260px] drop-shadow-xl transform -translate-y-2"
           style={{ lineHeight: 1 }}
         >
-          🐣
+          <Emoji char="🐣" />
         </span>
       </div>
     </div>
