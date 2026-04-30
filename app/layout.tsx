@@ -27,10 +27,6 @@ export const metadata: Metadata = {
     statusBarStyle: "default",
     title: "nest",
   },
-  icons: {
-    icon: "/icon.svg",
-    apple: "/icon-192.png",
-  },
   openGraph: {
     title: "nest. — split expenses easily",
     description: "split expenses, keep the peace 🌱",
@@ -38,10 +34,10 @@ export const metadata: Metadata = {
     siteName: "nest.",
     images: [
       {
-        url: "/icon-512.png",
-        width: 512,
-        height: 512,
-        alt: "nest logo",
+        url: "/opengraph-image.png",
+        width: 1200,
+        height: 630,
+        alt: "nest app preview",
       },
     ],
     locale: "en_US",

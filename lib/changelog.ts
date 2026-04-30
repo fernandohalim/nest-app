@@ -2,6 +2,18 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
+    version: "2.4",
+    date: "apr 30, 2026",
+    title: "identities & pwa polish 🐣",
+    badge: "feature",
+      badgeColor: "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200",
+    features: [
+      "added a custom 1200x630 opengraph image for dynamic spatial ui previews on social share.",
+      "added native apple-touch-icon support directly in the app directory for perfectly crisp ios home screen icons.",
+      "refined full pwa asset pipeline with 192px and 512px icons for native android and chrome installation.",
+    ],
+  },
+  {
     version: "2.3.2",
     date: "apr 29, 2026",
     title: "nicknames ✨",
