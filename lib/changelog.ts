@@ -2,6 +2,17 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
+    version: "2.4.2",
+    date: "apr 30, 2026",
+    title: "add not found 🛡️",
+    badge: "patch",
+    badgeColor: "bg-teal-100 text-teal-700 border-teal-200",
+    features: [
+      "added not found page.",
+      "refined opengraph image.",
+    ],
+  },
+  {
     version: "2.4.1",
     date: "apr 30, 2026",
     title: "global emoji push 🍃",

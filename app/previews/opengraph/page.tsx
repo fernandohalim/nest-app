@@ -102,21 +102,21 @@ export default function OGPreviewSpatialUI() {
           </div>
         </div>
 
-        <div className="absolute bottom-12 left-12 transform -rotate-6 z-20">
-          <div className="bg-white p-4 rounded-4xl shadow-2xl border-2 border-stone-100 flex items-center gap-5 relative">
+        <div className="absolute bottom-12 left-12 transform -rotate-354 z-20">
+          <div className="bg-white p-4 rounded-4xl shadow-2xl border-2 border-emerald-200 flex items-center gap-5 relative">
             <div className="w-16 h-16 bg-orange-50 border border-orange-100 rounded-[1.25rem] flex items-center justify-center shadow-inner">
               <Emoji char="🍜" className="h-8! w-8!" />{" "}
             </div>
             <div className="flex flex-col pr-6 pb-2">
               <span className="text-xs font-black text-stone-400 uppercase tracking-widest mb-1">
-                ramen nagi
+                ichiraku ramen
               </span>
               <span className="text-xl font-bold text-stone-700 leading-none">
                 Rp 350,000
               </span>
             </div>
 
-            <div className="absolute -bottom-3 right-6 bg-emerald-100 border border-emerald-200 text-emerald-600 px-3 py-1 rounded-full shadow-md flex items-center transform -rotate-3">
+            <div className="absolute -bottom-3 right-6 bg-emerald-100 border border-emerald-200 text-emerald-600 px-3 py-1 rounded-full shadow-md flex items-center transform">
               <span className="text-[10px] font-black uppercase tracking-widest">
                 ✓ settled
               </span>
@@ -124,20 +124,37 @@ export default function OGPreviewSpatialUI() {
           </div>
         </div>
 
-        <div className="absolute bottom-16 right-24 transform rotate-6 bg-white shadow-2xl rounded-3xl p-2 border-2 border-emerald-100 z-20">
-          <span className="font-bold px-6 py-3 bg-emerald-50 text-emerald-700 rounded-xl text-sm uppercase tracking-widest border border-emerald-200 block">
-            <Emoji char="🌴" /> bali getaway
-          </span>
+        {/* Bottom Right: Stacked Trip Tags (Vertical Stack) */}
+        <div className="absolute bottom-20 right-18 rotate-354 z-20 flex flex-col items-center">
+          {/* Bottom-most card shadow layer */}
+          <div className="absolute top-8 w-[90%] h-full bg-emerald-200/40 rounded-3xl -z-20 border-2 border-emerald-300/30"></div>
+
+          {/* Middle card shadow layer */}
+          <div className="absolute top-4 w-[95%] h-full bg-white/80 rounded-3xl -z-10 border-2 border-emerald-100 shadow-sm"></div>
+
+          {/* Top Primary card */}
+          <div className="bg-white shadow-2xl rounded-3xl p-2 border-2 border-emerald-100">
+            <span className="font-bold px-6 py-3 bg-emerald-50 text-emerald-700 rounded-xl text-sm uppercase tracking-widest border border-emerald-200 block flex items-center gap-2">
+              <Emoji char="🌴" /> bali getaway
+            </span>
+          </div>
         </div>
 
         <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10">
-          <h1 className="text-[150px] font-black text-stone-800 tracking-tighter leading-none drop-shadow-md mt-4">
+          <h1
+            className="text-[150px] font-black text-stone-800 tracking-tighter leading-none mt-4 mb-2"
+            style={{
+              WebkitTextStroke: "46px white",
+              paintOrder: "stroke fill",
+              filter: "drop-shadow(0 10px 20px rgba(16, 185, 129, 0.2))",
+            }}
+          >
             nest.
           </h1>
 
           <div className="w-28 border-t-[6px] border-dashed border-stone-300/80 my-2"></div>
 
-          <div className="bg-white px-8 py-4 mt-4 rounded-full border-2 border-emerald-200 shadow-xl pointer-events-auto">
+          <div className="bg-white px-8 py-4 mt-2 rounded-full border-2 border-emerald-200 shadow-xl pointer-events-auto">
             <p className="text-xl font-bold text-stone-500 uppercase tracking-[0.3em]">
               split expenses,{" "}
               <span className="text-emerald-500">
