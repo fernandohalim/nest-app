@@ -122,6 +122,13 @@ export default function TripDetail() {
   type SortOption = "newest" | "oldest" | "amount_high" | "amount_low";
   const [sortBy, setSortBy] = useState<SortOption>("newest");
   const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [expandedLedgerMemberId, setExpandedLedgerMemberId] = useState<
+    string | null
+  >(null);
+  const [expandedOwedKey, setExpandedOwedKey] = useState<string | null>(null);
+  const [settledRevealed, setSettledRevealed] = useState<Set<string>>(
+    new Set(),
+  );
   const [isLinked, setIsLinked] = useState(false);
 
   const processedExpenses = useMemo(
@@ -410,29 +417,57 @@ export default function TripDetail() {
   // because SettlementModal consumes the resulting shape and I want to avoid
   // any silent shape drift. Consolidation can happen in a focused later pass.
   // ──────────────────────────────────────────────────────────────────────────
+  type LedgerItemRow = {
+    name: string;
+    share: string | null; // "1/2", "2/3"
+    price: number;
+  };
+
+  type LedgerCallout = {
+    kind: "tax" | "discount" | "adjustment";
+    label: string;
+    amount: number; // signed
+  };
+
+  type RichPaidItem = {
+    title: string;
+    amount: number;
+    isNegative?: boolean;
+    // rich fields
+    expenseDate?: string;
+    totalExpense?: number;
+    payerCount?: number;
+    fromName?: string;
+  };
+
+  type RichOwedItem = {
+    title: string;
+    amount: number;
+    subItems?: string[];
+    extra?: number;
+    isSettled?: boolean;
+    originalAmount?: number;
+    // rich fields
+    expenseDate?: string;
+    totalExpense?: number;
+    paidByList?: { name: string; amount: number }[];
+    splitType?: "exact" | "equal" | "adjustment";
+    itemRows?: LedgerItemRow[];
+    callouts?: LedgerCallout[];
+    baseAmount?: number;
+    memberCount?: number;
+  };
+
   type MemberDetail = {
     totalPaid: number;
     totalOwed: number;
-    paidItems: { title: string; amount: number; isNegative?: boolean }[];
-    owedItems: {
-      title: string;
-      amount: number;
-      subItems?: string[];
-      extra?: number;
-      isSettled?: boolean;
-      originalAmount?: number;
-    }[];
+    paidItems: RichPaidItem[];
+    owedItems: RichOwedItem[];
   };
 
   const memberDetails = useMemo(() => {
     const result: Record<string, MemberDetail> = {};
     if (!trip) return result;
-
-    // small inline formatter so sub-item strings respect the trip's currency
-    const formatNum = (n: number) =>
-      Number(n).toLocaleString(undefined, {
-        maximumFractionDigits: isZeroDecimalCurrency(currencyCode) ? 0 : 2,
-      });
 
     trip.members.forEach((m) => {
       result[m.id] = {
@@ -444,57 +479,100 @@ export default function TripDetail() {
     });
 
     trip.expenses.forEach((exp) => {
+      const payerCount = Object.keys(exp.paidBy || {}).length;
+      const memberCount = Object.keys(exp.owedBy || {}).length;
+
       Object.entries(exp.paidBy || {}).forEach(([pId, pAmt]) => {
         if (result[pId]) {
           result[pId].totalPaid += pAmt;
-          result[pId].paidItems.push({ title: exp.title, amount: pAmt });
+          result[pId].paidItems.push({
+            title: exp.title,
+            amount: pAmt,
+            expenseDate: exp.expenseDate,
+            totalExpense: exp.totalAmount,
+            payerCount,
+          });
         }
       });
+
+      const paidByList = Object.entries(exp.paidBy || {})
+        .map(([id, amt]) => ({ name: getMemberName(id), amount: amt }))
+        .sort((a, b) => b.amount - a.amount);
 
       Object.entries(exp.owedBy || {}).forEach(([id, amt]) => {
         if (!result[id] || amt <= 0) return;
 
         result[id].totalOwed += amt;
         const isSettled = exp.settledShares?.[id] || false;
+
+        const itemRows: LedgerItemRow[] = [];
+        const callouts: LedgerCallout[] = [];
         const subItems: string[] = [];
+        let baseAmount = 0;
         let originalSum = 0;
 
         if (exp.splitType === "exact" && exp.items) {
           const myItems = exp.items.filter((i) => i.assignedTo.includes(id));
-          let myBaseSum = 0;
           myItems.forEach((i) => {
-            const userShares = i.assignedTo.filter(
-              (userId) => userId === id,
-            ).length;
+            const userShares = i.assignedTo.filter((u) => u === id).length;
             const totalShares = i.assignedTo.length;
-            const shareText =
-              totalShares > 1 ? ` (${userShares}/${totalShares})` : "";
+            const share =
+              totalShares > 1 ? `${userShares}/${totalShares}` : null;
             const myBaseShare = (i.price / totalShares) * userShares;
-            myBaseSum += myBaseShare;
+            baseAmount += myBaseShare;
             originalSum += myBaseShare;
+            itemRows.push({ name: i.name, share, price: myBaseShare });
+
+            const shareText = share ? ` (${share})` : "";
             subItems.push(
-              `${i.name}${shareText} • ${formatNum(myBaseShare)}`.trim(),
+              `${i.name}${shareText} • ${formatMoney(myBaseShare, currencyCode)}`,
             );
           });
 
-          const itemsSum = exp.items.reduce((acc, item) => acc + item.price, 0);
+          const itemsSum = exp.items.reduce((s, i) => s + i.price, 0);
           const difference = exp.totalAmount - itemsSum;
           if (Math.abs(difference) > 0) {
-            const amountOwed = exp.owedBy[id] || 0;
             const extra = exp.adjustments?.[id] || 0;
-            const diffShare = amountOwed - myBaseSum - extra;
+            const diffShare = amt - baseAmount - extra;
             if (Math.abs(diffShare) >= 0.5) {
+              callouts.push({
+                kind: difference > 0 ? "tax" : "discount",
+                label: difference > 0 ? "tax & tip" : "group discount",
+                amount: diffShare,
+              });
               subItems.push(
-                `${difference > 0 ? "tax & tip" : "global discount"} • ${diffShare > 0 ? "+" : ""}${formatNum(diffShare)}`,
+                `${difference > 0 ? "tax & tip" : "global discount"} • ${diffShare > 0 ? "+" : "-"}${formatMoney(Math.abs(diffShare), currencyCode)}`,
               );
             }
           }
         } else if (exp.splitType === "adjustment") {
           const extra = exp.adjustments?.[id] || 0;
+          baseAmount = amt - extra;
           if (extra > 0) {
-            subItems.push(`debt after split • ${formatNum(amt - extra)}`);
-            subItems.push(`adjusted bill • +${formatNum(extra)}`);
+            subItems.push(
+              `debt after split • ${formatMoney(amt - extra, currencyCode)}`,
+            );
+            subItems.push(
+              `adjusted bill • +${formatMoney(extra, currencyCode)}`,
+            );
           }
+        } else {
+          baseAmount = amt - (exp.adjustments?.[id] || 0);
+        }
+
+        const adjExtra = exp.adjustments?.[id] || 0;
+        if (adjExtra && exp.splitType !== "adjustment") {
+          callouts.push({
+            kind: "adjustment",
+            label: "manual adjustment",
+            amount: adjExtra,
+          });
+        } else if (adjExtra && exp.splitType === "adjustment") {
+          callouts.push({
+            kind: "adjustment",
+            label: "manual adjustment",
+            amount: adjExtra,
+          });
         }
 
         result[id].owedItems.push({
@@ -504,18 +582,24 @@ export default function TripDetail() {
           extra: exp.adjustments?.[id],
           isSettled,
           originalAmount: originalSum > 0 ? originalSum : undefined,
+          expenseDate: exp.expenseDate,
+          totalExpense: exp.totalAmount,
+          paidByList,
+          splitType: exp.splitType,
+          itemRows,
+          callouts,
+          baseAmount,
+          memberCount,
         });
 
-        // 🔥 L2 FIX (place 1): when this share is settled, distribute the
-        // credit proportionally across ALL payers in paid_by, not just the
-        // first one. For single-payer expenses this collapses to the old
-        // behavior (one payer gets 100% of the credit). For multi-payer
-        // expenses this is the actually-correct math.
         if (isSettled) {
           result[id].totalPaid += amt;
           result[id].paidItems.push({
             title: `✓ settled ${exp.title}`,
             amount: amt,
+            expenseDate: exp.expenseDate,
+            totalExpense: exp.totalAmount,
+            payerCount,
           });
 
           const totalPaidBy = Object.values(exp.paidBy || {}).reduce(
@@ -529,9 +613,12 @@ export default function TripDetail() {
               if (share <= 0) return;
               result[payerId].totalPaid -= share;
               result[payerId].paidItems.push({
-                title: `↓ received cash from ${getMemberName(id)} for ${exp.title}`,
+                title: `received from ${getMemberName(id)} for ${exp.title}`,
                 amount: -share,
                 isNegative: true,
+                expenseDate: exp.expenseDate,
+                totalExpense: exp.totalAmount,
+                fromName: getMemberName(id),
               });
             });
           }
@@ -837,12 +924,7 @@ export default function TripDetail() {
             <span className="text-2xl text-emerald-200 align-top mr-1">
               {currencySymbol}
             </span>
-            {/* 🔥 U10/U14: locale-aware, currency-aware decimals */}
-            {Number(totalTripCost).toLocaleString(undefined, {
-              maximumFractionDigits: isZeroDecimalCurrency(currencyCode)
-                ? 0
-                : 2,
-            })}
+            {formatMoney(totalTripCost, currencyCode)}
           </div>
 
           <div className="flex items-center gap-2 mt-6 bg-black/25 px-5 py-2 rounded-full text-xs font-bold text-emerald-50 backdrop-blur-sm relative z-10 shadow-inner">
@@ -1089,7 +1171,6 @@ export default function TripDetail() {
                       <div className="flex-1 min-w-0">
                         {/* date */}
                         <span className="text-[10px] font-black text-stone-400 tracking-widest uppercase mb-1 block">
-                          {/* 🔥 U10: locale-aware */}
                           {formatDisplayDateTime(exp.expenseDate)}
                         </span>
                         {/* title */}
@@ -1152,6 +1233,7 @@ export default function TripDetail() {
                       <div className="text-right shrink-0 pl-2">
                         <p className="text-lg sm:text-xl font-black text-emerald-600">
                           {/* 🔥 U10/U14 */}
+                          {currencySymbol}
                           {formatMoney(exp.totalAmount, currencyCode)}
                         </p>
                         <p className="text-[10px] sm:text-xs font-bold text-stone-400 mt-1 flex items-center justify-end gap-1">
@@ -1204,6 +1286,7 @@ export default function TripDetail() {
                                       </span>
                                     </div>
                                     <span className="font-black text-stone-600">
+                                      {currencySymbol}
                                       {formatMoney(item.price, currencyCode)}
                                     </span>
                                   </div>
@@ -1220,10 +1303,12 @@ export default function TripDetail() {
                                   <p className="leading-tight">
                                     subtotal is{" "}
                                     <span className="font-black">
+                                      {currencySymbol}
                                       {formatMoney(itemsSum, currencyCode)}
                                     </span>
                                     . the extra{" "}
                                     <span className="font-black">
+                                      {currencySymbol}
                                       {formatMoney(
                                         Math.abs(difference),
                                         currencyCode,
@@ -1325,6 +1410,7 @@ export default function TripDetail() {
                                         <span
                                           className={`font-black text-lg leading-none ${isSettled ? "text-stone-300 line-through decoration-2" : "text-stone-800"}`}
                                         >
+                                          {currencySymbol}
                                           {formatMoney(amount, currencyCode)}
                                         </span>
                                       </div>
@@ -1364,6 +1450,7 @@ export default function TripDetail() {
                                                       {shareText}
                                                     </span>
                                                     <span className="shrink-0 text-stone-300">
+                                                      {currencySymbol}
                                                       {formatMoney(
                                                         myBaseShare,
                                                         currencyCode,
@@ -1387,7 +1474,8 @@ export default function TripDetail() {
                                                   <span className="shrink-0">
                                                     {memberDiffShare > 0
                                                       ? "+"
-                                                      : ""}
+                                                      : "-"}
+                                                    {currencySymbol}
                                                     {formatMoney(
                                                       Math.abs(memberDiffShare),
                                                       currencyCode,
@@ -1405,6 +1493,7 @@ export default function TripDetail() {
                                                 ↳ debt after split
                                               </span>
                                               <span className="shrink-0 text-stone-300">
+                                                {currencySymbol}
                                                 {formatMoney(
                                                   amount - extra,
                                                   currencyCode,
@@ -1419,7 +1508,7 @@ export default function TripDetail() {
                                                 adjusted bill
                                               </span>
                                               <span className="shrink-0 text-amber-500">
-                                                +
+                                                +{currencySymbol}
                                                 {formatMoney(
                                                   extra,
                                                   currencyCode,
@@ -1436,7 +1525,7 @@ export default function TripDetail() {
                                               extra adjustment
                                             </span>
                                             <span className="shrink-0 text-amber-500">
-                                              +
+                                              +{currencySymbol}
                                               {formatMoney(extra, currencyCode)}
                                             </span>
                                           </span>
@@ -1582,6 +1671,7 @@ export default function TripDetail() {
                       <div className="flex items-center gap-2 sm:gap-4 text-right flex-1 min-w-0 justify-end">
                         <div className="flex flex-col min-w-0 items-end">
                           <span className="font-extrabold text-base sm:text-lg text-emerald-400 truncate max-w-full">
+                            {currencySymbol}
                             {formatMoney(settlement.amount, currencyCode)}
                           </span>
                           <span className="text-stone-400 font-bold text-[9px] sm:text-xs tracking-widest uppercase truncate max-w-full">
@@ -1611,7 +1701,7 @@ export default function TripDetail() {
               </button>
 
               {showLedger && (
-                <div className="space-y-4 mt-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                <div className="mt-4 space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
                   {trip.members.map((member) => {
                     const details = memberDetails[member.id];
                     if (
@@ -1619,179 +1709,481 @@ export default function TripDetail() {
                       (details.totalPaid === 0 && details.totalOwed === 0)
                     )
                       return null;
+
                     const net = details.totalPaid - details.totalOwed;
+                    const isExpanded = expandedLedgerMemberId === member.id;
+                    const showSettled = settledRevealed.has(member.id);
+
+                    const activeOwedItems = details.owedItems.filter(
+                      (i) => !i.isSettled,
+                    );
+                    const settledOwedItems = details.owedItems.filter(
+                      (i) => i.isSettled,
+                    );
 
                     return (
                       <div
                         key={member.id}
-                        className="p-6 bg-white border-2 border-stone-100 rounded-4xl shadow-sm relative overflow-hidden hover:border-emerald-200 transition-colors"
+                        className="bg-white border-2 border-stone-100 rounded-2xl overflow-hidden hover:border-stone-200 transition-colors"
                       >
-                        <div
-                          className="absolute top-0 left-0 right-0 h-1.5 flex justify-around opacity-20"
-                          aria-hidden="true"
+                        {/* compact header — always visible */}
+                        <button
+                          onClick={() =>
+                            setExpandedLedgerMemberId(
+                              isExpanded ? null : member.id,
+                            )
+                          }
+                          aria-expanded={isExpanded}
+                          className="w-full flex items-center justify-between p-4 text-left active:bg-stone-50 transition-colors gap-3"
                         >
-                          {Array.from({ length: 30 }).map((_, i) => (
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
                             <div
-                              key={i}
-                              className="w-2.5 h-2.5 bg-stone-400 rotate-45 -mt-1.5"
-                            ></div>
-                          ))}
-                        </div>
-                        <div className="flex justify-between items-center pb-5 mb-5 mt-2 border-b-2 border-stone-100">
-                          <span className="font-black text-xl text-stone-800">
-                            {member.name}
-                          </span>
-                          <span
-                            className={`text-xs font-black px-3.5 py-1.5 rounded-xl uppercase tracking-widest border-2 ${net > 0 ? "bg-emerald-50 text-emerald-600 border-emerald-100" : "bg-stone-50 text-stone-500 border-stone-200"}`}
-                          >
-                            {net > 0 ? "gets " : net < 0 ? "owes " : "even "}
-                            {formatMoney(Math.abs(net), currencyCode)}
-                          </span>
-                        </div>
-                        <div className="flex gap-3 mb-6">
-                          <div className="flex-1 bg-emerald-50/50 border border-emerald-100 rounded-2xl p-3 flex flex-col gap-1">
-                            <span className="text-[9px] font-black text-emerald-600/60 uppercase tracking-widest">
-                              total paid out
-                            </span>
-                            <span className="font-black text-emerald-700">
-                              {formatMoney(details.totalPaid, currencyCode)}
-                            </span>
-                          </div>
-                          <div className="flex-1 bg-stone-50 border border-stone-100 rounded-2xl p-3 flex flex-col gap-1">
-                            <span className="text-[9px] font-black text-stone-400 uppercase tracking-widest">
-                              total consumed
-                            </span>
-                            <span className="font-black text-stone-700">
-                              {formatMoney(details.totalOwed, currencyCode)}
-                            </span>
-                          </div>
-                        </div>
-                        <div
-                          className="w-full border-t-2 border-dashed border-stone-200 mb-6"
-                          aria-hidden="true"
-                        ></div>
-                        <div className="space-y-6">
-                          {details.paidItems.length > 0 && (
-                            <div className="flex flex-col gap-3">
-                              <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">
-                                💳 paid for
+                              className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 text-xs font-black border ${getAvatarColor(member.name)}`}
+                              aria-hidden="true"
+                            >
+                              {getInitials(member.name)}
+                            </div>
+                            <div className="flex flex-col min-w-0">
+                              <span className="font-extrabold text-stone-800 truncate text-base">
+                                {member.name}
                               </span>
-                              <div className="flex flex-col gap-2">
-                                {details.paidItems.map((item, idx) => (
-                                  <div
-                                    key={`paid-${idx}`}
-                                    className="flex justify-between items-start gap-4 text-sm"
-                                  >
-                                    <span
-                                      className={`font-bold flex-1 leading-tight ${item.isNegative ? "text-stone-400 italic" : "text-stone-700"}`}
-                                    >
-                                      {item.title}
+                              <span className="text-[11px] font-medium text-stone-400 truncate">
+                                paid {currencySymbol}
+                                {formatMoney(details.totalPaid, currencyCode)} ·
+                                consumed {currencySymbol}
+                                {formatMoney(details.totalOwed, currencyCode)}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span
+                              className={`text-[11px] font-black px-2.5 py-1 rounded-lg uppercase tracking-wider border ${
+                                net > 0
+                                  ? "bg-emerald-50 text-emerald-600 border-emerald-100"
+                                  : net < 0
+                                    ? "bg-rose-50 text-rose-600 border-rose-100"
+                                    : "bg-stone-50 text-stone-400 border-stone-100"
+                              }`}
+                            >
+                              {net > 0 ? "+" : net < 0 ? "−" : ""}
+                              {currencySymbol}
+                              {formatMoney(Math.abs(net), currencyCode)}
+                            </span>
+                            <span
+                              className={`w-6 h-6 flex items-center justify-center rounded-full transition-transform duration-300 ${isExpanded ? "rotate-180 bg-stone-100 text-stone-600" : "text-stone-400"}`}
+                              aria-hidden="true"
+                            >
+                              <svg
+                                className="w-3 h-3"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth={3}
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  d="M19 9l-7 7-7-7"
+                                />
+                              </svg>
+                            </span>
+                          </div>
+                        </button>
+
+                        {/* expanded body */}
+                        {isExpanded && (
+                          <div className="border-t border-stone-100 bg-stone-50/40 px-3 py-5 space-y-5 animate-in fade-in slide-in-from-top-1 duration-200">
+                            {/* PAID UPFRONT */}
+                            {details.paidItems.length > 0 && (
+                              <div>
+                                <div className="flex items-baseline justify-between mb-2.5 px-1">
+                                  <div className="flex items-baseline gap-2">
+                                    <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">
+                                      💳 paid upfront
                                     </span>
-                                    <span
-                                      className={`font-black shrink-0 ${item.isNegative ? "text-stone-400" : "text-emerald-700"}`}
-                                    >
-                                      {item.isNegative ? "-" : "+"}
-                                      {formatMoney(
-                                        Math.abs(item.amount),
-                                        currencyCode,
-                                      )}
+                                    <span className="text-[10px] font-black text-stone-300 tabular-nums">
+                                      {details.paidItems.length}
                                     </span>
                                   </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          {details.owedItems.length > 0 && (
-                            <div className="flex flex-col gap-3">
-                              <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">
-                                🍕 consumed
-                              </span>
-                              <div className="flex flex-col gap-4">
-                                {details.owedItems.map((item, idx) => (
-                                  <div
-                                    key={`owed-${idx}`}
-                                    className={`flex flex-col gap-1 text-sm w-full ${item.isSettled ? "opacity-60 grayscale" : ""}`}
-                                  >
-                                    <div className="flex justify-between items-start gap-4 w-full">
-                                      <span
-                                        className={`font-bold text-stone-700 leading-tight ${item.isSettled ? "line-through decoration-stone-400 decoration-2" : ""}`}
-                                      >
-                                        {item.title}
-                                      </span>
-                                      <div className="flex flex-col items-end shrink-0 gap-1">
+                                  <span className="text-[10px] font-black text-emerald-700 tabular-nums">
+                                    {currencySymbol}
+                                    {formatMoney(
+                                      details.totalPaid,
+                                      currencyCode,
+                                    )}
+                                  </span>
+                                </div>
+                                <div className="space-y-2">
+                                  {details.paidItems.map((item, idx) => (
+                                    <div
+                                      key={`paid-${idx}`}
+                                      className={`bg-white border border-stone-200/70 rounded-xl px-3.5 py-3 ${item.isNegative ? "border-dashed" : ""}`}
+                                    >
+                                      <div className="flex items-start justify-between gap-3 mb-1">
+                                        <div className="flex flex-col min-w-0 flex-1">
+                                          {item.expenseDate && (
+                                            <span className="text-[9px] font-black text-stone-400 uppercase tracking-widest mb-0.5">
+                                              {formatDisplayDateTime(
+                                                item.expenseDate,
+                                              )}
+                                            </span>
+                                          )}
+                                          <span
+                                            className={`text-sm leading-tight truncate ${item.isNegative ? "text-stone-500 italic font-semibold" : "text-stone-800 font-black"}`}
+                                          >
+                                            {item.title}
+                                          </span>
+                                        </div>
                                         <span
-                                          className={`font-black ${item.isSettled ? "text-stone-400 line-through decoration-2" : "text-stone-800"}`}
+                                          className={`font-black shrink-0 tabular-nums text-sm ${item.isNegative ? "text-rose-500" : "text-emerald-700"}`}
                                         >
+                                          {item.isNegative ? "−" : "+"}
+                                          {currencySymbol}
                                           {formatMoney(
-                                            item.amount,
+                                            Math.abs(item.amount),
                                             currencyCode,
                                           )}
                                         </span>
-                                        {item.isSettled && (
-                                          <span className="text-[9px] font-black text-stone-400 uppercase tracking-widest mt-0.5">
-                                            settled ✓
-                                          </span>
-                                        )}
                                       </div>
-                                    </div>
-                                    {item.subItems &&
-                                      item.subItems.length > 0 && (
-                                        <div className="flex flex-col mt-0.5 w-full gap-1">
-                                          {item.subItems.map((sub, sIdx) => {
-                                            const [namePart, pricePart] =
-                                              sub.split(" • ");
-                                            let textColor = "text-stone-400",
-                                              priceColor = "text-stone-300",
-                                              arrowColor = "text-stone-300";
-                                            if (
-                                              namePart.includes(
-                                                "global discount",
-                                              )
-                                            ) {
-                                              textColor = "text-emerald-500/80";
-                                              priceColor = "text-emerald-500";
-                                              arrowColor =
-                                                "text-emerald-400/50";
-                                            } else if (
-                                              namePart.includes("tax & tip") ||
-                                              namePart.includes("adjusted bill")
-                                            ) {
-                                              textColor = "text-amber-500/80";
-                                              priceColor = "text-amber-500";
-                                              arrowColor = "text-amber-400/50";
-                                            }
-                                            return (
-                                              <div
-                                                key={sIdx}
-                                                className={`text-[11px] font-bold flex justify-between gap-3 leading-tight w-full ${textColor}`}
-                                              >
-                                                <span className="truncate flex items-center gap-1.5">
-                                                  <span
-                                                    className={arrowColor}
-                                                    aria-hidden="true"
-                                                  >
-                                                    ↳
-                                                  </span>
-                                                  {namePart}
+                                      {!item.isNegative &&
+                                        item.totalExpense && (
+                                          <div className="flex items-center gap-1.5 text-[10px] font-bold text-stone-400 mt-1 flex-wrap">
+                                            <span>
+                                              your share of{" "}
+                                              <span className="text-stone-600 tabular-nums">
+                                                {currencySymbol}
+                                                {formatMoney(
+                                                  item.totalExpense,
+                                                  currencyCode,
+                                                )}
+                                              </span>
+                                            </span>
+                                            {item.totalExpense > 0 && (
+                                              <>
+                                                <span aria-hidden="true">
+                                                  ·
                                                 </span>
-                                                {pricePart && (
-                                                  <span
-                                                    className={`shrink-0 ${priceColor}`}
-                                                  >
-                                                    {currencySymbol} {pricePart}
+                                                <span className="tabular-nums">
+                                                  {Math.round(
+                                                    (item.amount /
+                                                      item.totalExpense) *
+                                                      100,
+                                                  )}
+                                                  %
+                                                </span>
+                                              </>
+                                            )}
+                                            {item.payerCount &&
+                                              item.payerCount > 1 && (
+                                                <>
+                                                  <span aria-hidden="true">
+                                                    ·
                                                   </span>
+                                                  <span>
+                                                    split with{" "}
+                                                    {item.payerCount - 1} other
+                                                  </span>
+                                                </>
+                                              )}
+                                          </div>
+                                        )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* CONSUMED — receipt cards */}
+                            {activeOwedItems.length > 0 && (
+                              <div>
+                                <div className="flex items-baseline justify-between mb-2.5 px-1">
+                                  <div className="flex items-baseline gap-2">
+                                    <span className="text-[10px] font-black text-stone-700 uppercase tracking-widest">
+                                      🍕 consumed
+                                    </span>
+                                    <span className="text-[10px] font-black text-stone-300 tabular-nums">
+                                      {activeOwedItems.length}
+                                    </span>
+                                  </div>
+                                  <span className="text-[10px] font-black text-stone-700 tabular-nums">
+                                    {currencySymbol}
+                                    {formatMoney(
+                                      details.totalOwed,
+                                      currencyCode,
+                                    )}
+                                  </span>
+                                </div>
+                                <div className="space-y-3">
+                                  {activeOwedItems.map((item, idx) => {
+                                    const itemRows = item.itemRows || [];
+                                    const callouts = item.callouts || [];
+                                    const hasItems = itemRows.length > 0;
+                                    const hasCallouts = callouts.length > 0;
+                                    const subtotal =
+                                      item.baseAmount ??
+                                      itemRows.reduce((s, r) => s + r.price, 0);
+
+                                    return (
+                                      <div
+                                        key={`owed-${idx}`}
+                                        className="bg-white border border-stone-200/70 rounded-xl overflow-hidden"
+                                      >
+                                        {/* receipt header */}
+                                        <div className="px-3.5 pt-3 pb-2.5 bg-gradient-to-b from-stone-50 to-transparent border-b border-dashed border-stone-200">
+                                          {item.expenseDate && (
+                                            <div className="text-[9px] font-black text-stone-400 uppercase tracking-widest mb-0.5">
+                                              {formatDisplayDateTime(
+                                                item.expenseDate,
+                                              )}
+                                            </div>
+                                          )}
+                                          <div className="flex justify-between items-baseline gap-3 mb-1.5">
+                                            <span className="text-sm font-black text-stone-800 truncate">
+                                              {item.title}
+                                            </span>
+                                            {item.totalExpense && (
+                                              <span className="text-[10px] font-bold text-stone-400 shrink-0 tabular-nums">
+                                                bill {currencySymbol}
+                                                {formatMoney(
+                                                  item.totalExpense,
+                                                  currencyCode,
+                                                )}
+                                              </span>
+                                            )}
+                                          </div>
+                                          {item.paidByList &&
+                                            item.paidByList.length > 0 && (
+                                              <div className="text-[10px] font-bold text-stone-500 flex items-center gap-1 flex-wrap">
+                                                <span className="text-stone-400">
+                                                  paid by
+                                                </span>
+                                                {item.paidByList.map((p, i) => (
+                                                  <span
+                                                    key={i}
+                                                    className="flex items-center gap-1"
+                                                  >
+                                                    <span className="text-stone-700 font-black">
+                                                      {p.name}
+                                                    </span>
+                                                    {item.paidByList!.length >
+                                                      1 && (
+                                                      <span className="text-stone-400 tabular-nums">
+                                                        ({currencySymbol}
+                                                        {formatMoney(
+                                                          p.amount,
+                                                          currencyCode,
+                                                        )}
+                                                        )
+                                                      </span>
+                                                    )}
+                                                    {i <
+                                                      item.paidByList!.length -
+                                                        1 && (
+                                                      <span className="text-stone-300">
+                                                        +
+                                                      </span>
+                                                    )}
+                                                  </span>
+                                                ))}
+                                                {item.memberCount && (
+                                                  <>
+                                                    <span
+                                                      className="text-stone-300"
+                                                      aria-hidden="true"
+                                                    >
+                                                      ·
+                                                    </span>
+                                                    <span className="text-stone-400">
+                                                      split {item.memberCount}{" "}
+                                                      ways
+                                                    </span>
+                                                  </>
                                                 )}
                                               </div>
-                                            );
-                                          })}
+                                            )}
                                         </div>
-                                      )}
-                                  </div>
-                                ))}
+
+                                        {/* receipt body */}
+                                        <div className="px-3.5 py-2.5">
+                                          {hasItems && (
+                                            <div className="space-y-1 mb-2">
+                                              {itemRows.map((row, rIdx) => (
+                                                <div
+                                                  key={`row-${rIdx}`}
+                                                  className="flex items-center justify-between gap-2 text-xs"
+                                                >
+                                                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                                    <span className="text-stone-700 font-bold truncate">
+                                                      {row.name}
+                                                    </span>
+                                                    {row.share && (
+                                                      <span className="text-[9px] font-black text-stone-500 bg-stone-100 border border-stone-200/60 px-1.5 py-0.5 rounded-md shrink-0 tabular-nums leading-none">
+                                                        {row.share}
+                                                      </span>
+                                                    )}
+                                                  </div>
+                                                  <span className="text-stone-700 font-bold shrink-0 tabular-nums">
+                                                    {currencySymbol}
+                                                    {formatMoney(
+                                                      row.price,
+                                                      currencyCode,
+                                                    )}
+                                                  </span>
+                                                </div>
+                                              ))}
+                                            </div>
+                                          )}
+
+                                          {/* subtotal line — only if both items and callouts exist */}
+                                          {hasItems && hasCallouts && (
+                                            <div className="flex justify-between items-center pt-2 mt-1 border-t border-dashed border-stone-200 text-[11px] font-black text-stone-500 uppercase tracking-wider">
+                                              <span>subtotal</span>
+                                              <span className="tabular-nums">
+                                                {currencySymbol}
+                                                {formatMoney(
+                                                  subtotal,
+                                                  currencyCode,
+                                                )}
+                                              </span>
+                                            </div>
+                                          )}
+
+                                          {/* callouts (tax/tip/discount/adjustment) */}
+                                          {hasCallouts && (
+                                            <div className="space-y-1 mt-1.5">
+                                              {callouts.map((c, cIdx) => {
+                                                const isPositive = c.amount > 0;
+                                                const palette =
+                                                  c.kind === "discount"
+                                                    ? "text-emerald-600"
+                                                    : c.kind === "tax"
+                                                      ? "text-amber-600"
+                                                      : "text-stone-600";
+                                                return (
+                                                  <div
+                                                    key={`callout-${cIdx}`}
+                                                    className={`flex justify-between items-center text-[11px] font-bold ${palette}`}
+                                                  >
+                                                    <span className="flex items-center gap-1.5">
+                                                      <span aria-hidden="true">
+                                                        +
+                                                      </span>
+                                                      <span>{c.label}</span>
+                                                    </span>
+                                                    <span className="font-black tabular-nums">
+                                                      {isPositive ? "+" : "−"}
+                                                      {currencySymbol}
+                                                      {formatMoney(
+                                                        Math.abs(c.amount),
+                                                        currencyCode,
+                                                      )}
+                                                    </span>
+                                                  </div>
+                                                );
+                                              })}
+                                            </div>
+                                          )}
+
+                                          {/* total line */}
+                                          <div className="flex justify-between items-center pt-2.5 mt-2.5 border-t-2 border-double border-stone-300">
+                                            <span className="text-[11px] font-black text-stone-700 uppercase tracking-widest">
+                                              your total
+                                            </span>
+                                            <span className="text-sm font-black text-stone-900 tabular-nums">
+                                              {currencySymbol}
+                                              {formatMoney(
+                                                item.amount,
+                                                currencyCode,
+                                              )}
+                                            </span>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
                               </div>
-                            </div>
-                          )}
-                        </div>
+                            )}
+
+                            {/* settled — collapsed by default */}
+                            {settledOwedItems.length > 0 && (
+                              <div>
+                                {!showSettled ? (
+                                  <button
+                                    onClick={() =>
+                                      setSettledRevealed((prev) => {
+                                        const next = new Set(prev);
+                                        next.add(member.id);
+                                        return next;
+                                      })
+                                    }
+                                    className="w-full flex items-center justify-between gap-2 text-[10px] font-black text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors py-2.5 px-3 rounded-xl uppercase tracking-widest border border-dashed border-stone-200"
+                                  >
+                                    <span className="flex items-center gap-2">
+                                      <span aria-hidden="true">✓</span>
+                                      {settledOwedItems.length} settled item
+                                      {settledOwedItems.length !== 1 ? "s" : ""}
+                                    </span>
+                                    <span aria-hidden="true">show →</span>
+                                  </button>
+                                ) : (
+                                  <div>
+                                    <div className="flex justify-between items-baseline mb-2.5 px-1">
+                                      <div className="flex items-baseline gap-2">
+                                        <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">
+                                          ✓ settled
+                                        </span>
+                                        <span className="text-[10px] font-black text-stone-300 tabular-nums">
+                                          {settledOwedItems.length}
+                                        </span>
+                                      </div>
+                                      <button
+                                        onClick={() =>
+                                          setSettledRevealed((prev) => {
+                                            const next = new Set(prev);
+                                            next.delete(member.id);
+                                            return next;
+                                          })
+                                        }
+                                        className="text-[10px] font-black text-stone-400 hover:text-stone-700 uppercase tracking-widest transition-colors"
+                                      >
+                                        hide
+                                      </button>
+                                    </div>
+                                    <div className="space-y-1.5 opacity-60">
+                                      {settledOwedItems.map((item, idx) => (
+                                        <div
+                                          key={`settled-${idx}`}
+                                          className="bg-white border border-stone-200/70 rounded-xl px-3.5 py-2.5 flex justify-between items-center gap-3"
+                                        >
+                                          <div className="flex flex-col min-w-0 flex-1">
+                                            {item.expenseDate && (
+                                              <span className="text-[9px] font-black text-stone-400 uppercase tracking-widest mb-0.5">
+                                                {formatDisplayDateTime(
+                                                  item.expenseDate,
+                                                )}
+                                              </span>
+                                            )}
+                                            <span className="text-sm leading-tight truncate text-stone-600 font-bold line-through decoration-stone-400">
+                                              {item.title}
+                                            </span>
+                                          </div>
+                                          <span className="font-black shrink-0 text-stone-500 line-through tabular-nums text-sm">
+                                            {currencySymbol}
+                                            {formatMoney(
+                                              item.amount,
+                                              currencyCode,
+                                            )}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -1968,6 +2360,7 @@ export default function TripDetail() {
                           </div>
                         </div>
                         <span className="font-black text-emerald-600 shrink-0">
+                          {currencySymbol}
                           {formatMoney(amt, currencyCode)}
                         </span>
                       </div>
@@ -1980,6 +2373,7 @@ export default function TripDetail() {
                   total
                 </span>
                 <span className="font-black text-stone-800 text-lg">
+                  {currencySymbol}
                   {formatMoney(payerBreakdownExpense.totalAmount, currencyCode)}
                 </span>
               </div>
@@ -2045,6 +2439,7 @@ export default function TripDetail() {
         memberDetails={memberDetails}
         settlements={settlements}
         currencySymbol={currencySymbol}
+        currencyCode={currencyCode}
       />
 
       {showScanner && (
@@ -2093,11 +2488,7 @@ export default function TripDetail() {
                 </span>
                 <span className="text-5xl font-black text-emerald-500 flex items-start justify-center">
                   <span className="text-2xl mt-1.5 mr-1">{currencySymbol}</span>
-                  {Number(totalTripCost).toLocaleString(undefined, {
-                    maximumFractionDigits: isZeroDecimalCurrency(currencyCode)
-                      ? 0
-                      : 2,
-                  })}
+                  {formatMoney(totalTripCost, currencyCode)}
                 </span>
               </div>
 

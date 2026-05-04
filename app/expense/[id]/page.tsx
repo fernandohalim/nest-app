@@ -12,6 +12,7 @@ import { formatMoney, getCurrencySymbol } from "@/lib/format";
 import { formatDisplayDateTime } from "@/lib/datetime";
 import twemoji from "@twemoji/api";
 import Emoji from "@/components/emoji";
+import { getAvatarColor } from "@/lib/avatars";
 
 const BARCODE_WIDTHS = [
   4, 8, 2, 4, 6, 8, 2, 6, 4, 8, 2, 6, 4, 4, 8, 2, 4, 6, 8, 2, 4,
@@ -40,6 +41,21 @@ export default function UnifiedExpensePage() {
     owner_id: string;
     is_collaborative: boolean;
   } | null>(null);
+
+  const PAYER_BAR_COLOR_MAP: Record<string, string> = {
+    pink: "bg-pink-500",
+    purple: "bg-purple-500",
+    indigo: "bg-indigo-500",
+    sky: "bg-sky-500",
+    teal: "bg-teal-500",
+    amber: "bg-amber-500",
+    rose: "bg-rose-500",
+  };
+
+  const getPayerBarColor = (name: string): string => {
+    const match = getAvatarColor(name).match(/bg-(\w+)-\d+/);
+    return PAYER_BAR_COLOR_MAP[match?.[1] ?? ""] ?? "bg-stone-400";
+  };
 
   useEffect(() => {
     const fetchData = async () => {
@@ -218,15 +234,6 @@ export default function UnifiedExpensePage() {
       ? expense.items.reduce((acc, item) => acc + item.price, 0)
       : 0;
   const difference = expense.totalAmount - itemsSum;
-
-  let totalExtraAdjustments = 0;
-  if (expense.splitType === "adjustment" && expense.adjustments) {
-    totalExtraAdjustments = Object.values(expense.adjustments).reduce(
-      (acc, val) => acc + val,
-      0,
-    );
-  }
-  const baseAdjustmentSubtotal = expense.totalAmount - totalExtraAdjustments;
 
   const payersEntries = Object.entries(expense.paidBy);
 
@@ -440,6 +447,7 @@ export default function UnifiedExpensePage() {
                           {item.name}
                         </span>
                         <span className="font-black text-stone-800 shrink-0">
+                          {currencySymbol}
                           {formatMoney(item.price, currencyCode)}
                         </span>
                       </div>
@@ -468,6 +476,7 @@ export default function UnifiedExpensePage() {
                 <div className="flex justify-between text-sm text-stone-500">
                   <span className="font-bold">subtotal</span>
                   <span className="font-black">
+                    {currencySymbol}
                     {formatMoney(itemsSum, currencyCode)}
                   </span>
                 </div>
@@ -477,39 +486,20 @@ export default function UnifiedExpensePage() {
                   </span>
                   <span className="font-black">
                     {difference > 0 ? "+" : "-"}
+                    {currencySymbol}
                     {formatMoney(Math.abs(difference), currencyCode)}
                   </span>
                 </div>
               </>
             )}
 
-            {expense.splitType === "adjustment" &&
-              totalExtraAdjustments > 0 && (
-                <>
-                  <div className="flex justify-between text-sm text-stone-500">
-                    <span className="font-bold">base subtotal</span>
-                    <span className="font-black">
-                      {formatMoney(baseAdjustmentSubtotal, currencyCode)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-sm text-stone-500">
-                    <span className="font-bold">adjustments</span>
-                    <span className="font-black">
-                      +{formatMoney(totalExtraAdjustments, currencyCode)}
-                    </span>
-                  </div>
-                </>
-              )}
-
             <div className="flex justify-between items-end mt-2 p-4 bg-emerald-50 border-2 border-emerald-100 rounded-2xl">
               <span className="text-[11px] font-black text-emerald-800 uppercase tracking-widest">
                 total
               </span>
               <span className="text-3xl font-black text-emerald-600">
-                {currencySymbol}{" "}
-                {formatMoney(expense.totalAmount, currencyCode)
-                  .replace(currencySymbol, "")
-                  .trim()}
+                {currencySymbol}
+                {formatMoney(expense.totalAmount, currencyCode)}
               </span>
             </div>
           </div>
@@ -517,30 +507,68 @@ export default function UnifiedExpensePage() {
           {/* SECTION 3: THE SETTLEMENT */}
           <div className="flex flex-col gap-4 bg-stone-50 rounded-2xl p-5 border-2 border-stone-100">
             <div
-              className={`flex ${payersEntries.length > 2 ? "flex-col items-start gap-3" : "justify-between items-center gap-4"} text-sm border-b-2 border-stone-200/60 pb-4 mb-2`}
+              className={`flex text-sm border-b-2 border-stone-200/60 pb-4 mb-2 ${
+                payersEntries.length === 1
+                  ? "justify-between items-center gap-4"
+                  : "flex-col items-start gap-3"
+              }`}
             >
               <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest shrink-0">
                 paid by
               </span>
 
-              {/* 🔥 NEW: Payer Pills mapping */}
-              <div
-                className={`flex flex-wrap gap-2 ${payersEntries.length > 2 ? "justify-start" : "justify-end"}`}
-              >
-                {payersEntries.map(([memberId, amount]) => (
-                  <div
-                    key={memberId}
-                    className="font-extrabold text-stone-800 bg-white px-3 py-1.5 rounded-lg border border-stone-200 shadow-sm flex items-center gap-1.5 leading-none"
-                  >
-                    <span>{getMemberName(memberId)}</span>
-                    {payersEntries.length > 1 && (
-                      <span className="font-bold text-stone-400 text-xs">
-                        {formatMoney(amount, currencyCode)}
-                      </span>
-                    )}
+              {payersEntries.length === 1 ? (
+                <div className="font-extrabold text-stone-800 bg-white px-3 py-1.5 rounded-lg border border-stone-200 shadow-sm leading-none">
+                  {getMemberName(payersEntries[0][0])}
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2 w-full">
+                  {/* proportion bar */}
+                  <div className="flex w-full h-2.5 rounded-full overflow-hidden bg-stone-100 shadow-inner">
+                    {payersEntries.map(([memberId, amount]) => {
+                      const name = getMemberName(memberId);
+                      const pct = (amount / expense.totalAmount) * 100;
+                      return (
+                        <div
+                          key={memberId}
+                          className={getPayerBarColor(name)}
+                          style={{ width: `${pct}%` }}
+                          title={`${name} • ${pct.toFixed(0)}%`}
+                        />
+                      );
+                    })}
                   </div>
-                ))}
-              </div>
+
+                  {/* legend */}
+                  <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+                    {payersEntries.map(([memberId, amount]) => {
+                      const name = getMemberName(memberId);
+                      const pct = (amount / expense.totalAmount) * 100;
+                      return (
+                        <div
+                          key={memberId}
+                          className="flex items-center gap-1.5 text-xs leading-none"
+                        >
+                          <span
+                            className={`w-2 h-2 rounded-full shrink-0 ${getPayerBarColor(name)}`}
+                            aria-hidden="true"
+                          />
+                          <span className="font-extrabold text-stone-700">
+                            {name}
+                          </span>
+                          <span className="font-bold text-stone-400">
+                            {currencySymbol}
+                            {formatMoney(amount, currencyCode)}
+                          </span>
+                          <span className="font-bold text-stone-300 text-[10px]">
+                            {pct.toFixed(0)}%
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
             </div>
 
             <div className="flex flex-col gap-4">
@@ -596,6 +624,7 @@ export default function UnifiedExpensePage() {
                         {getMemberName(memberId)}
                       </span>
                       <span className="font-black text-stone-800">
+                        {currencySymbol}
                         {formatMoney(finalAmount, currencyCode)}
                       </span>
                     </div>
@@ -616,6 +645,7 @@ export default function UnifiedExpensePage() {
                                 : ""}
                             </span>
                             <span className="font-bold shrink-0">
+                              {currencySymbol}
                               {formatMoney(item.share, currencyCode)}
                             </span>
                           </div>
@@ -630,6 +660,7 @@ export default function UnifiedExpensePage() {
                               </span>
                               <span className="font-bold shrink-0">
                                 {exactDiff > 0 ? "+" : "-"}
+                                {currencySymbol}
                                 {formatMoney(Math.abs(exactDiff), currencyCode)}
                               </span>
                             </div>
@@ -642,6 +673,7 @@ export default function UnifiedExpensePage() {
                       adjustmentExtra !== 0 && (
                         <span className="text-[10px] font-bold text-stone-400 text-right mt-1">
                           (includes {adjustmentExtra > 0 ? "+" : "-"}
+                          {currencySymbol}
                           {formatMoney(Math.abs(adjustmentExtra), currencyCode)}
                           )
                         </span>
@@ -741,9 +773,7 @@ export default function UnifiedExpensePage() {
               </span>
               <span className="text-5xl font-black text-emerald-500 flex items-start justify-center">
                 <span className="text-2xl mt-1.5 mr-1">{currencySymbol}</span>
-                {formatMoney(expense.totalAmount, currencyCode)
-                  .replace(currencySymbol, "")
-                  .trim()}
+                {formatMoney(expense.totalAmount, currencyCode)}
               </span>
             </div>
 
@@ -755,6 +785,7 @@ export default function UnifiedExpensePage() {
                   <div className="flex justify-between text-xs font-bold text-stone-500">
                     <span>subtotal</span>
                     <span className="text-stone-700">
+                      {currencySymbol}
                       {formatMoney(itemsSum, currencyCode)}
                     </span>
                   </div>
@@ -762,29 +793,12 @@ export default function UnifiedExpensePage() {
                     <span>{difference > 0 ? "tax & fees" : "discount"}</span>
                     <span className="text-stone-700">
                       {difference > 0 ? "+" : "-"}
+                      {currencySymbol}
                       {formatMoney(Math.abs(difference), currencyCode)}
                     </span>
                   </div>
                 </div>
               )}
-
-              {expense.splitType === "adjustment" &&
-                totalExtraAdjustments > 0 && (
-                  <div className="w-full flex flex-col gap-2 bg-stone-50 p-4 rounded-2xl border border-stone-100">
-                    <div className="flex justify-between text-xs font-bold text-stone-500">
-                      <span>base subtotal</span>
-                      <span className="text-stone-700">
-                        {formatMoney(baseAdjustmentSubtotal, currencyCode)}
-                      </span>
-                    </div>
-                    <div className="flex justify-between text-xs font-bold text-stone-500">
-                      <span>adjustments</span>
-                      <span className="text-stone-700">
-                        +{formatMoney(totalExtraAdjustments, currencyCode)}
-                      </span>
-                    </div>
-                  </div>
-                )}
 
               {/* paid by chips */}
               <div className="mt-2 flex flex-col items-center w-full">
@@ -800,7 +814,8 @@ export default function UnifiedExpensePage() {
                       {getMemberName(id)}
                       {payersEntries.length > 1 && (
                         <span className="text-stone-400">
-                          ({formatMoney(amt, currencyCode)})
+                          ({currencySymbol}
+                          {formatMoney(amt, currencyCode)})
                         </span>
                       )}
                     </span>

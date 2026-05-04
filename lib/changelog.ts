@@ -2,6 +2,18 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
+  version: "2.4.3",
+    date: "may 4, 2026",
+    title: "receipt-grade ledger 🧾",
+    badge: "patch",
+    badgeColor: "bg-teal-100 text-teal-700 border-teal-200",
+    features: [
+      "refined detailed ledger with receipt-style breakdowns.",
+      "refined money format, correctly display the currency on each amount",
+      "added multi-payer section a proportion bar showing each payer's share at a glance.",
+    ],
+  },
+  {
     version: "2.4.2",
     date: "apr 30, 2026",
     title: "add not found 🛡️",

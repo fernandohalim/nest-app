@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Transaction, Member } from "@/lib/types";
 import { useAlertStore } from "@/store/useAlertStore";
+import { formatMoney } from "@/lib/format";
 
 // 🔥 1. Perfectly typed interface to replace 'any'
 export interface MemberDetail {
@@ -26,6 +27,7 @@ interface SettlementModalProps {
   memberDetails: Record<string, MemberDetail>; // 🔥 using the new type!
   settlements: Transaction[];
   currencySymbol?: string;
+  currencyCode?: string;
 }
 
 const getAvatarColor = (name: string) => {
@@ -53,6 +55,7 @@ export default function SettlementModal({
   memberDetails,
   settlements,
   currencySymbol = "Rp",
+  currencyCode = "IDR",
 }: SettlementModalProps) {
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
   const [prevIsOpen, setPrevIsOpen] = useState(isOpen);
@@ -169,10 +172,7 @@ export default function SettlementModal({
                             </span>
                             <span className="font-black text-rose-600">
                               {currencySymbol}
-                              {Number(details.totalOwed).toLocaleString(
-                                "en-US",
-                                { maximumFractionDigits: 2 },
-                              )}
+                              {formatMoney(details.totalOwed, currencyCode)}
                             </span>
                           </div>
                           <div className="flex flex-col gap-2.5">
@@ -192,18 +192,27 @@ export default function SettlementModal({
                                     </span>
                                     <span className="shrink-0 font-black">
                                       {currencySymbol}
-                                      {Number(owed.amount).toLocaleString(
-                                        "en-US",
-                                        { maximumFractionDigits: 2 },
-                                      )}
+                                      {formatMoney(owed.amount, currencyCode)}
                                     </span>
                                   </div>
                                   {owed.subItems &&
                                     owed.subItems.length > 0 && (
                                       <div className="flex flex-col gap-0.5 mt-0.5">
                                         {owed.subItems.map((sub, sIdx) => {
-                                          const [namePart, pricePart] =
+                                          const [namePart, rawPricePart] =
                                             sub.split(" • ");
+                                          let sign = "";
+                                          let pricePart = rawPricePart;
+                                          if (rawPricePart) {
+                                            const trimmed = rawPricePart.trim();
+                                            if (
+                                              trimmed.startsWith("+") ||
+                                              trimmed.startsWith("-")
+                                            ) {
+                                              sign = trimmed[0];
+                                              pricePart = trimmed.slice(1);
+                                            }
+                                          }
                                           return (
                                             <div
                                               key={sIdx}
@@ -214,6 +223,7 @@ export default function SettlementModal({
                                               </span>
                                               {pricePart && (
                                                 <span>
+                                                  {sign}
                                                   {currencySymbol}
                                                   {pricePart}
                                                 </span>
@@ -237,10 +247,7 @@ export default function SettlementModal({
                             </span>
                             <span className="font-black text-emerald-600">
                               {currencySymbol}
-                              {Number(details.totalPaid).toLocaleString(
-                                "en-US",
-                                { maximumFractionDigits: 2 },
-                              )}
+                              {formatMoney(details.totalPaid, currencyCode)}
                             </span>
                           </div>
                           <div className="flex flex-col gap-2.5">
@@ -260,10 +267,7 @@ export default function SettlementModal({
                                   </span>
                                   <span className="shrink-0 font-black">
                                     {currencySymbol}
-                                    {Number(paid.amount).toLocaleString(
-                                      "en-US",
-                                      { maximumFractionDigits: 2 },
-                                    )}
+                                    {formatMoney(paid.amount, currencyCode)}
                                   </span>
                                 </div>
                               ))
@@ -280,10 +284,8 @@ export default function SettlementModal({
                           total consumed
                         </span>
                         <span className="font-black text-rose-500">
-                          {currencySymbol}{" "}
-                          {Number(details.totalOwed).toLocaleString("en-US", {
-                            maximumFractionDigits: 2,
-                          })}
+                          {currencySymbol}
+                          {formatMoney(details.totalOwed, currencyCode)}
                         </span>
                       </div>
                       <div className="flex justify-between items-center mb-4">
@@ -291,10 +293,8 @@ export default function SettlementModal({
                           paid upfront
                         </span>
                         <span className="font-black text-emerald-500">
-                          {currencySymbol}{" "}
-                          {Number(details.totalPaid).toLocaleString("en-US", {
-                            maximumFractionDigits: 2,
-                          })}
+                          {currencySymbol}
+                          {formatMoney(details.totalPaid, currencyCode)}
                         </span>
                       </div>
 
@@ -315,10 +315,8 @@ export default function SettlementModal({
                         <span
                           className={`text-xl font-black ${isShort ? "text-rose-600" : isOwed ? "text-emerald-600" : "text-stone-600"}`}
                         >
-                          {currencySymbol}{" "}
-                          {Number(Math.abs(balance)).toLocaleString("en-US", {
-                            maximumFractionDigits: 2,
-                          })}
+                          {currencySymbol}
+                          {formatMoney(Math.abs(balance), currencyCode)}
                         </span>
                       </div>
                     </div>
@@ -339,7 +337,7 @@ export default function SettlementModal({
                       )}
 
                       {myPayments.map((payment, idx) => {
-                        const proofText = `yo! for the trip tab, i consumed ${currencySymbol}${Number(details.totalOwed).toLocaleString()}, but only paid ${currencySymbol}${Number(details.totalPaid).toLocaleString()} upfront. so i owe you ${currencySymbol}${Number(payment.amount).toLocaleString()}! 💸`;
+                        const proofText = `yo! for the trip tab, i consumed ${currencySymbol}${formatMoney(details.totalOwed, currencyCode)}, but only paid ${currencySymbol}${formatMoney(details.totalPaid, currencyCode)} upfront. so i owe you ${currencySymbol}${formatMoney(payment.amount, currencyCode)}! 💸`;
                         return (
                           <div
                             key={`pay-${idx}`}
@@ -351,9 +349,7 @@ export default function SettlementModal({
                                 {payment.to.name}
                               </span>{" "}
                               {currencySymbol}
-                              {Number(payment.amount).toLocaleString("en-US", {
-                                maximumFractionDigits: 2,
-                              })}
+                              {formatMoney(payment.amount, currencyCode)}
                             </span>
                             <button
                               onClick={() => handleShareProof(proofText)}
@@ -366,7 +362,7 @@ export default function SettlementModal({
                       })}
 
                       {myReceives.map((receive, idx) => {
-                        const proofText = `hey ${receive.from.name}! your total share for the trip was ${currencySymbol}${Number(memberDetails[receive.from.id]?.totalOwed || 0).toLocaleString()}, but you only paid ${currencySymbol}${Number(memberDetails[receive.from.id]?.totalPaid || 0).toLocaleString()} upfront. nest grouped the math, so you just need to venmo me ${currencySymbol}${Number(receive.amount).toLocaleString()}! 💸`;
+                        const proofText = `hey ${receive.from.name}! your total share for the trip was ${currencySymbol}${formatMoney(memberDetails[receive.from.id]?.totalOwed || 0, currencyCode)}, but you only paid ${currencySymbol}${formatMoney(memberDetails[receive.from.id]?.totalPaid || 0, currencyCode)} upfront. nest grouped the math, so you just need to venmo me ${currencySymbol}${formatMoney(receive.amount, currencyCode)}! 💸`;
                         return (
                           <div
                             key={`receive-${idx}`}
@@ -376,10 +372,7 @@ export default function SettlementModal({
                               collect{" "}
                               <span className="text-emerald-600">
                                 {currencySymbol}
-                                {Number(receive.amount).toLocaleString(
-                                  "en-US",
-                                  { maximumFractionDigits: 2 },
-                                )}
+                                {formatMoney(receive.amount, currencyCode)}
                               </span>{" "}
                               from {receive.from.name}
                             </span>
