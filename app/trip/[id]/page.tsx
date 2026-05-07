@@ -128,9 +128,9 @@ export default function TripDetail() {
   const [settledRevealed, setSettledRevealed] = useState<Set<string>>(
     new Set(),
   );
-  const [detailedRevealed, setDetailedRevealed] = useState<Set<string>>(
-    new Set(),
-  );
+  const [expandedLedgerItemKey, setExpandedLedgerItemKey] = useState<
+    string | null
+  >(null);
   const [isLinked, setIsLinked] = useState(false);
 
   const processedExpenses = useMemo(
@@ -435,11 +435,19 @@ export default function TripDetail() {
     title: string;
     amount: number;
     isNegative?: boolean;
-    // rich fields
     expenseDate?: string;
     totalExpense?: number;
     payerCount?: number;
     fromName?: string;
+    // For settled credits — carry the underlying receipt
+    itemRows?: LedgerItemRow[];
+    callouts?: LedgerCallout[];
+    paidByList?: { name: string; amount: number }[];
+    splitType?: "exact" | "equal" | "adjustment";
+    baseAmount?: number;
+    memberCount?: number;
+    isSettledCredit?: boolean;
+    originalTitle?: string;
   };
 
   type RichOwedItem = {
@@ -602,6 +610,14 @@ export default function TripDetail() {
             expenseDate: exp.expenseDate,
             totalExpense: exp.totalAmount,
             payerCount,
+            isSettledCredit: true,
+            originalTitle: exp.title,
+            itemRows,
+            callouts,
+            paidByList,
+            splitType: exp.splitType,
+            baseAmount,
+            memberCount,
           });
 
           const totalPaidBy = Object.values(exp.paidBy || {}).reduce(
@@ -1282,7 +1298,7 @@ export default function TripDetail() {
                                         {item.name}
                                       </span>
                                       <span className="text-[10px] sm:text-xs font-bold text-stone-400 mt-0.5">
-                                        {item.assignedTo
+                                        {Array.from(new Set(item.assignedTo))
                                           .map((id) => getMemberName(id))
                                           .join(", ")}
                                       </span>
@@ -1445,11 +1461,18 @@ export default function TripDetail() {
                                                 return (
                                                   <span
                                                     key={i.id}
-                                                    className="text-[11px] font-bold text-stone-400 leading-tight flex justify-between gap-3"
+                                                    className="text-[11px] font-bold text-stone-400 leading-tight flex justify-between gap-3 items-center"
                                                   >
-                                                    <span className="truncate">
-                                                      ↳ {i.name}
-                                                      {shareText}
+                                                    <span className="truncate flex items-center gap-1.5 min-w-0">
+                                                      <span className="truncate">
+                                                        ↳ {i.name}
+                                                      </span>
+                                                      {totalShares > 1 && (
+                                                        <span className="text-[9px] font-black text-stone-500 bg-stone-100 border border-stone-200/60 px-1.5 py-0.5 rounded-md shrink-0 tabular-nums leading-none">
+                                                          {userShares}/
+                                                          {totalShares}
+                                                        </span>
+                                                      )}
                                                     </span>
                                                     <span className="shrink-0 text-stone-300">
                                                       {currencySymbol}
@@ -1795,40 +1818,262 @@ export default function TripDetail() {
                         {/* expanded body */}
                         {isExpanded &&
                           (() => {
-                            const showDetailed = detailedRevealed.has(
-                              member.id,
-                            );
+                            const showSettled = settledRevealed.has(member.id);
+
+                            const renderOwedDetail = (
+                              item: RichOwedItem | RichPaidItem,
+                            ) => {
+                              const itemRows = item.itemRows || [];
+                              const callouts = item.callouts || [];
+                              const hasItems = itemRows.length > 0;
+                              const hasCallouts = callouts.length > 0;
+                              const subtotal =
+                                item.baseAmount ??
+                                itemRows.reduce((s, r) => s + r.price, 0);
+
+                              return (
+                                <>
+                                  {/* metadata row: date · bill · paid by · split N */}
+                                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-[10px] font-bold mb-2.5">
+                                    {item.expenseDate && (
+                                      <span className="text-stone-400 uppercase tracking-widest font-black">
+                                        {formatDisplayDateTime(
+                                          item.expenseDate,
+                                        )}
+                                      </span>
+                                    )}
+                                    {item.totalExpense && (
+                                      <>
+                                        <span
+                                          className="text-stone-300"
+                                          aria-hidden="true"
+                                        >
+                                          ·
+                                        </span>
+                                        <span className="text-stone-400">
+                                          bill{" "}
+                                          <span className="text-stone-600 tabular-nums">
+                                            {currencySymbol}
+                                            {formatMoney(
+                                              item.totalExpense,
+                                              currencyCode,
+                                            )}
+                                          </span>
+                                        </span>
+                                      </>
+                                    )}
+                                  </div>
+
+                                  {item.paidByList &&
+                                    item.paidByList.length > 0 && (
+                                      <div className="text-[10px] font-bold text-stone-500 flex items-center gap-1 flex-wrap mb-2.5">
+                                        <span className="text-stone-400">
+                                          paid by
+                                        </span>
+                                        {item.paidByList.map((p, i) => (
+                                          <span
+                                            key={i}
+                                            className="flex items-center gap-1"
+                                          >
+                                            <span className="text-stone-700 font-black">
+                                              {p.name}
+                                            </span>
+                                            {item.paidByList!.length > 1 && (
+                                              <span className="text-stone-400 tabular-nums">
+                                                ({currencySymbol}
+                                                {formatMoney(
+                                                  p.amount,
+                                                  currencyCode,
+                                                )}
+                                                )
+                                              </span>
+                                            )}
+                                            {i <
+                                              item.paidByList!.length - 1 && (
+                                              <span className="text-stone-300">
+                                                +
+                                              </span>
+                                            )}
+                                          </span>
+                                        ))}
+                                        {item.memberCount && (
+                                          <>
+                                            <span
+                                              className="text-stone-300"
+                                              aria-hidden="true"
+                                            >
+                                              ·
+                                            </span>
+                                            <span className="text-stone-400">
+                                              split {item.memberCount} ways
+                                            </span>
+                                          </>
+                                        )}
+                                      </div>
+                                    )}
+
+                                  {hasItems && (
+                                    <div className="space-y-1 mb-2">
+                                      {itemRows.map((row, rIdx) => (
+                                        <div
+                                          key={`row-${rIdx}`}
+                                          className="flex items-center justify-between gap-2 text-xs"
+                                        >
+                                          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                            <span className="text-stone-700 font-bold truncate">
+                                              {row.name}
+                                            </span>
+                                            {row.share && (
+                                              <span className="text-[9px] font-black text-stone-500 bg-stone-100 border border-stone-200/60 px-1.5 py-0.5 rounded-md shrink-0 tabular-nums leading-none">
+                                                {row.share}
+                                              </span>
+                                            )}
+                                          </div>
+                                          <span className="text-stone-700 font-bold shrink-0 tabular-nums">
+                                            {currencySymbol}
+                                            {formatMoney(
+                                              row.price,
+                                              currencyCode,
+                                            )}
+                                          </span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  )}
+
+                                  {hasItems && hasCallouts && (
+                                    <div className="flex justify-between items-center pt-2 mt-1 border-t border-dashed border-stone-200 text-[11px] font-black text-stone-500 uppercase tracking-wider">
+                                      <span>subtotal</span>
+                                      <span className="tabular-nums">
+                                        {currencySymbol}
+                                        {formatMoney(subtotal, currencyCode)}
+                                      </span>
+                                    </div>
+                                  )}
+
+                                  {hasCallouts && (
+                                    <div className="space-y-1 mt-1.5">
+                                      {callouts.map((c, cIdx) => {
+                                        const isPositive = c.amount > 0;
+                                        const palette =
+                                          c.kind === "discount"
+                                            ? "text-emerald-600"
+                                            : c.kind === "tax"
+                                              ? "text-amber-600"
+                                              : "text-stone-600";
+                                        return (
+                                          <div
+                                            key={`callout-${cIdx}`}
+                                            className={`flex justify-between items-center text-[11px] font-bold ${palette}`}
+                                          >
+                                            <span className="flex items-center gap-1.5">
+                                              <span aria-hidden="true">+</span>
+                                              <span>{c.label}</span>
+                                            </span>
+                                            <span className="font-black tabular-nums">
+                                              {isPositive ? "+" : "−"}
+                                              {currencySymbol}
+                                              {formatMoney(
+                                                Math.abs(c.amount),
+                                                currencyCode,
+                                              )}
+                                            </span>
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
+                                  )}
+
+                                  {!hasItems && !hasCallouts && (
+                                    <div className="text-[10px] font-bold text-stone-400 italic">
+                                      no further breakdown — this expense was
+                                      split equally without line items.
+                                    </div>
+                                  )}
+                                </>
+                              );
+                            };
+
+                            const renderPaidDetail = (item: RichPaidItem) => {
+                              if (item.isNegative) {
+                                return (
+                                  <div className="text-[11px] font-bold text-stone-500">
+                                    {item.fromName ? (
+                                      <>
+                                        <span className="text-stone-700 font-black">
+                                          {item.fromName}
+                                        </span>{" "}
+                                        paid you back.
+                                      </>
+                                    ) : (
+                                      "received cash back."
+                                    )}
+                                  </div>
+                                );
+                              }
+                              if (item.isSettledCredit) {
+                                return (
+                                  <>
+                                    <div className="text-[10px] font-bold text-stone-400 mb-2.5">
+                                      you settled this debt for{" "}
+                                      <span className="text-stone-600 font-black">
+                                        {item.originalTitle}
+                                      </span>
+                                    </div>
+                                    {renderOwedDetail(item)}
+                                  </>
+                                );
+                              }
+                              return (
+                                <>
+                                  {item.expenseDate && (
+                                    <div className="text-[10px] font-black text-stone-400 uppercase tracking-widest mb-2">
+                                      {formatDisplayDateTime(item.expenseDate)}
+                                    </div>
+                                  )}
+                                  <div className="space-y-1.5 text-[11px] font-bold">
+                                    {item.totalExpense && (
+                                      <div className="flex justify-between text-stone-500">
+                                        <span>full bill</span>
+                                        <span className="text-stone-700 tabular-nums">
+                                          {currencySymbol}
+                                          {formatMoney(
+                                            item.totalExpense,
+                                            currencyCode,
+                                          )}
+                                        </span>
+                                      </div>
+                                    )}
+                                    {item.totalExpense &&
+                                      item.totalExpense > 0 && (
+                                        <div className="flex justify-between text-stone-500">
+                                          <span>your share</span>
+                                          <span className="text-stone-700 tabular-nums">
+                                            {Math.round(
+                                              (item.amount /
+                                                item.totalExpense) *
+                                                100,
+                                            )}
+                                            %
+                                          </span>
+                                        </div>
+                                      )}
+                                    {item.payerCount && item.payerCount > 1 && (
+                                      <div className="flex justify-between text-stone-500">
+                                        <span>co-payers</span>
+                                        <span className="text-stone-700">
+                                          split with {item.payerCount - 1} other
+                                          {item.payerCount > 2 ? "s" : ""}
+                                        </span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </>
+                              );
+                            };
 
                             return (
                               <div className="border-t border-stone-100 bg-stone-50/40 px-3 py-5 space-y-5 animate-in fade-in slide-in-from-top-1 duration-200">
-                                {/* view toggle */}
-                                <div className="flex items-center bg-stone-100 rounded-xl p-1 gap-1">
-                                  <button
-                                    onClick={() =>
-                                      setDetailedRevealed((prev) => {
-                                        const next = new Set(prev);
-                                        next.delete(member.id);
-                                        return next;
-                                      })
-                                    }
-                                    className={`flex-1 text-[11px] font-black uppercase tracking-widest py-2 rounded-lg transition-all ${!showDetailed ? "bg-white text-stone-800 shadow-sm" : "text-stone-500 hover:text-stone-700"}`}
-                                  >
-                                    summary
-                                  </button>
-                                  <button
-                                    onClick={() =>
-                                      setDetailedRevealed((prev) => {
-                                        const next = new Set(prev);
-                                        next.add(member.id);
-                                        return next;
-                                      })
-                                    }
-                                    className={`flex-1 text-[11px] font-black uppercase tracking-widest py-2 rounded-lg transition-all ${showDetailed ? "bg-white text-stone-800 shadow-sm" : "text-stone-500 hover:text-stone-700"}`}
-                                  >
-                                    full receipt
-                                  </button>
-                                </div>
-
                                 {/* PAID UPFRONT */}
                                 {details.paidItems.length > 0 && (
                                   <div>
@@ -1849,118 +2094,72 @@ export default function TripDetail() {
                                         )}
                                       </span>
                                     </div>
-
-                                    {!showDetailed ? (
-                                      // compact: title + amount only, divided list
-                                      <div className="bg-white border border-stone-200/70 rounded-xl divide-y divide-stone-100 overflow-hidden">
-                                        {details.paidItems.map((item, idx) => (
+                                    <div className="bg-white border border-stone-200/70 rounded-xl overflow-hidden">
+                                      {details.paidItems.map((item, idx) => {
+                                        const itemKey = `${member.id}:paid:${idx}`;
+                                        const isItemExpanded =
+                                          expandedLedgerItemKey === itemKey;
+                                        return (
                                           <div
                                             key={`paid-${idx}`}
-                                            className="flex justify-between items-center gap-3 px-3.5 py-2.5"
+                                            className={`${idx > 0 ? "border-t border-stone-100" : ""} ${isItemExpanded ? "bg-stone-50/40" : ""}`}
                                           >
-                                            <span
-                                              className={`flex-1 leading-snug text-sm truncate ${item.isNegative ? "text-stone-400 italic font-semibold" : "text-stone-700 font-bold"}`}
+                                            <button
+                                              onClick={() =>
+                                                setExpandedLedgerItemKey(
+                                                  isItemExpanded
+                                                    ? null
+                                                    : itemKey,
+                                                )
+                                              }
+                                              aria-expanded={isItemExpanded}
+                                              className="w-full flex justify-between items-center gap-3 px-3 py-2 text-left active:bg-stone-100/60 transition-colors"
                                             >
-                                              {item.title}
-                                            </span>
-                                            <span
-                                              className={`font-black shrink-0 tabular-nums text-sm ${item.isNegative ? "text-rose-500" : "text-emerald-700"}`}
-                                            >
-                                              {item.isNegative ? "−" : "+"}
-                                              {currencySymbol}
-                                              {formatMoney(
-                                                Math.abs(item.amount),
-                                                currencyCode,
-                                              )}
-                                            </span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    ) : (
-                                      // detailed: full cards with date + share %
-                                      <div className="space-y-2">
-                                        {details.paidItems.map((item, idx) => (
-                                          <div
-                                            key={`paid-${idx}`}
-                                            className={`bg-white border border-stone-200/70 rounded-xl px-3.5 py-3 ${item.isNegative ? "border-dashed" : ""}`}
-                                          >
-                                            <div className="flex items-start justify-between gap-3 mb-1">
-                                              <div className="flex flex-col min-w-0 flex-1">
-                                                {item.expenseDate && (
-                                                  <span className="text-[9px] font-black text-stone-400 uppercase tracking-widest mb-0.5">
-                                                    {formatDisplayDateTime(
-                                                      item.expenseDate,
-                                                    )}
-                                                  </span>
-                                                )}
-                                                <span
-                                                  className={`text-sm leading-tight truncate ${item.isNegative ? "text-stone-500 italic font-semibold" : "text-stone-800 font-black"}`}
-                                                >
-                                                  {item.title}
-                                                </span>
-                                              </div>
                                               <span
-                                                className={`font-black shrink-0 tabular-nums text-sm ${item.isNegative ? "text-rose-500" : "text-emerald-700"}`}
+                                                className={`flex-1 leading-tight text-[13px] truncate ${item.isNegative ? "text-stone-400 italic font-semibold" : "text-stone-700 font-bold"}`}
                                               >
-                                                {item.isNegative ? "−" : "+"}
-                                                {currencySymbol}
-                                                {formatMoney(
-                                                  Math.abs(item.amount),
-                                                  currencyCode,
-                                                )}
+                                                {item.title}
                                               </span>
-                                            </div>
-                                            {!item.isNegative &&
-                                              item.totalExpense && (
-                                                <div className="flex items-center gap-1.5 text-[10px] font-bold text-stone-400 mt-1 flex-wrap">
-                                                  <span>
-                                                    your share of{" "}
-                                                    <span className="text-stone-600 tabular-nums">
-                                                      {currencySymbol}
-                                                      {formatMoney(
-                                                        item.totalExpense,
-                                                        currencyCode,
-                                                      )}
-                                                    </span>
-                                                  </span>
-                                                  {item.totalExpense > 0 && (
-                                                    <>
-                                                      <span aria-hidden="true">
-                                                        ·
-                                                      </span>
-                                                      <span className="tabular-nums">
-                                                        {Math.round(
-                                                          (item.amount /
-                                                            item.totalExpense) *
-                                                            100,
-                                                        )}
-                                                        %
-                                                      </span>
-                                                    </>
+                                              <div className="flex items-center gap-1.5 shrink-0">
+                                                <span
+                                                  className={`font-black tabular-nums text-[13px] ${item.isNegative ? "text-rose-500" : "text-emerald-700"}`}
+                                                >
+                                                  {item.isNegative ? "−" : "+"}
+                                                  {currencySymbol}
+                                                  {formatMoney(
+                                                    Math.abs(item.amount),
+                                                    currencyCode,
                                                   )}
-                                                  {item.payerCount &&
-                                                    item.payerCount > 1 && (
-                                                      <>
-                                                        <span aria-hidden="true">
-                                                          ·
-                                                        </span>
-                                                        <span>
-                                                          split with{" "}
-                                                          {item.payerCount - 1}{" "}
-                                                          other
-                                                        </span>
-                                                      </>
-                                                    )}
-                                                </div>
-                                              )}
+                                                </span>
+                                                <svg
+                                                  className={`w-3 h-3 text-stone-300 transition-transform duration-200 ${isItemExpanded ? "rotate-180" : ""}`}
+                                                  fill="none"
+                                                  stroke="currentColor"
+                                                  strokeWidth={3}
+                                                  viewBox="0 0 24 24"
+                                                  aria-hidden="true"
+                                                >
+                                                  <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    d="M19 9l-7 7-7-7"
+                                                  />
+                                                </svg>
+                                              </div>
+                                            </button>
+                                            {isItemExpanded && (
+                                              <div className="px-3 pb-3 pt-1 animate-in slide-in-from-top-1 duration-150">
+                                                {renderPaidDetail(item)}
+                                              </div>
+                                            )}
                                           </div>
-                                        ))}
-                                      </div>
-                                    )}
+                                        );
+                                      })}
+                                    </div>
                                   </div>
                                 )}
 
-                                {/* CONSUMED */}
+                                {/* CONSUMED — active */}
                                 {activeOwedItems.length > 0 && (
                                   <div>
                                     <div className="flex items-baseline justify-between mb-2.5 px-1">
@@ -1980,238 +2179,67 @@ export default function TripDetail() {
                                         )}
                                       </span>
                                     </div>
-
-                                    {!showDetailed ? (
-                                      // compact: title + amount only
-                                      <div className="bg-white border border-stone-200/70 rounded-xl divide-y divide-stone-100 overflow-hidden">
-                                        {activeOwedItems.map((item, idx) => (
+                                    <div className="bg-white border border-stone-200/70 rounded-xl overflow-hidden">
+                                      {activeOwedItems.map((item, idx) => {
+                                        const itemKey = `${member.id}:owed:${idx}`;
+                                        const isItemExpanded =
+                                          expandedLedgerItemKey === itemKey;
+                                        return (
                                           <div
                                             key={`owed-${idx}`}
-                                            className="flex justify-between items-center gap-3 px-3.5 py-2.5"
+                                            className={`${idx > 0 ? "border-t border-stone-100" : ""} ${isItemExpanded ? "bg-stone-50/40" : ""}`}
                                           >
-                                            <span className="flex-1 leading-snug text-sm truncate text-stone-700 font-bold">
-                                              {item.title}
-                                            </span>
-                                            <span className="font-black shrink-0 tabular-nums text-sm text-stone-800">
-                                              {currencySymbol}
-                                              {formatMoney(
-                                                item.amount,
-                                                currencyCode,
-                                              )}
-                                            </span>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    ) : (
-                                      // detailed: receipt cards
-                                      <div className="space-y-3">
-                                        {activeOwedItems.map((item, idx) => {
-                                          const itemRows = item.itemRows || [];
-                                          const callouts = item.callouts || [];
-                                          const hasItems = itemRows.length > 0;
-                                          const hasCallouts =
-                                            callouts.length > 0;
-                                          const subtotal =
-                                            item.baseAmount ??
-                                            itemRows.reduce(
-                                              (s, r) => s + r.price,
-                                              0,
-                                            );
-
-                                          return (
-                                            <div
-                                              key={`owed-${idx}`}
-                                              className="bg-white border border-stone-200/70 rounded-xl overflow-hidden"
+                                            <button
+                                              onClick={() =>
+                                                setExpandedLedgerItemKey(
+                                                  isItemExpanded
+                                                    ? null
+                                                    : itemKey,
+                                                )
+                                              }
+                                              aria-expanded={isItemExpanded}
+                                              className="w-full flex justify-between items-center gap-3 px-3 py-2 text-left active:bg-stone-100/60 transition-colors"
                                             >
-                                              <div className="px-3.5 pt-3 pb-2.5 bg-gradient-to-b from-stone-50 to-transparent border-b border-dashed border-stone-200">
-                                                {item.expenseDate && (
-                                                  <div className="text-[9px] font-black text-stone-400 uppercase tracking-widest mb-0.5">
-                                                    {formatDisplayDateTime(
-                                                      item.expenseDate,
-                                                    )}
-                                                  </div>
-                                                )}
-                                                <div className="flex justify-between items-baseline gap-3 mb-1.5">
-                                                  <span className="text-sm font-black text-stone-800 truncate">
-                                                    {item.title}
-                                                  </span>
-                                                  {item.totalExpense && (
-                                                    <span className="text-[10px] font-bold text-stone-400 shrink-0 tabular-nums">
-                                                      bill {currencySymbol}
-                                                      {formatMoney(
-                                                        item.totalExpense,
-                                                        currencyCode,
-                                                      )}
-                                                    </span>
+                                              <span className="flex-1 leading-tight text-[13px] truncate text-stone-700 font-bold">
+                                                {item.title}
+                                              </span>
+                                              <div className="flex items-center gap-1.5 shrink-0">
+                                                <span className="font-black tabular-nums text-[13px] text-stone-800">
+                                                  {currencySymbol}
+                                                  {formatMoney(
+                                                    item.amount,
+                                                    currencyCode,
                                                   )}
-                                                </div>
-                                                {item.paidByList &&
-                                                  item.paidByList.length >
-                                                    0 && (
-                                                    <div className="text-[10px] font-bold text-stone-500 flex items-center gap-1 flex-wrap">
-                                                      <span className="text-stone-400">
-                                                        paid by
-                                                      </span>
-                                                      {item.paidByList.map(
-                                                        (p, i) => (
-                                                          <span
-                                                            key={i}
-                                                            className="flex items-center gap-1"
-                                                          >
-                                                            <span className="text-stone-700 font-black">
-                                                              {p.name}
-                                                            </span>
-                                                            {item.paidByList!
-                                                              .length > 1 && (
-                                                              <span className="text-stone-400 tabular-nums">
-                                                                (
-                                                                {currencySymbol}
-                                                                {formatMoney(
-                                                                  p.amount,
-                                                                  currencyCode,
-                                                                )}
-                                                                )
-                                                              </span>
-                                                            )}
-                                                            {i <
-                                                              item.paidByList!
-                                                                .length -
-                                                                1 && (
-                                                              <span className="text-stone-300">
-                                                                +
-                                                              </span>
-                                                            )}
-                                                          </span>
-                                                        ),
-                                                      )}
-                                                      {item.memberCount && (
-                                                        <>
-                                                          <span
-                                                            className="text-stone-300"
-                                                            aria-hidden="true"
-                                                          >
-                                                            ·
-                                                          </span>
-                                                          <span className="text-stone-400">
-                                                            split{" "}
-                                                            {item.memberCount}{" "}
-                                                            ways
-                                                          </span>
-                                                        </>
-                                                      )}
-                                                    </div>
-                                                  )}
+                                                </span>
+                                                <svg
+                                                  className={`w-3 h-3 text-stone-300 transition-transform duration-200 ${isItemExpanded ? "rotate-180" : ""}`}
+                                                  fill="none"
+                                                  stroke="currentColor"
+                                                  strokeWidth={3}
+                                                  viewBox="0 0 24 24"
+                                                  aria-hidden="true"
+                                                >
+                                                  <path
+                                                    strokeLinecap="round"
+                                                    strokeLinejoin="round"
+                                                    d="M19 9l-7 7-7-7"
+                                                  />
+                                                </svg>
                                               </div>
-
-                                              <div className="px-3.5 py-2.5">
-                                                {hasItems && (
-                                                  <div className="space-y-1 mb-2">
-                                                    {itemRows.map(
-                                                      (row, rIdx) => (
-                                                        <div
-                                                          key={`row-${rIdx}`}
-                                                          className="flex items-center justify-between gap-2 text-xs"
-                                                        >
-                                                          <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                                            <span className="text-stone-700 font-bold truncate">
-                                                              {row.name}
-                                                            </span>
-                                                            {row.share && (
-                                                              <span className="text-[9px] font-black text-stone-500 bg-stone-100 border border-stone-200/60 px-1.5 py-0.5 rounded-md shrink-0 tabular-nums leading-none">
-                                                                {row.share}
-                                                              </span>
-                                                            )}
-                                                          </div>
-                                                          <span className="text-stone-700 font-bold shrink-0 tabular-nums">
-                                                            {currencySymbol}
-                                                            {formatMoney(
-                                                              row.price,
-                                                              currencyCode,
-                                                            )}
-                                                          </span>
-                                                        </div>
-                                                      ),
-                                                    )}
-                                                  </div>
-                                                )}
-
-                                                {hasItems && hasCallouts && (
-                                                  <div className="flex justify-between items-center pt-2 mt-1 border-t border-dashed border-stone-200 text-[11px] font-black text-stone-500 uppercase tracking-wider">
-                                                    <span>subtotal</span>
-                                                    <span className="tabular-nums">
-                                                      {currencySymbol}
-                                                      {formatMoney(
-                                                        subtotal,
-                                                        currencyCode,
-                                                      )}
-                                                    </span>
-                                                  </div>
-                                                )}
-
-                                                {hasCallouts && (
-                                                  <div className="space-y-1 mt-1.5">
-                                                    {callouts.map((c, cIdx) => {
-                                                      const isPositive =
-                                                        c.amount > 0;
-                                                      const palette =
-                                                        c.kind === "discount"
-                                                          ? "text-emerald-600"
-                                                          : c.kind === "tax"
-                                                            ? "text-amber-600"
-                                                            : "text-stone-600";
-                                                      return (
-                                                        <div
-                                                          key={`callout-${cIdx}`}
-                                                          className={`flex justify-between items-center text-[11px] font-bold ${palette}`}
-                                                        >
-                                                          <span className="flex items-center gap-1.5">
-                                                            <span aria-hidden="true">
-                                                              +
-                                                            </span>
-                                                            <span>
-                                                              {c.label}
-                                                            </span>
-                                                          </span>
-                                                          <span className="font-black tabular-nums">
-                                                            {isPositive
-                                                              ? "+"
-                                                              : "−"}
-                                                            {currencySymbol}
-                                                            {formatMoney(
-                                                              Math.abs(
-                                                                c.amount,
-                                                              ),
-                                                              currencyCode,
-                                                            )}
-                                                          </span>
-                                                        </div>
-                                                      );
-                                                    })}
-                                                  </div>
-                                                )}
-
-                                                <div className="flex justify-between items-center pt-2.5 mt-2.5 border-t-2 border-double border-stone-300">
-                                                  <span className="text-[11px] font-black text-stone-700 uppercase tracking-widest">
-                                                    your total
-                                                  </span>
-                                                  <span className="text-sm font-black text-stone-900 tabular-nums">
-                                                    {currencySymbol}
-                                                    {formatMoney(
-                                                      item.amount,
-                                                      currencyCode,
-                                                    )}
-                                                  </span>
-                                                </div>
+                                            </button>
+                                            {isItemExpanded && (
+                                              <div className="px-3 pb-3 pt-1 animate-in slide-in-from-top-1 duration-150">
+                                                {renderOwedDetail(item)}
                                               </div>
-                                            </div>
-                                          );
-                                        })}
-                                      </div>
-                                    )}
+                                            )}
+                                          </div>
+                                        );
+                                      })}
+                                    </div>
                                   </div>
                                 )}
 
-                                {/* settled — collapsed by default */}
+                                {/* SETTLED */}
                                 {settledOwedItems.length > 0 && (
                                   <div>
                                     {!showSettled ? (
@@ -2258,60 +2286,63 @@ export default function TripDetail() {
                                             hide
                                           </button>
                                         </div>
-                                        {!showDetailed ? (
-                                          <div className="bg-white border border-stone-200/70 rounded-xl divide-y divide-stone-100 overflow-hidden opacity-60">
-                                            {settledOwedItems.map(
-                                              (item, idx) => (
-                                                <div
-                                                  key={`settled-${idx}`}
-                                                  className="flex justify-between items-center gap-3 px-3.5 py-2.5"
+                                        <div className="bg-white border border-stone-200/70 rounded-xl overflow-hidden opacity-70">
+                                          {settledOwedItems.map((item, idx) => {
+                                            const itemKey = `${member.id}:settled:${idx}`;
+                                            const isItemExpanded =
+                                              expandedLedgerItemKey === itemKey;
+                                            return (
+                                              <div
+                                                key={`settled-${idx}`}
+                                                className={`${idx > 0 ? "border-t border-stone-100" : ""} ${isItemExpanded ? "bg-stone-50/40" : ""}`}
+                                              >
+                                                <button
+                                                  onClick={() =>
+                                                    setExpandedLedgerItemKey(
+                                                      isItemExpanded
+                                                        ? null
+                                                        : itemKey,
+                                                    )
+                                                  }
+                                                  aria-expanded={isItemExpanded}
+                                                  className="w-full flex justify-between items-center gap-3 px-3 py-2 text-left active:bg-stone-100/60 transition-colors"
                                                 >
-                                                  <span className="flex-1 leading-snug text-sm truncate text-stone-600 font-bold line-through decoration-stone-400">
+                                                  <span className="flex-1 leading-tight text-[13px] truncate text-stone-600 font-bold line-through decoration-stone-400">
                                                     {item.title}
                                                   </span>
-                                                  <span className="font-black shrink-0 text-stone-500 line-through tabular-nums text-sm">
-                                                    {currencySymbol}
-                                                    {formatMoney(
-                                                      item.amount,
-                                                      currencyCode,
-                                                    )}
-                                                  </span>
-                                                </div>
-                                              ),
-                                            )}
-                                          </div>
-                                        ) : (
-                                          <div className="space-y-1.5 opacity-60">
-                                            {settledOwedItems.map(
-                                              (item, idx) => (
-                                                <div
-                                                  key={`settled-${idx}`}
-                                                  className="bg-white border border-stone-200/70 rounded-xl px-3.5 py-2.5 flex justify-between items-center gap-3"
-                                                >
-                                                  <div className="flex flex-col min-w-0 flex-1">
-                                                    {item.expenseDate && (
-                                                      <span className="text-[9px] font-black text-stone-400 uppercase tracking-widest mb-0.5">
-                                                        {formatDisplayDateTime(
-                                                          item.expenseDate,
-                                                        )}
-                                                      </span>
-                                                    )}
-                                                    <span className="text-sm leading-tight truncate text-stone-600 font-bold line-through decoration-stone-400">
-                                                      {item.title}
+                                                  <div className="flex items-center gap-1.5 shrink-0">
+                                                    <span className="font-black tabular-nums text-[13px] text-stone-500 line-through">
+                                                      {currencySymbol}
+                                                      {formatMoney(
+                                                        item.amount,
+                                                        currencyCode,
+                                                      )}
                                                     </span>
+                                                    <svg
+                                                      className={`w-3 h-3 text-stone-300 transition-transform duration-200 ${isItemExpanded ? "rotate-180" : ""}`}
+                                                      fill="none"
+                                                      stroke="currentColor"
+                                                      strokeWidth={3}
+                                                      viewBox="0 0 24 24"
+                                                      aria-hidden="true"
+                                                    >
+                                                      <path
+                                                        strokeLinecap="round"
+                                                        strokeLinejoin="round"
+                                                        d="M19 9l-7 7-7-7"
+                                                      />
+                                                    </svg>
                                                   </div>
-                                                  <span className="font-black shrink-0 text-stone-500 line-through tabular-nums text-sm">
-                                                    {currencySymbol}
-                                                    {formatMoney(
-                                                      item.amount,
-                                                      currencyCode,
-                                                    )}
-                                                  </span>
-                                                </div>
-                                              ),
-                                            )}
-                                          </div>
-                                        )}
+                                                </button>
+                                                {isItemExpanded && (
+                                                  <div className="px-3 pb-3 pt-1 animate-in slide-in-from-top-1 duration-150 not-prose">
+                                                    {renderOwedDetail(item)}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
                                       </div>
                                     )}
                                   </div>

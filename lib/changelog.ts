@@ -2,6 +2,19 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
+    version: "2.4.6",
+    date: "may 7, 2026",
+    title: "ledger details, everywhere 🔍",
+    badge: "patch",
+    badgeColor: "bg-teal-100 text-teal-700 border-teal-200",
+    features: [
+      "refined detailed ledger to show full receipt breakdown for settled items, no more disappearing details once a debt is paid.",
+      "refined ledger interaction: tap any item to expand its breakdown, replacing the all-or-nothing summary toggle.",
+      "refined share fractions to use a unified pill style across detailed ledger, expense card breakdowns, and the receipt page.",
+      "fixed duplicate names appearing in receipt item assignments when one person had multiple shares.",
+    ],
+  },
+  {
     version: "2.4.5",
     date: "may 7, 2026",
     title: "tap to dismiss 👆",

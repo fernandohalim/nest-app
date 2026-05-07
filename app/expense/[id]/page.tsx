@@ -454,7 +454,7 @@ export default function UnifiedExpensePage() {
                       {item.assignedTo.length > 0 && (
                         <div className="text-[11px] font-bold text-stone-400 leading-snug">
                           item by:{" "}
-                          {item.assignedTo
+                          {Array.from(new Set(item.assignedTo))
                             .map((id) => getMemberName(id))
                             .join(", ")}
                         </div>
@@ -636,15 +636,17 @@ export default function UnifiedExpensePage() {
                         {memberItems.map((item, idx) => (
                           <div
                             key={idx}
-                            className="flex justify-between items-start text-[11px] text-stone-500"
+                            className="flex justify-between items-center text-[11px] text-stone-500 gap-2"
                           >
-                            <span className="font-bold truncate pr-2 leading-tight">
-                              ↳ {item.name}{" "}
-                              {item.totalShares > 1
-                                ? `(${item.count}/${item.totalShares})`
-                                : ""}
+                            <span className="font-bold leading-tight flex items-center gap-1.5 min-w-0 flex-1">
+                              <span className="truncate">↳ {item.name}</span>
+                              {item.totalShares > 1 && (
+                                <span className="text-[9px] font-black text-stone-500 bg-stone-100 border border-stone-200/60 px-1.5 py-0.5 rounded-md shrink-0 tabular-nums leading-none">
+                                  {item.count}/{item.totalShares}
+                                </span>
+                              )}
                             </span>
-                            <span className="font-bold shrink-0">
+                            <span className="font-bold shrink-0 tabular-nums">
                               {currencySymbol}
                               {formatMoney(item.share, currencyCode)}
                             </span>
