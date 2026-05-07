@@ -79,8 +79,6 @@ export default function ProfileMenu({ isOpen, onClose }: ProfileModalProps) {
       <div className="fixed inset-0" onClick={onClose}></div>
 
       <div className="bg-[#fdfbf7] w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500 overflow-hidden relative pb-8 sm:pb-0">
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-stone-300 rounded-full sm:hidden z-20"></div>
-
         <div className="px-6 py-5 pt-8 sm:pt-6 border-b-2 border-stone-100 flex justify-between items-center bg-white z-10 shadow-sm">
           <h2 className="text-2xl font-black text-stone-800">
             your profile 👤

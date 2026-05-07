@@ -2,6 +2,16 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
+    version: "2.4.5",
+    date: "may 7, 2026",
+    title: "tap to dismiss 👆",
+    badge: "patch",
+    badgeColor: "bg-teal-100 text-teal-700 border-teal-200",
+    features: [
+      "fixed 'how nest works' info modal so tapping the backdrop dismisses it, matching the rest of the app.",
+    ],
+  },
+  {
     version: "2.4.4",
     date: "may 7, 2026",
     title: "summary mode 📋",

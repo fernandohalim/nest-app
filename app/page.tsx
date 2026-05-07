@@ -821,8 +821,12 @@ function HomeContent() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="how-nest-works-title"
+            onClick={() => setIsInfoModalOpen(false)}
           >
-            <div className="bg-[#fdfbf7] w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500 overflow-hidden relative pb-8 sm:pb-0">
+            <div
+              className="bg-[#fdfbf7] w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500 overflow-hidden relative pb-8 sm:pb-0"
+              onClick={(e) => e.stopPropagation()}
+            >
               <div className="px-6 py-5 pt-8 sm:pt-6 border-b-2 border-stone-100 flex justify-between items-center bg-white z-10 shadow-sm">
                 <h2
                   id="how-nest-works-title"
