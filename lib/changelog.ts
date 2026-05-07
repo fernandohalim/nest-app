@@ -2,7 +2,18 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
-  version: "2.4.3",
+    version: "2.4.4",
+    date: "may 7, 2026",
+    title: "summary mode 📋",
+    badge: "patch",
+    badgeColor: "bg-teal-100 text-teal-700 border-teal-200",
+    features: [
+      "added 'summary' and 'full receipt' toggle inside the detailed ledger, switch per-member to scan totals or audit every line.",
+      "refined compact ledger rows with tighter padding and font for at-a-glance scanning.",
+    ],
+  },
+  {
+    version: "2.4.3",
     date: "may 4, 2026",
     title: "receipt-grade ledger 🧾",
     badge: "patch",
@@ -19,10 +30,7 @@ export const releases: Release[] = [
     title: "add not found 🛡️",
     badge: "patch",
     badgeColor: "bg-teal-100 text-teal-700 border-teal-200",
-    features: [
-      "added not found page.",
-      "refined opengraph image.",
-    ],
+    features: ["added not found page.", "refined opengraph image."],
   },
   {
     version: "2.4.1",
@@ -40,7 +48,7 @@ export const releases: Release[] = [
     date: "apr 30, 2026",
     title: "identities & pwa polish 🐣",
     badge: "feature",
-      badgeColor: "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200",
+    badgeColor: "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200",
     features: [
       "added a custom 1200x630 opengraph image for dynamic spatial ui previews on social share.",
       "added native apple-touch-icon support directly in the app directory for perfectly crisp ios home screen icons.",

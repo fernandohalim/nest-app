@@ -125,8 +125,10 @@ export default function TripDetail() {
   const [expandedLedgerMemberId, setExpandedLedgerMemberId] = useState<
     string | null
   >(null);
-  const [expandedOwedKey, setExpandedOwedKey] = useState<string | null>(null);
   const [settledRevealed, setSettledRevealed] = useState<Set<string>>(
+    new Set(),
+  );
+  const [detailedRevealed, setDetailedRevealed] = useState<Set<string>>(
     new Set(),
   );
   const [isLinked, setIsLinked] = useState(false);
@@ -1791,305 +1793,206 @@ export default function TripDetail() {
                         </button>
 
                         {/* expanded body */}
-                        {isExpanded && (
-                          <div className="border-t border-stone-100 bg-stone-50/40 px-3 py-5 space-y-5 animate-in fade-in slide-in-from-top-1 duration-200">
-                            {/* PAID UPFRONT */}
-                            {details.paidItems.length > 0 && (
-                              <div>
-                                <div className="flex items-baseline justify-between mb-2.5 px-1">
-                                  <div className="flex items-baseline gap-2">
-                                    <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">
-                                      💳 paid upfront
-                                    </span>
-                                    <span className="text-[10px] font-black text-stone-300 tabular-nums">
-                                      {details.paidItems.length}
-                                    </span>
-                                  </div>
-                                  <span className="text-[10px] font-black text-emerald-700 tabular-nums">
-                                    {currencySymbol}
-                                    {formatMoney(
-                                      details.totalPaid,
-                                      currencyCode,
-                                    )}
-                                  </span>
+                        {isExpanded &&
+                          (() => {
+                            const showDetailed = detailedRevealed.has(
+                              member.id,
+                            );
+
+                            return (
+                              <div className="border-t border-stone-100 bg-stone-50/40 px-3 py-5 space-y-5 animate-in fade-in slide-in-from-top-1 duration-200">
+                                {/* view toggle */}
+                                <div className="flex items-center bg-stone-100 rounded-xl p-1 gap-1">
+                                  <button
+                                    onClick={() =>
+                                      setDetailedRevealed((prev) => {
+                                        const next = new Set(prev);
+                                        next.delete(member.id);
+                                        return next;
+                                      })
+                                    }
+                                    className={`flex-1 text-[11px] font-black uppercase tracking-widest py-2 rounded-lg transition-all ${!showDetailed ? "bg-white text-stone-800 shadow-sm" : "text-stone-500 hover:text-stone-700"}`}
+                                  >
+                                    summary
+                                  </button>
+                                  <button
+                                    onClick={() =>
+                                      setDetailedRevealed((prev) => {
+                                        const next = new Set(prev);
+                                        next.add(member.id);
+                                        return next;
+                                      })
+                                    }
+                                    className={`flex-1 text-[11px] font-black uppercase tracking-widest py-2 rounded-lg transition-all ${showDetailed ? "bg-white text-stone-800 shadow-sm" : "text-stone-500 hover:text-stone-700"}`}
+                                  >
+                                    full receipt
+                                  </button>
                                 </div>
-                                <div className="space-y-2">
-                                  {details.paidItems.map((item, idx) => (
-                                    <div
-                                      key={`paid-${idx}`}
-                                      className={`bg-white border border-stone-200/70 rounded-xl px-3.5 py-3 ${item.isNegative ? "border-dashed" : ""}`}
-                                    >
-                                      <div className="flex items-start justify-between gap-3 mb-1">
-                                        <div className="flex flex-col min-w-0 flex-1">
-                                          {item.expenseDate && (
-                                            <span className="text-[9px] font-black text-stone-400 uppercase tracking-widest mb-0.5">
-                                              {formatDisplayDateTime(
-                                                item.expenseDate,
-                                              )}
-                                            </span>
-                                          )}
-                                          <span
-                                            className={`text-sm leading-tight truncate ${item.isNegative ? "text-stone-500 italic font-semibold" : "text-stone-800 font-black"}`}
-                                          >
-                                            {item.title}
-                                          </span>
-                                        </div>
-                                        <span
-                                          className={`font-black shrink-0 tabular-nums text-sm ${item.isNegative ? "text-rose-500" : "text-emerald-700"}`}
-                                        >
-                                          {item.isNegative ? "−" : "+"}
-                                          {currencySymbol}
-                                          {formatMoney(
-                                            Math.abs(item.amount),
-                                            currencyCode,
-                                          )}
+
+                                {/* PAID UPFRONT */}
+                                {details.paidItems.length > 0 && (
+                                  <div>
+                                    <div className="flex items-baseline justify-between mb-2.5 px-1">
+                                      <div className="flex items-baseline gap-2">
+                                        <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">
+                                          💳 paid upfront
+                                        </span>
+                                        <span className="text-[10px] font-black text-stone-300 tabular-nums">
+                                          {details.paidItems.length}
                                         </span>
                                       </div>
-                                      {!item.isNegative &&
-                                        item.totalExpense && (
-                                          <div className="flex items-center gap-1.5 text-[10px] font-bold text-stone-400 mt-1 flex-wrap">
-                                            <span>
-                                              your share of{" "}
-                                              <span className="text-stone-600 tabular-nums">
-                                                {currencySymbol}
-                                                {formatMoney(
-                                                  item.totalExpense,
-                                                  currencyCode,
-                                                )}
-                                              </span>
-                                            </span>
-                                            {item.totalExpense > 0 && (
-                                              <>
-                                                <span aria-hidden="true">
-                                                  ·
-                                                </span>
-                                                <span className="tabular-nums">
-                                                  {Math.round(
-                                                    (item.amount /
-                                                      item.totalExpense) *
-                                                      100,
-                                                  )}
-                                                  %
-                                                </span>
-                                              </>
-                                            )}
-                                            {item.payerCount &&
-                                              item.payerCount > 1 && (
-                                                <>
-                                                  <span aria-hidden="true">
-                                                    ·
-                                                  </span>
-                                                  <span>
-                                                    split with{" "}
-                                                    {item.payerCount - 1} other
-                                                  </span>
-                                                </>
-                                              )}
-                                          </div>
+                                      <span className="text-[10px] font-black text-emerald-700 tabular-nums">
+                                        {currencySymbol}
+                                        {formatMoney(
+                                          details.totalPaid,
+                                          currencyCode,
                                         )}
+                                      </span>
                                     </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
 
-                            {/* CONSUMED — receipt cards */}
-                            {activeOwedItems.length > 0 && (
-                              <div>
-                                <div className="flex items-baseline justify-between mb-2.5 px-1">
-                                  <div className="flex items-baseline gap-2">
-                                    <span className="text-[10px] font-black text-stone-700 uppercase tracking-widest">
-                                      🍕 consumed
-                                    </span>
-                                    <span className="text-[10px] font-black text-stone-300 tabular-nums">
-                                      {activeOwedItems.length}
-                                    </span>
-                                  </div>
-                                  <span className="text-[10px] font-black text-stone-700 tabular-nums">
-                                    {currencySymbol}
-                                    {formatMoney(
-                                      details.totalOwed,
-                                      currencyCode,
-                                    )}
-                                  </span>
-                                </div>
-                                <div className="space-y-3">
-                                  {activeOwedItems.map((item, idx) => {
-                                    const itemRows = item.itemRows || [];
-                                    const callouts = item.callouts || [];
-                                    const hasItems = itemRows.length > 0;
-                                    const hasCallouts = callouts.length > 0;
-                                    const subtotal =
-                                      item.baseAmount ??
-                                      itemRows.reduce((s, r) => s + r.price, 0);
-
-                                    return (
-                                      <div
-                                        key={`owed-${idx}`}
-                                        className="bg-white border border-stone-200/70 rounded-xl overflow-hidden"
-                                      >
-                                        {/* receipt header */}
-                                        <div className="px-3.5 pt-3 pb-2.5 bg-gradient-to-b from-stone-50 to-transparent border-b border-dashed border-stone-200">
-                                          {item.expenseDate && (
-                                            <div className="text-[9px] font-black text-stone-400 uppercase tracking-widest mb-0.5">
-                                              {formatDisplayDateTime(
-                                                item.expenseDate,
-                                              )}
-                                            </div>
-                                          )}
-                                          <div className="flex justify-between items-baseline gap-3 mb-1.5">
-                                            <span className="text-sm font-black text-stone-800 truncate">
+                                    {!showDetailed ? (
+                                      // compact: title + amount only, divided list
+                                      <div className="bg-white border border-stone-200/70 rounded-xl divide-y divide-stone-100 overflow-hidden">
+                                        {details.paidItems.map((item, idx) => (
+                                          <div
+                                            key={`paid-${idx}`}
+                                            className="flex justify-between items-center gap-3 px-3.5 py-2.5"
+                                          >
+                                            <span
+                                              className={`flex-1 leading-snug text-sm truncate ${item.isNegative ? "text-stone-400 italic font-semibold" : "text-stone-700 font-bold"}`}
+                                            >
                                               {item.title}
                                             </span>
-                                            {item.totalExpense && (
-                                              <span className="text-[10px] font-bold text-stone-400 shrink-0 tabular-nums">
-                                                bill {currencySymbol}
-                                                {formatMoney(
-                                                  item.totalExpense,
-                                                  currencyCode,
-                                                )}
-                                              </span>
-                                            )}
+                                            <span
+                                              className={`font-black shrink-0 tabular-nums text-sm ${item.isNegative ? "text-rose-500" : "text-emerald-700"}`}
+                                            >
+                                              {item.isNegative ? "−" : "+"}
+                                              {currencySymbol}
+                                              {formatMoney(
+                                                Math.abs(item.amount),
+                                                currencyCode,
+                                              )}
+                                            </span>
                                           </div>
-                                          {item.paidByList &&
-                                            item.paidByList.length > 0 && (
-                                              <div className="text-[10px] font-bold text-stone-500 flex items-center gap-1 flex-wrap">
-                                                <span className="text-stone-400">
-                                                  paid by
-                                                </span>
-                                                {item.paidByList.map((p, i) => (
-                                                  <span
-                                                    key={i}
-                                                    className="flex items-center gap-1"
-                                                  >
-                                                    <span className="text-stone-700 font-black">
-                                                      {p.name}
-                                                    </span>
-                                                    {item.paidByList!.length >
-                                                      1 && (
-                                                      <span className="text-stone-400 tabular-nums">
-                                                        ({currencySymbol}
-                                                        {formatMoney(
-                                                          p.amount,
-                                                          currencyCode,
-                                                        )}
-                                                        )
-                                                      </span>
-                                                    )}
-                                                    {i <
-                                                      item.paidByList!.length -
-                                                        1 && (
-                                                      <span className="text-stone-300">
-                                                        +
-                                                      </span>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      // detailed: full cards with date + share %
+                                      <div className="space-y-2">
+                                        {details.paidItems.map((item, idx) => (
+                                          <div
+                                            key={`paid-${idx}`}
+                                            className={`bg-white border border-stone-200/70 rounded-xl px-3.5 py-3 ${item.isNegative ? "border-dashed" : ""}`}
+                                          >
+                                            <div className="flex items-start justify-between gap-3 mb-1">
+                                              <div className="flex flex-col min-w-0 flex-1">
+                                                {item.expenseDate && (
+                                                  <span className="text-[9px] font-black text-stone-400 uppercase tracking-widest mb-0.5">
+                                                    {formatDisplayDateTime(
+                                                      item.expenseDate,
                                                     )}
                                                   </span>
-                                                ))}
-                                                {item.memberCount && (
-                                                  <>
-                                                    <span
-                                                      className="text-stone-300"
-                                                      aria-hidden="true"
-                                                    >
-                                                      ·
-                                                    </span>
-                                                    <span className="text-stone-400">
-                                                      split {item.memberCount}{" "}
-                                                      ways
-                                                    </span>
-                                                  </>
                                                 )}
-                                              </div>
-                                            )}
-                                        </div>
-
-                                        {/* receipt body */}
-                                        <div className="px-3.5 py-2.5">
-                                          {hasItems && (
-                                            <div className="space-y-1 mb-2">
-                                              {itemRows.map((row, rIdx) => (
-                                                <div
-                                                  key={`row-${rIdx}`}
-                                                  className="flex items-center justify-between gap-2 text-xs"
+                                                <span
+                                                  className={`text-sm leading-tight truncate ${item.isNegative ? "text-stone-500 italic font-semibold" : "text-stone-800 font-black"}`}
                                                 >
-                                                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                                                    <span className="text-stone-700 font-bold truncate">
-                                                      {row.name}
-                                                    </span>
-                                                    {row.share && (
-                                                      <span className="text-[9px] font-black text-stone-500 bg-stone-100 border border-stone-200/60 px-1.5 py-0.5 rounded-md shrink-0 tabular-nums leading-none">
-                                                        {row.share}
-                                                      </span>
-                                                    )}
-                                                  </div>
-                                                  <span className="text-stone-700 font-bold shrink-0 tabular-nums">
-                                                    {currencySymbol}
-                                                    {formatMoney(
-                                                      row.price,
-                                                      currencyCode,
-                                                    )}
-                                                  </span>
-                                                </div>
-                                              ))}
-                                            </div>
-                                          )}
-
-                                          {/* subtotal line — only if both items and callouts exist */}
-                                          {hasItems && hasCallouts && (
-                                            <div className="flex justify-between items-center pt-2 mt-1 border-t border-dashed border-stone-200 text-[11px] font-black text-stone-500 uppercase tracking-wider">
-                                              <span>subtotal</span>
-                                              <span className="tabular-nums">
+                                                  {item.title}
+                                                </span>
+                                              </div>
+                                              <span
+                                                className={`font-black shrink-0 tabular-nums text-sm ${item.isNegative ? "text-rose-500" : "text-emerald-700"}`}
+                                              >
+                                                {item.isNegative ? "−" : "+"}
                                                 {currencySymbol}
                                                 {formatMoney(
-                                                  subtotal,
+                                                  Math.abs(item.amount),
                                                   currencyCode,
                                                 )}
                                               </span>
                                             </div>
-                                          )}
-
-                                          {/* callouts (tax/tip/discount/adjustment) */}
-                                          {hasCallouts && (
-                                            <div className="space-y-1 mt-1.5">
-                                              {callouts.map((c, cIdx) => {
-                                                const isPositive = c.amount > 0;
-                                                const palette =
-                                                  c.kind === "discount"
-                                                    ? "text-emerald-600"
-                                                    : c.kind === "tax"
-                                                      ? "text-amber-600"
-                                                      : "text-stone-600";
-                                                return (
-                                                  <div
-                                                    key={`callout-${cIdx}`}
-                                                    className={`flex justify-between items-center text-[11px] font-bold ${palette}`}
-                                                  >
-                                                    <span className="flex items-center gap-1.5">
-                                                      <span aria-hidden="true">
-                                                        +
-                                                      </span>
-                                                      <span>{c.label}</span>
-                                                    </span>
-                                                    <span className="font-black tabular-nums">
-                                                      {isPositive ? "+" : "−"}
+                                            {!item.isNegative &&
+                                              item.totalExpense && (
+                                                <div className="flex items-center gap-1.5 text-[10px] font-bold text-stone-400 mt-1 flex-wrap">
+                                                  <span>
+                                                    your share of{" "}
+                                                    <span className="text-stone-600 tabular-nums">
                                                       {currencySymbol}
                                                       {formatMoney(
-                                                        Math.abs(c.amount),
+                                                        item.totalExpense,
                                                         currencyCode,
                                                       )}
                                                     </span>
-                                                  </div>
-                                                );
-                                              })}
-                                            </div>
-                                          )}
+                                                  </span>
+                                                  {item.totalExpense > 0 && (
+                                                    <>
+                                                      <span aria-hidden="true">
+                                                        ·
+                                                      </span>
+                                                      <span className="tabular-nums">
+                                                        {Math.round(
+                                                          (item.amount /
+                                                            item.totalExpense) *
+                                                            100,
+                                                        )}
+                                                        %
+                                                      </span>
+                                                    </>
+                                                  )}
+                                                  {item.payerCount &&
+                                                    item.payerCount > 1 && (
+                                                      <>
+                                                        <span aria-hidden="true">
+                                                          ·
+                                                        </span>
+                                                        <span>
+                                                          split with{" "}
+                                                          {item.payerCount - 1}{" "}
+                                                          other
+                                                        </span>
+                                                      </>
+                                                    )}
+                                                </div>
+                                              )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
 
-                                          {/* total line */}
-                                          <div className="flex justify-between items-center pt-2.5 mt-2.5 border-t-2 border-double border-stone-300">
-                                            <span className="text-[11px] font-black text-stone-700 uppercase tracking-widest">
-                                              your total
+                                {/* CONSUMED */}
+                                {activeOwedItems.length > 0 && (
+                                  <div>
+                                    <div className="flex items-baseline justify-between mb-2.5 px-1">
+                                      <div className="flex items-baseline gap-2">
+                                        <span className="text-[10px] font-black text-stone-700 uppercase tracking-widest">
+                                          🍕 consumed
+                                        </span>
+                                        <span className="text-[10px] font-black text-stone-300 tabular-nums">
+                                          {activeOwedItems.length}
+                                        </span>
+                                      </div>
+                                      <span className="text-[10px] font-black text-stone-700 tabular-nums">
+                                        {currencySymbol}
+                                        {formatMoney(
+                                          details.totalOwed,
+                                          currencyCode,
+                                        )}
+                                      </span>
+                                    </div>
+
+                                    {!showDetailed ? (
+                                      // compact: title + amount only
+                                      <div className="bg-white border border-stone-200/70 rounded-xl divide-y divide-stone-100 overflow-hidden">
+                                        {activeOwedItems.map((item, idx) => (
+                                          <div
+                                            key={`owed-${idx}`}
+                                            className="flex justify-between items-center gap-3 px-3.5 py-2.5"
+                                          >
+                                            <span className="flex-1 leading-snug text-sm truncate text-stone-700 font-bold">
+                                              {item.title}
                                             </span>
-                                            <span className="text-sm font-black text-stone-900 tabular-nums">
+                                            <span className="font-black shrink-0 tabular-nums text-sm text-stone-800">
                                               {currencySymbol}
                                               {formatMoney(
                                                 item.amount,
@@ -2097,93 +2000,325 @@ export default function TripDetail() {
                                               )}
                                             </span>
                                           </div>
-                                        </div>
+                                        ))}
                                       </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            )}
+                                    ) : (
+                                      // detailed: receipt cards
+                                      <div className="space-y-3">
+                                        {activeOwedItems.map((item, idx) => {
+                                          const itemRows = item.itemRows || [];
+                                          const callouts = item.callouts || [];
+                                          const hasItems = itemRows.length > 0;
+                                          const hasCallouts =
+                                            callouts.length > 0;
+                                          const subtotal =
+                                            item.baseAmount ??
+                                            itemRows.reduce(
+                                              (s, r) => s + r.price,
+                                              0,
+                                            );
 
-                            {/* settled — collapsed by default */}
-                            {settledOwedItems.length > 0 && (
-                              <div>
-                                {!showSettled ? (
-                                  <button
-                                    onClick={() =>
-                                      setSettledRevealed((prev) => {
-                                        const next = new Set(prev);
-                                        next.add(member.id);
-                                        return next;
-                                      })
-                                    }
-                                    className="w-full flex items-center justify-between gap-2 text-[10px] font-black text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors py-2.5 px-3 rounded-xl uppercase tracking-widest border border-dashed border-stone-200"
-                                  >
-                                    <span className="flex items-center gap-2">
-                                      <span aria-hidden="true">✓</span>
-                                      {settledOwedItems.length} settled item
-                                      {settledOwedItems.length !== 1 ? "s" : ""}
-                                    </span>
-                                    <span aria-hidden="true">show →</span>
-                                  </button>
-                                ) : (
-                                  <div>
-                                    <div className="flex justify-between items-baseline mb-2.5 px-1">
-                                      <div className="flex items-baseline gap-2">
-                                        <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">
-                                          ✓ settled
-                                        </span>
-                                        <span className="text-[10px] font-black text-stone-300 tabular-nums">
-                                          {settledOwedItems.length}
-                                        </span>
+                                          return (
+                                            <div
+                                              key={`owed-${idx}`}
+                                              className="bg-white border border-stone-200/70 rounded-xl overflow-hidden"
+                                            >
+                                              <div className="px-3.5 pt-3 pb-2.5 bg-gradient-to-b from-stone-50 to-transparent border-b border-dashed border-stone-200">
+                                                {item.expenseDate && (
+                                                  <div className="text-[9px] font-black text-stone-400 uppercase tracking-widest mb-0.5">
+                                                    {formatDisplayDateTime(
+                                                      item.expenseDate,
+                                                    )}
+                                                  </div>
+                                                )}
+                                                <div className="flex justify-between items-baseline gap-3 mb-1.5">
+                                                  <span className="text-sm font-black text-stone-800 truncate">
+                                                    {item.title}
+                                                  </span>
+                                                  {item.totalExpense && (
+                                                    <span className="text-[10px] font-bold text-stone-400 shrink-0 tabular-nums">
+                                                      bill {currencySymbol}
+                                                      {formatMoney(
+                                                        item.totalExpense,
+                                                        currencyCode,
+                                                      )}
+                                                    </span>
+                                                  )}
+                                                </div>
+                                                {item.paidByList &&
+                                                  item.paidByList.length >
+                                                    0 && (
+                                                    <div className="text-[10px] font-bold text-stone-500 flex items-center gap-1 flex-wrap">
+                                                      <span className="text-stone-400">
+                                                        paid by
+                                                      </span>
+                                                      {item.paidByList.map(
+                                                        (p, i) => (
+                                                          <span
+                                                            key={i}
+                                                            className="flex items-center gap-1"
+                                                          >
+                                                            <span className="text-stone-700 font-black">
+                                                              {p.name}
+                                                            </span>
+                                                            {item.paidByList!
+                                                              .length > 1 && (
+                                                              <span className="text-stone-400 tabular-nums">
+                                                                (
+                                                                {currencySymbol}
+                                                                {formatMoney(
+                                                                  p.amount,
+                                                                  currencyCode,
+                                                                )}
+                                                                )
+                                                              </span>
+                                                            )}
+                                                            {i <
+                                                              item.paidByList!
+                                                                .length -
+                                                                1 && (
+                                                              <span className="text-stone-300">
+                                                                +
+                                                              </span>
+                                                            )}
+                                                          </span>
+                                                        ),
+                                                      )}
+                                                      {item.memberCount && (
+                                                        <>
+                                                          <span
+                                                            className="text-stone-300"
+                                                            aria-hidden="true"
+                                                          >
+                                                            ·
+                                                          </span>
+                                                          <span className="text-stone-400">
+                                                            split{" "}
+                                                            {item.memberCount}{" "}
+                                                            ways
+                                                          </span>
+                                                        </>
+                                                      )}
+                                                    </div>
+                                                  )}
+                                              </div>
+
+                                              <div className="px-3.5 py-2.5">
+                                                {hasItems && (
+                                                  <div className="space-y-1 mb-2">
+                                                    {itemRows.map(
+                                                      (row, rIdx) => (
+                                                        <div
+                                                          key={`row-${rIdx}`}
+                                                          className="flex items-center justify-between gap-2 text-xs"
+                                                        >
+                                                          <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                                            <span className="text-stone-700 font-bold truncate">
+                                                              {row.name}
+                                                            </span>
+                                                            {row.share && (
+                                                              <span className="text-[9px] font-black text-stone-500 bg-stone-100 border border-stone-200/60 px-1.5 py-0.5 rounded-md shrink-0 tabular-nums leading-none">
+                                                                {row.share}
+                                                              </span>
+                                                            )}
+                                                          </div>
+                                                          <span className="text-stone-700 font-bold shrink-0 tabular-nums">
+                                                            {currencySymbol}
+                                                            {formatMoney(
+                                                              row.price,
+                                                              currencyCode,
+                                                            )}
+                                                          </span>
+                                                        </div>
+                                                      ),
+                                                    )}
+                                                  </div>
+                                                )}
+
+                                                {hasItems && hasCallouts && (
+                                                  <div className="flex justify-between items-center pt-2 mt-1 border-t border-dashed border-stone-200 text-[11px] font-black text-stone-500 uppercase tracking-wider">
+                                                    <span>subtotal</span>
+                                                    <span className="tabular-nums">
+                                                      {currencySymbol}
+                                                      {formatMoney(
+                                                        subtotal,
+                                                        currencyCode,
+                                                      )}
+                                                    </span>
+                                                  </div>
+                                                )}
+
+                                                {hasCallouts && (
+                                                  <div className="space-y-1 mt-1.5">
+                                                    {callouts.map((c, cIdx) => {
+                                                      const isPositive =
+                                                        c.amount > 0;
+                                                      const palette =
+                                                        c.kind === "discount"
+                                                          ? "text-emerald-600"
+                                                          : c.kind === "tax"
+                                                            ? "text-amber-600"
+                                                            : "text-stone-600";
+                                                      return (
+                                                        <div
+                                                          key={`callout-${cIdx}`}
+                                                          className={`flex justify-between items-center text-[11px] font-bold ${palette}`}
+                                                        >
+                                                          <span className="flex items-center gap-1.5">
+                                                            <span aria-hidden="true">
+                                                              +
+                                                            </span>
+                                                            <span>
+                                                              {c.label}
+                                                            </span>
+                                                          </span>
+                                                          <span className="font-black tabular-nums">
+                                                            {isPositive
+                                                              ? "+"
+                                                              : "−"}
+                                                            {currencySymbol}
+                                                            {formatMoney(
+                                                              Math.abs(
+                                                                c.amount,
+                                                              ),
+                                                              currencyCode,
+                                                            )}
+                                                          </span>
+                                                        </div>
+                                                      );
+                                                    })}
+                                                  </div>
+                                                )}
+
+                                                <div className="flex justify-between items-center pt-2.5 mt-2.5 border-t-2 border-double border-stone-300">
+                                                  <span className="text-[11px] font-black text-stone-700 uppercase tracking-widest">
+                                                    your total
+                                                  </span>
+                                                  <span className="text-sm font-black text-stone-900 tabular-nums">
+                                                    {currencySymbol}
+                                                    {formatMoney(
+                                                      item.amount,
+                                                      currencyCode,
+                                                    )}
+                                                  </span>
+                                                </div>
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
                                       </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* settled — collapsed by default */}
+                                {settledOwedItems.length > 0 && (
+                                  <div>
+                                    {!showSettled ? (
                                       <button
                                         onClick={() =>
                                           setSettledRevealed((prev) => {
                                             const next = new Set(prev);
-                                            next.delete(member.id);
+                                            next.add(member.id);
                                             return next;
                                           })
                                         }
-                                        className="text-[10px] font-black text-stone-400 hover:text-stone-700 uppercase tracking-widest transition-colors"
+                                        className="w-full flex items-center justify-between gap-2 text-[10px] font-black text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors py-2.5 px-3 rounded-xl uppercase tracking-widest border border-dashed border-stone-200"
                                       >
-                                        hide
+                                        <span className="flex items-center gap-2">
+                                          <span aria-hidden="true">✓</span>
+                                          {settledOwedItems.length} settled item
+                                          {settledOwedItems.length !== 1
+                                            ? "s"
+                                            : ""}
+                                        </span>
+                                        <span aria-hidden="true">show →</span>
                                       </button>
-                                    </div>
-                                    <div className="space-y-1.5 opacity-60">
-                                      {settledOwedItems.map((item, idx) => (
-                                        <div
-                                          key={`settled-${idx}`}
-                                          className="bg-white border border-stone-200/70 rounded-xl px-3.5 py-2.5 flex justify-between items-center gap-3"
-                                        >
-                                          <div className="flex flex-col min-w-0 flex-1">
-                                            {item.expenseDate && (
-                                              <span className="text-[9px] font-black text-stone-400 uppercase tracking-widest mb-0.5">
-                                                {formatDisplayDateTime(
-                                                  item.expenseDate,
-                                                )}
-                                              </span>
-                                            )}
-                                            <span className="text-sm leading-tight truncate text-stone-600 font-bold line-through decoration-stone-400">
-                                              {item.title}
+                                    ) : (
+                                      <div>
+                                        <div className="flex justify-between items-baseline mb-2.5 px-1">
+                                          <div className="flex items-baseline gap-2">
+                                            <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest">
+                                              ✓ settled
+                                            </span>
+                                            <span className="text-[10px] font-black text-stone-300 tabular-nums">
+                                              {settledOwedItems.length}
                                             </span>
                                           </div>
-                                          <span className="font-black shrink-0 text-stone-500 line-through tabular-nums text-sm">
-                                            {currencySymbol}
-                                            {formatMoney(
-                                              item.amount,
-                                              currencyCode,
-                                            )}
-                                          </span>
+                                          <button
+                                            onClick={() =>
+                                              setSettledRevealed((prev) => {
+                                                const next = new Set(prev);
+                                                next.delete(member.id);
+                                                return next;
+                                              })
+                                            }
+                                            className="text-[10px] font-black text-stone-400 hover:text-stone-700 uppercase tracking-widest transition-colors"
+                                          >
+                                            hide
+                                          </button>
                                         </div>
-                                      ))}
-                                    </div>
+                                        {!showDetailed ? (
+                                          <div className="bg-white border border-stone-200/70 rounded-xl divide-y divide-stone-100 overflow-hidden opacity-60">
+                                            {settledOwedItems.map(
+                                              (item, idx) => (
+                                                <div
+                                                  key={`settled-${idx}`}
+                                                  className="flex justify-between items-center gap-3 px-3.5 py-2.5"
+                                                >
+                                                  <span className="flex-1 leading-snug text-sm truncate text-stone-600 font-bold line-through decoration-stone-400">
+                                                    {item.title}
+                                                  </span>
+                                                  <span className="font-black shrink-0 text-stone-500 line-through tabular-nums text-sm">
+                                                    {currencySymbol}
+                                                    {formatMoney(
+                                                      item.amount,
+                                                      currencyCode,
+                                                    )}
+                                                  </span>
+                                                </div>
+                                              ),
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <div className="space-y-1.5 opacity-60">
+                                            {settledOwedItems.map(
+                                              (item, idx) => (
+                                                <div
+                                                  key={`settled-${idx}`}
+                                                  className="bg-white border border-stone-200/70 rounded-xl px-3.5 py-2.5 flex justify-between items-center gap-3"
+                                                >
+                                                  <div className="flex flex-col min-w-0 flex-1">
+                                                    {item.expenseDate && (
+                                                      <span className="text-[9px] font-black text-stone-400 uppercase tracking-widest mb-0.5">
+                                                        {formatDisplayDateTime(
+                                                          item.expenseDate,
+                                                        )}
+                                                      </span>
+                                                    )}
+                                                    <span className="text-sm leading-tight truncate text-stone-600 font-bold line-through decoration-stone-400">
+                                                      {item.title}
+                                                    </span>
+                                                  </div>
+                                                  <span className="font-black shrink-0 text-stone-500 line-through tabular-nums text-sm">
+                                                    {currencySymbol}
+                                                    {formatMoney(
+                                                      item.amount,
+                                                      currencyCode,
+                                                    )}
+                                                  </span>
+                                                </div>
+                                              ),
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                    )}
                                   </div>
                                 )}
                               </div>
-                            )}
-                          </div>
-                        )}
+                            );
+                          })()}
                       </div>
                     );
                   })}
