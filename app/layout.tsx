@@ -6,6 +6,7 @@ import AuthProvider from "@/components/auth-provider";
 import PlayfulAlert from "@/components/playful-alert";
 import VersionGuard from "@/components/version-guard";
 import OfflineScreen from "@/components/offline-screen";
+import InstallPrompt from "@/components/install-prompt";
 import TwemojiProvider from "@/components/twemoji-provider";
 
 export const viewport: Viewport = {
@@ -59,6 +60,7 @@ export default function RootLayout({
       <body className="min-h-full flex flex-col bg-[#fdfbf7] text-stone-800">
         <VersionGuard />
         <OfflineScreen />
+        <InstallPrompt />
 
         <TwemojiProvider>
           <AuthProvider>

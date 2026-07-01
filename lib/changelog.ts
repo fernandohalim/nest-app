@@ -2,6 +2,19 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
+    version: "2.5",
+    date: "jul 1, 2026",
+    title: "add to home screen 📲",
+    badge: "feature",
+    badgeColor: "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200",
+    features: [
+      "added a custom install prompt so you can pop nest onto your home screen for a full-screen, app-like experience, straight from the browser.",
+      "added a native one-tap install on android chrome & desktop chrome/edge, driven by our own on-brand modal.",
+      "added tailored 'add to home screen' instructions for ios safari, which has no native install button.",
+      "refined the prompt to only appear on platforms where installing actually works, and to stay quiet once you install or dismiss it.",
+    ],
+  },
+  {
     version: "2.4.6",
     date: "may 7, 2026",
     title: "ledger details, everywhere 🔍",
