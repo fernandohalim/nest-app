@@ -3,6 +3,7 @@ import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import "./globals.css";
 import AuthProvider from "@/components/auth-provider";
+import AppShell from "@/components/app-shell";
 import PlayfulAlert from "@/components/playful-alert";
 import VersionGuard from "@/components/version-guard";
 import OfflineScreen from "@/components/offline-screen";
@@ -64,7 +65,7 @@ export default function RootLayout({
 
         <TwemojiProvider>
           <AuthProvider>
-            {children}
+            <AppShell>{children}</AppShell>
             <PlayfulAlert />
           </AuthProvider>
         </TwemojiProvider>

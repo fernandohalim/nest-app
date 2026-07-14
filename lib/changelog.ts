@@ -1,6 +1,23 @@
 import { Release } from "./types";
 
 export const releases: Release[] = [
+  // 3.0 is a MAJOR release with two halves: (1) merge receipts, and (2)
+  // responsive desktop design. Both shipped jul 14, 2026.
+  {
+    version: "3.0",
+    date: "jul 14, 2026",
+    title: "desktop + merge receipts 🖥️",
+    badge: "major",
+    badgeColor: "bg-amber-100 text-amber-700 border-amber-200",
+    features: [
+      "added a full desktop experience — on bigger screens nest trades the phone-style bottom bar for a persistent sidebar, so trips, receipts, and creating anything new are always one click away.",
+      "added a two-column trip dashboard for desktop: the trip summary, members, and settlement ledger sit beside the expense feed instead of stacking into one phone-width strip.",
+      "refined the home screen, receipts, and expense forms to spread into roomy multi-column layouts on wide screens — no more thin column marooned in the middle of an empty page.",
+      "added 'merge receipts' — select any quick splits from the receipts tab and fold them into a trip, either brand-new or an existing one, so you send a single link instead of chasing everyone across separate splits.",
+      "added a member resolver for merges: when the same person shows up under different names (like 'jo' and 'jonathan'), merge them into one — or split apart anyone grouped by mistake.",
+      "refined merging so the original receipts move into the trip (leaving the receipts list) and shared amounts sum up correctly when two people turn out to be one.",
+    ],
+  },
   {
     version: "2.5",
     date: "jul 1, 2026",

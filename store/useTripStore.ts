@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { supabase } from "@/lib/supabase";
 import { Trip, Expense, Member, ExpenseItem, Profile } from "@/lib/types";
+import { MergeExpensePayload } from "@/lib/merge";
 import { sanitizeNickname } from "@/lib/nickname";
 import { User } from "@supabase/supabase-js";
 
@@ -97,6 +98,13 @@ interface TripStore {
     tripId: string,
     isCollaborative: boolean,
   ) => Promise<void>;
+
+  mergeQuickSplits: (args: {
+    targetTripId: string | null;
+    newTrip?: { name: string; currency: string };
+    newMembers: { id: string; name: string }[];
+    expenses: MergeExpensePayload[];
+  }) => Promise<string>;
 }
 
 export const useTripStore = create<TripStore>((set, get) => ({
@@ -615,5 +623,37 @@ export const useTripStore = create<TripStore>((set, get) => ({
     return () => {
       supabase.removeChannel(channel);
     };
+  },
+
+  mergeQuickSplits: async ({ targetTripId, newTrip, newMembers, expenses }) => {
+    const currentUser = get().user;
+    if (!currentUser) throw new Error("not signed in");
+
+    set({ isSyncing: true });
+    try {
+      const profile = get().profile;
+      const ownerName =
+        profile?.nickname ||
+        currentUser.user_metadata?.full_name ||
+        currentUser.email?.split("@")[0] ||
+        "me";
+
+      const { data, error } = await supabase.rpc("merge_quick_splits", {
+        p_target_trip_id: targetTripId,
+        p_new_trip: newTrip ? { ...newTrip, owner_name: ownerName } : null,
+        p_new_members: newMembers,
+        p_expenses: expenses,
+      });
+
+      if (error) throw error;
+
+      // refetch so the new/updated trip shows up and the merged expenses drop
+      // out of the receipts list (they now have a trip_id)
+      await get().fetchTrips();
+
+      return data as string;
+    } finally {
+      set({ isSyncing: false });
+    }
   },
 }));

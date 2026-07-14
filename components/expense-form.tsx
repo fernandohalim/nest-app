@@ -464,7 +464,10 @@ export default function ExpenseForm({
     "flex-[2] py-4.5 bg-stone-900 text-white rounded-2xl text-base font-black hover:bg-emerald-600 transition-all shadow-xl shadow-stone-900/20 hover:shadow-emerald-600/30 active:scale-95 disabled:bg-stone-300 disabled:shadow-none flex justify-center items-center";
 
   return (
-    <form onSubmit={handleSubmit} className="flex flex-col gap-8">
+    <form
+      onSubmit={handleSubmit}
+      className="@container flex flex-col gap-8 @xl:gap-10"
+    >
       {/* hero inputs */}
       <div className="flex flex-col gap-5 p-2">
         <input
@@ -549,6 +552,7 @@ export default function ExpenseForm({
           />
         ) : (
           <div className="space-y-3 animate-in fade-in duration-300">
+            <div className="space-y-3 @xl:space-y-0 @xl:grid @xl:grid-cols-2 @xl:gap-3">
             {members.map((m) => (
               <div
                 key={m.id}
@@ -568,6 +572,7 @@ export default function ExpenseForm({
                 />
               </div>
             ))}
+            </div>
 
             <div className="mt-4 pt-4 border-t-2 border-dashed border-stone-100">
               {totalAmountNum === 0 ? (
@@ -674,7 +679,7 @@ export default function ExpenseForm({
         </div>
 
         {(splitType === "equal" || splitType === "adjustment") && (
-          <div className="space-y-2.5 animate-in slide-in-from-top-2 duration-300">
+          <div className="space-y-2.5 @xl:space-y-0 @xl:grid @xl:grid-cols-2 @xl:gap-2.5 animate-in slide-in-from-top-2 duration-300">
             {members.map((m) => {
               const isTicked = involvedIds.includes(m.id);
               const hasAdjustment = !!adjustments[m.id];
@@ -753,6 +758,7 @@ export default function ExpenseForm({
               </p>
             </div>
 
+            <div className="space-y-4 @2xl:space-y-0 @2xl:grid @2xl:grid-cols-2 @2xl:gap-4 @2xl:items-start">
             {items.map((item) => {
               const isOrphaned =
                 item.name.trim() !== "" &&
@@ -879,6 +885,7 @@ export default function ExpenseForm({
                 </div>
               );
             })}
+            </div>
 
             <button
               type="button"

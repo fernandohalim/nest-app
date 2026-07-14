@@ -12,8 +12,8 @@ export default function Changelog() {
   >({});
 
   return (
-    <main className="flex min-h-screen flex-col items-center p-6 bg-[#fdfbf7] pb-32 font-sans selection:bg-emerald-200 selection:text-emerald-900">
-      <div className="w-full max-w-md relative">
+    <main className="flex min-h-screen flex-col items-center p-6 lg:p-10 bg-[#fdfbf7] pb-32 font-sans selection:bg-emerald-200 selection:text-emerald-900">
+      <div className="w-full max-w-md lg:max-w-2xl relative">
         <div className="sticky top-0 pt-4 pb-4 bg-[#fdfbf7]/90 backdrop-blur-xl z-20 flex items-center justify-between mb-8 border-b border-stone-100/50">
           <button
             onClick={() => router.push("/")}

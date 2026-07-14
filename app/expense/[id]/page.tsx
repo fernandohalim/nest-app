@@ -254,7 +254,7 @@ export default function UnifiedExpensePage() {
 
   return (
     <main className="flex min-h-screen flex-col items-center p-4 sm:p-6 bg-[#fdfbf7] pb-10 font-sans selection:bg-emerald-200 selection:text-emerald-900">
-      <div className="w-full max-w-md flex justify-between items-center mb-6">
+      <div className="w-full max-w-md lg:max-w-4xl flex justify-between items-center mb-6">
         <button
           onClick={() => {
             const urlParams = new URLSearchParams(window.location.search);
@@ -337,9 +337,13 @@ export default function UnifiedExpensePage() {
         </div>
       </div>
 
+      {/* desktop: receipt on the left, its meta (expiry / linked trip) in a
+          side rail. the contents-wrappers keep the mobile stack byte-identical. */}
+      <div className="w-full max-w-md lg:max-w-4xl lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-6 lg:items-start">
+        <div className="contents lg:flex lg:flex-col lg:gap-6 lg:col-start-2 lg:row-start-1">
       {isQuickSplit && (
         <div
-          className={`w-full max-w-md mb-6 animate-in slide-in-from-top-4 duration-500 z-10 rounded-2xl border-2 p-4 flex items-center gap-3 shadow-sm ${
+          className={`w-full max-w-md lg:max-w-none mb-6 lg:mb-0 animate-in slide-in-from-top-4 duration-500 z-10 rounded-2xl border-2 p-4 flex items-center gap-3 shadow-sm ${
             isExpiringSoon
               ? "bg-rose-50 border-rose-200"
               : "bg-amber-50 border-amber-100"
@@ -374,7 +378,7 @@ export default function UnifiedExpensePage() {
       )}
 
       {tripData && (
-        <div className="w-full max-w-md mb-6 animate-in slide-in-from-top-4 duration-500 z-10">
+        <div className="w-full max-w-md lg:max-w-none mb-6 lg:mb-0 animate-in slide-in-from-top-4 duration-500 z-10">
           <button
             onClick={() => router.push(`/trip/${tripData.id}`)}
             className="w-full bg-white border-2 border-stone-100 rounded-3xl p-5 flex items-center justify-between shadow-sm hover:border-emerald-200 hover:shadow-md transition-all group active:scale-[0.98]"
@@ -409,10 +413,13 @@ export default function UnifiedExpensePage() {
         </div>
       )}
 
+        </div>
+        {/* receipt + save — the main column on desktop */}
+        <div className="contents lg:flex lg:flex-col lg:col-start-1 lg:row-start-1">
       {/* THE RECEIPT (captured by html-to-image) */}
       <div
         ref={receiptRef}
-        className="w-full max-w-md bg-white rounded-3xl shadow-xl border-2 border-stone-100 flex flex-col font-sans text-stone-800 animate-in zoom-in-95 duration-500 overflow-hidden relative"
+        className="w-full max-w-md lg:max-w-none bg-white rounded-3xl shadow-xl border-2 border-stone-100 flex flex-col font-sans text-stone-800 animate-in zoom-in-95 duration-500 overflow-hidden relative"
       >
         {/* HEADER */}
         <div className="p-6 sm:p-8 border-b-2 border-dashed border-stone-200 flex flex-col items-center text-center bg-white relative z-10">
@@ -715,7 +722,7 @@ export default function UnifiedExpensePage() {
         onClick={handleExportImage}
         disabled={isExporting}
         aria-label="save receipt as image"
-        className="mt-8 w-full max-w-md py-4.5 bg-stone-900 text-white font-black text-base rounded-2xl shadow-xl hover:bg-stone-800 active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50"
+        className="mt-8 w-full max-w-md lg:max-w-none py-4.5 bg-stone-900 text-white font-black text-base rounded-2xl shadow-xl hover:bg-stone-800 active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50"
       >
         {isExporting ? (
           <div
@@ -740,6 +747,8 @@ export default function UnifiedExpensePage() {
         )}
         save receipt image
       </button>
+        </div>
+      </div>
 
       {/* off-screen receipt snapshot for exporting */}
       <div className="overflow-hidden absolute -left-2499.75 top-0 pointer-events-none">

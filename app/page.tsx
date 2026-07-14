@@ -4,11 +4,10 @@ import { useState, useEffect, Suspense, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTripStore } from "@/store/useTripStore";
 import { useAlertStore } from "@/store/useAlertStore";
+import { useUiStore } from "@/store/useUiStore";
 import { supabase } from "@/lib/supabase";
 import { Expense, Member } from "@/lib/types";
-import CreateTripModal from "@/components/create-trip-modal";
-import AboutModal from "@/components/about-modal";
-import ProfileMenu from "@/components/profile-menu";
+import MergeModal from "@/components/merge-modal";
 import LoadingState from "@/components/loading-state";
 import { formatDisplayDate } from "@/lib/datetime";
 import Image from "next/image";
@@ -34,6 +33,14 @@ function HomeContent() {
   const showAlert = useAlertStore((s) => s.showAlert);
   const showConfirm = useAlertStore((s) => s.showConfirm);
 
+  // the "＋ new" action menu, create-trip, about and profile modals now live
+  // globally in <AppShell> (so the desktop sidebar can open them too); the
+  // mobile bottom nav below drives them through this shared store.
+  const openActionMenu = useUiStore((s) => s.openActionMenu);
+  const isActionMenuOpen = useUiStore((s) => s.isActionMenuOpen);
+  const openAbout = useUiStore((s) => s.openAbout);
+  const openProfile = useUiStore((s) => s.openProfile);
+
   const user = useTripStore((s) => s.user);
   const profile = useTripStore((s) => s.profile);
   const trips = useTripStore((s) => s.trips);
@@ -42,10 +49,6 @@ function HomeContent() {
 
   const [currentTime] = useState(() => Date.now());
 
-  const [isCreating, setIsCreating] = useState(false);
-  const [isAboutOpen, setIsAboutOpen] = useState(false);
-  const [isProfileOpen, setIsProfileOpen] = useState(false);
-  const [isActionMenuOpen, setIsActionMenuOpen] = useState(false);
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
   const currentTab = searchParams.get("tab");
@@ -92,6 +95,8 @@ function HomeContent() {
     setLocalViewMode(mode);
     setSearchQuery("");
     setVisibleCount(5);
+    setIsSelecting(false);
+    setSelectedIds(new Set());
 
     const params = new URLSearchParams(searchParams.toString());
     if (mode === "quick") params.set("tab", "quick");
@@ -104,6 +109,25 @@ function HomeContent() {
 
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(5);
+
+  // 🪄 merge mode: multi-select quick splits and fold them into a trip
+  const [isSelecting, setIsSelecting] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [isMergeOpen, setIsMergeOpen] = useState(false);
+
+  const exitSelectMode = () => {
+    setIsSelecting(false);
+    setSelectedIds(new Set());
+  };
+
+  const toggleSelected = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const [quickSplits, setQuickSplits] = useState<Expense[]>([]);
   const [isLoadingQuick, setIsLoadingQuick] = useState(false);
@@ -260,17 +284,48 @@ function HomeContent() {
   const initial = fullName.charAt(0).toUpperCase();
 
   return (
-    <main className="flex min-h-screen flex-col items-center p-6 bg-[#fdfbf7] pb-48 font-sans selection:bg-emerald-200 selection:text-emerald-900 relative">
-      <div className="w-full max-w-md relative">
+    <main
+      className={`flex min-h-screen flex-col items-center p-6 lg:p-10 bg-[#fdfbf7] pb-48 ${isSelecting ? "lg:pb-32" : "lg:pb-12"} font-sans selection:bg-emerald-200 selection:text-emerald-900 relative`}
+    >
+      <div className="w-full max-w-md lg:max-w-5xl relative">
         <div className="flex justify-between items-center mb-6 pt-4">
           <h1 className="text-4xl font-black tracking-tight text-stone-800 drop-shadow-sm">
             {viewMode === "trips" ? "trips 🎒" : "receipts 🧾"}
           </h1>
-          <button
-            onClick={() => setIsInfoModalOpen(true)}
-            aria-label="how nest works"
-            className="w-10 h-10 flex items-center justify-center rounded-full bg-white border-2 border-stone-100 text-stone-400 hover:text-emerald-500 hover:border-emerald-200 transition-all shadow-sm active:scale-95"
-          >
+          <div className="flex items-center gap-2">
+            {viewMode === "quick" &&
+              !isLoadingQuick &&
+              quickSplits.length > 0 &&
+              !isSelecting && (
+                <button
+                  onClick={() => setIsSelecting(true)}
+                  aria-label="merge receipts"
+                  title="merge receipts"
+                  className="w-10 h-10 flex items-center justify-center rounded-full bg-white border-2 border-stone-100 text-stone-400 hover:text-emerald-600 hover:border-emerald-200 transition-all shadow-sm active:scale-95"
+                >
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <circle cx="18" cy="18" r="2.5" strokeWidth={2} />
+                    <circle cx="6" cy="6" r="2.5" strokeWidth={2} />
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 21V9a9 9 0 009 9"
+                    />
+                  </svg>
+                </button>
+              )}
+            <button
+              onClick={() => setIsInfoModalOpen(true)}
+              aria-label="how nest works"
+              className="w-10 h-10 flex items-center justify-center rounded-full bg-white border-2 border-stone-100 text-stone-400 hover:text-emerald-500 hover:border-emerald-200 transition-all shadow-sm active:scale-95"
+            >
             <svg
               className="w-5 h-5"
               fill="none"
@@ -286,6 +341,7 @@ function HomeContent() {
               />
             </svg>
           </button>
+          </div>
         </div>
 
         <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -396,6 +452,45 @@ function HomeContent() {
                 </div>
               )}
 
+              {!isLoadingQuick && quickSplits.length > 0 && isSelecting && (
+                <div className="mb-4">
+                  <div className="flex items-center justify-between gap-3 px-4 py-2.5 bg-emerald-50 border-2 border-emerald-200 rounded-2xl animate-in fade-in slide-in-from-top-1 duration-200">
+                    <button
+                      onClick={exitSelectMode}
+                      className="text-xs font-black text-stone-500 hover:text-stone-800 uppercase tracking-wider transition-colors"
+                    >
+                      cancel
+                    </button>
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-xs font-black text-emerald-700 tabular-nums">
+                        {selectedIds.size} selected
+                      </span>
+                      <span className="text-emerald-300" aria-hidden="true">
+                        •
+                      </span>
+                      <button
+                        onClick={() => {
+                          const allIds = processedQuickSplits.map((e) => e.id);
+                          const allSelected = allIds.every((id) =>
+                            selectedIds.has(id),
+                          );
+                          setSelectedIds(
+                            allSelected ? new Set() : new Set(allIds),
+                          );
+                        }}
+                        className="text-xs font-black text-emerald-600 hover:text-emerald-800 uppercase tracking-wider transition-colors"
+                      >
+                        {processedQuickSplits.every((e) =>
+                          selectedIds.has(e.id),
+                        )
+                          ? "clear all"
+                          : "select all"}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               {isLoadingQuick ? (
                 <div className="py-20">
                   <LoadingState label="finding receipts..." />
@@ -418,7 +513,7 @@ function HomeContent() {
                   </p>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
                   {displayedQuickSplits.map((expense) => {
                     const createdAt = new Date(expense.createdAt).getTime();
                     const daysSince = Math.floor(
@@ -430,9 +525,15 @@ function HomeContent() {
                       <button
                         key={expense.id}
                         onClick={() =>
-                          router.push(`/expense/${expense.id}?from=quick`)
+                          isSelecting
+                            ? toggleSelected(expense.id)
+                            : router.push(`/expense/${expense.id}?from=quick`)
                         }
-                        className="w-full bg-white p-5 rounded-3xl shadow-sm border-2 border-stone-100 hover:shadow-md hover:border-emerald-200 transition-all text-left flex justify-between items-center group active:scale-[0.98]"
+                        className={`w-full bg-white p-5 rounded-3xl shadow-sm border-2 transition-all text-left flex justify-between items-center group active:scale-[0.98] ${
+                          isSelecting && selectedIds.has(expense.id)
+                            ? "border-emerald-400 ring-4 ring-emerald-100"
+                            : "border-stone-100 hover:shadow-md hover:border-emerald-200"
+                        }`}
                       >
                         <div className="flex flex-col gap-2 pr-4 min-w-0 flex-1">
                           <h3 className="font-extrabold text-stone-800 text-lg truncate group-hover:text-emerald-700 transition-colors">
@@ -453,71 +554,96 @@ function HomeContent() {
                             </span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        {isSelecting ? (
                           <div
-                            onClick={(e) =>
-                              handleDeleteQuickSplit(
-                                expense.id,
-                                expense.title,
-                                e,
-                              )
-                            }
-                            role="button"
-                            tabIndex={0}
-                            aria-label={`delete ${expense.title}`}
-                            onKeyDown={(e) => {
-                              if (e.key === "Enter" || e.key === " ") {
-                                e.preventDefault();
-                                handleDeleteQuickSplit(
-                                  expense.id,
-                                  expense.title,
-                                  e as unknown as React.MouseEvent,
-                                );
-                              }
-                            }}
-                            className="shrink-0 w-10 h-10 rounded-full bg-stone-50 flex items-center justify-center text-stone-400 hover:bg-rose-500 hover:text-white transition-colors"
+                            className={`shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${
+                              selectedIds.has(expense.id)
+                                ? "bg-emerald-500 border-emerald-500 text-white"
+                                : "bg-white border-stone-200 text-transparent"
+                            }`}
+                            aria-hidden="true"
                           >
                             <svg
                               className="w-4 h-4"
                               fill="none"
                               stroke="currentColor"
                               viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={3}
+                                d="M5 13l4 4L19 7"
+                              />
+                            </svg>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2">
+                            <div
+                              onClick={(e) =>
+                                handleDeleteQuickSplit(
+                                  expense.id,
+                                  expense.title,
+                                  e,
+                                )
+                              }
+                              role="button"
+                              tabIndex={0}
+                              aria-label={`delete ${expense.title}`}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  handleDeleteQuickSplit(
+                                    expense.id,
+                                    expense.title,
+                                    e as unknown as React.MouseEvent,
+                                  );
+                                }
+                              }}
+                              className="shrink-0 w-10 h-10 rounded-full bg-stone-50 flex items-center justify-center text-stone-400 hover:bg-rose-500 hover:text-white transition-colors"
+                            >
+                              <svg
+                                className="w-4 h-4"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                                aria-hidden="true"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2.5}
+                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                />
+                              </svg>
+                            </div>
+                            <div
+                              className="shrink-0 w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-colors"
                               aria-hidden="true"
                             >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2.5}
-                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                              />
-                            </svg>
+                              <svg
+                                className="w-5 h-5 group-hover:translate-x-0.5 transition-transform"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2.5}
+                                  d="M9 5l7 7-7 7"
+                                />
+                              </svg>
+                            </div>
                           </div>
-                          <div
-                            className="shrink-0 w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-colors"
-                            aria-hidden="true"
-                          >
-                            <svg
-                              className="w-5 h-5 group-hover:translate-x-0.5 transition-transform"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={2.5}
-                                d="M9 5l7 7-7 7"
-                              />
-                            </svg>
-                          </div>
-                        </div>
+                        )}
                       </button>
                     );
                   })}
                   {hasMoreQuick && (
                     <button
                       onClick={() => setVisibleCount((prev) => prev + 5)}
-                      className="w-full mt-4 py-4 bg-stone-100 text-stone-500 font-black rounded-3xl hover:bg-stone-200 active:scale-95 transition-all text-sm border-2 border-stone-200/50 hover:border-stone-300 border-dashed"
+                      className="w-full lg:col-span-full py-4 bg-stone-100 text-stone-500 font-black rounded-3xl hover:bg-stone-200 active:scale-95 transition-all text-sm border-2 border-stone-200/50 hover:border-stone-300 border-dashed"
                     >
                       load more receipts ⬇️
                     </button>
@@ -710,7 +836,7 @@ function HomeContent() {
                   </p>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
                   {displayedTrips.map((trip) => (
                     <button
                       key={trip.id}
@@ -791,7 +917,7 @@ function HomeContent() {
                   {hasMoreTrips && (
                     <button
                       onClick={() => setVisibleCount((prev) => prev + 5)}
-                      className="w-full mt-4 py-4 bg-stone-100 text-stone-500 font-black rounded-3xl hover:bg-stone-200 active:scale-95 transition-all text-sm border-2 border-stone-200/50 hover:border-stone-300 border-dashed"
+                      className="w-full lg:col-span-full py-4 bg-stone-100 text-stone-500 font-black rounded-3xl hover:bg-stone-200 active:scale-95 transition-all text-sm border-2 border-stone-200/50 hover:border-stone-300 border-dashed"
                     >
                       load more trips ⬇️
                     </button>
@@ -802,17 +928,13 @@ function HomeContent() {
           )}
         </div>
 
-        <CreateTripModal
-          isOpen={isCreating}
-          onClose={() => setIsCreating(false)}
-        />
-        <AboutModal
-          isOpen={isAboutOpen}
-          onClose={() => setIsAboutOpen(false)}
-        />
-        <ProfileMenu
-          isOpen={isProfileOpen}
-          onClose={() => setIsProfileOpen(false)}
+        <MergeModal
+          isOpen={isMergeOpen}
+          onClose={() => {
+            setIsMergeOpen(false);
+            exitSelectMode();
+          }}
+          selectedIds={Array.from(selectedIds)}
         />
 
         {isInfoModalOpen && (
@@ -874,130 +996,31 @@ function HomeContent() {
           </div>
         )}
 
-        {isActionMenuOpen && (
-          <div
-            className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-60 flex items-end justify-center animate-in fade-in duration-300"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="action-menu-title"
-          >
-            <div
-              className="fixed inset-0"
-              onClick={() => setIsActionMenuOpen(false)}
-              aria-hidden="true"
-            ></div>
-
-            <div className="bg-[#fdfbf7] w-full max-w-md rounded-t-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full duration-500 p-6 pt-8 pb-12 relative">
-              <button
-                onClick={() => setIsActionMenuOpen(false)}
-                aria-label="close"
-                className="absolute top-6 right-6 w-10 h-10 bg-stone-100 rounded-full flex items-center justify-center text-stone-500 hover:bg-stone-200 active:scale-90 transition-all font-bold"
-              >
-                ×
-              </button>
-              <h2
-                id="action-menu-title"
-                className="text-2xl font-black text-stone-800 mb-2"
-              >
-                what&apos;s the plan?
-              </h2>
-              <p className="text-sm font-bold text-stone-400 mb-8">
-                create a group trip or split a quick receipt.
-              </p>
-
-              <div className="flex flex-col gap-4">
-                <button
-                  onClick={() => {
-                    setIsActionMenuOpen(false);
-                    setIsCreating(true);
-                  }}
-                  className="w-full flex items-center gap-4 bg-white border-2 border-stone-100 p-4 rounded-2xl hover:border-emerald-200 hover:shadow-[0_8px_30px_rgb(16,185,129,0.1)] active:scale-95 transition-all text-left group"
-                >
-                  <div
-                    className="w-14 h-14 bg-stone-50 rounded-2xl flex items-center justify-center text-stone-500 text-2xl shadow-inner shrink-0 group-hover:bg-emerald-50 group-hover:text-emerald-500 transition-colors"
-                    aria-hidden="true"
-                  >
-                    🎒
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="font-black text-stone-800 text-lg group-hover:text-emerald-700 transition-colors">
-                      start a new trip
-                    </span>
-                    <span className="text-xs font-bold text-stone-400">
-                      create a dedicated space for a group
-                    </span>
-                  </div>
-                </button>
-
-                <div className="flex items-center gap-4 py-2">
-                  <div
-                    className="h-0.5 w-full bg-stone-100 rounded-full"
-                    aria-hidden="true"
-                  ></div>
-                  <span className="text-[10px] font-black text-stone-300 uppercase tracking-widest shrink-0">
-                    quick splits
-                  </span>
-                  <div
-                    className="h-0.5 w-full bg-stone-100 rounded-full"
-                    aria-hidden="true"
-                  ></div>
-                </div>
-
-                <button
-                  onClick={() => {
-                    setIsActionMenuOpen(false);
-                    router.push("/quick-split?action=scan");
-                  }}
-                  className="w-full flex items-center gap-4 bg-emerald-50 border-2 border-emerald-100 p-4 rounded-2xl hover:bg-emerald-100 hover:border-emerald-300 active:scale-95 transition-all text-left"
-                >
-                  <div
-                    className="w-14 h-14 bg-emerald-500 rounded-2xl flex items-center justify-center text-white text-2xl shadow-sm shrink-0 relative overflow-hidden"
-                    aria-hidden="true"
-                  >
-                    <div className="absolute inset-0 bg-emerald-400 opacity-0 hover:opacity-100 transition-opacity flex items-center justify-center font-black tracking-widest text-[8px] uppercase">
-                      AI ✨
-                    </div>
-                    📸
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="font-black text-emerald-800 text-lg">
-                      scan receipt
-                    </span>
-                    <span className="text-xs font-bold text-emerald-600/80">
-                      let gemini do the math instantly
-                    </span>
-                  </div>
-                </button>
-
-                <button
-                  onClick={() => {
-                    setIsActionMenuOpen(false);
-                    router.push("/quick-split?action=manual");
-                  }}
-                  className="w-full flex items-center gap-4 bg-white border-2 border-stone-100 p-4 rounded-2xl hover:bg-stone-50 hover:border-stone-200 active:scale-95 transition-all text-left"
-                >
-                  <div
-                    className="w-14 h-14 bg-stone-50 border-2 border-stone-100 rounded-2xl flex items-center justify-center text-stone-400 text-2xl shadow-sm shrink-0"
-                    aria-hidden="true"
-                  >
-                    ✍️
-                  </div>
-                  <div className="flex flex-col">
-                    <span className="font-black text-stone-800 text-lg">
-                      enter manually
-                    </span>
-                    <span className="text-xs font-bold text-stone-400">
-                      type the items yourself
-                    </span>
-                  </div>
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 z-50 flex justify-center pb-0 sm:pb-6 px-0 sm:px-4 pointer-events-none">
+      {/* selection action bar — docks at the bottom of the content while
+          selecting. on mobile it takes the bottom nav's place (the nav hides
+          below); on desktop it offsets past the sidebar to align with content. */}
+      {viewMode === "quick" && isSelecting && (
+        <div className="fixed bottom-0 left-0 right-0 lg:left-64 z-60 border-t border-stone-200/70 bg-white/95 backdrop-blur-xl shadow-[0_-10px_40px_rgba(0,0,0,0.08)] px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))] animate-in slide-in-from-bottom-4 duration-300">
+          <div className="mx-auto w-full max-w-md lg:max-w-2xl">
+            <button
+              onClick={() => setIsMergeOpen(true)}
+              disabled={selectedIds.size === 0}
+              className="w-full py-4 bg-stone-900 text-white rounded-2xl text-base font-black hover:bg-emerald-600 transition-all shadow-lg active:scale-95 disabled:bg-stone-200 disabled:text-stone-400 disabled:shadow-none flex justify-center items-center gap-2"
+            >
+              <span aria-hidden="true">🪄</span>
+              {selectedIds.size === 0
+                ? "select receipts to merge"
+                : `merge ${selectedIds.size} receipt${selectedIds.size !== 1 ? "s" : ""} into a trip`}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div
+        className={`${isSelecting ? "hidden" : "lg:hidden"} fixed bottom-0 left-0 right-0 z-50 flex justify-center pb-0 sm:pb-6 px-0 sm:px-4 pointer-events-none`}
+      >
         <div className="w-full max-w-md bg-white/95 backdrop-blur-xl rounded-t-3xl sm:rounded-3xl h-[calc(5rem+env(safe-area-inset-bottom))] pb-[env(safe-area-inset-bottom)] shadow-[0_-10px_40px_rgba(0,0,0,0.08)] flex items-center justify-between px-6 relative pointer-events-auto border-t sm:border border-stone-100">
           <div className="flex items-center gap-4 sm:gap-6">
             <button
@@ -1050,7 +1073,7 @@ function HomeContent() {
           <div className="absolute left-1/2 -top-8 -translate-x-1/2 flex justify-center">
             <div className="w-24 h-24 bg-[#fdfbf7] rounded-full p-2 flex items-center justify-center">
               <button
-                onClick={() => setIsActionMenuOpen(true)}
+                onClick={openActionMenu}
                 aria-label="add new"
                 className={`w-full h-full rounded-full border-4 border-white flex items-center justify-center text-white bg-emerald-500 transition-all duration-300 active:scale-90 shadow-[0_10px_30px_rgba(16,185,129,0.3)] hover:bg-emerald-600 ${isActionMenuOpen ? "rotate-45 bg-stone-800" : ""}`}
               >
@@ -1074,7 +1097,7 @@ function HomeContent() {
 
           <div className="flex items-center gap-4 sm:gap-6">
             <button
-              onClick={() => setIsAboutOpen(true)}
+              onClick={openAbout}
               aria-label="about nest"
               className="flex flex-col items-center gap-1 transition-all active:scale-90 w-12 text-stone-400 hover:text-stone-600"
             >
@@ -1096,7 +1119,7 @@ function HomeContent() {
             </button>
 
             <button
-              onClick={() => setIsProfileOpen(true)}
+              onClick={openProfile}
               aria-label="profile"
               className="flex flex-col items-center gap-1 transition-all active:scale-90 w-12 text-stone-400 hover:text-stone-600 group"
             >

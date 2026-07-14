@@ -682,7 +682,7 @@ export default function TripDetail() {
 
   return (
     <main className="flex min-h-screen flex-col items-center p-6 bg-[#fdfbf7] pb-40 text-stone-800 font-sans selection:bg-emerald-200 selection:text-emerald-900">
-      <div className="w-full max-w-md relative">
+      <div className="w-full max-w-md lg:max-w-6xl relative">
         {/* top navigation */}
         <div className="flex justify-between items-center mb-6">
           <button
@@ -788,6 +788,13 @@ export default function TripDetail() {
           </div>
         </div>
 
+        {/* desktop: the trip turns into a dashboard — a sticky left rail carries
+            the whole summary (status, hero total, collaborative toggle, members)
+            while the right pane is the expense feed + settlement ledger. below
+            lg it collapses back to the original single-column stack. */}
+        <div className="lg:grid lg:grid-cols-2 lg:gap-8 lg:items-start">
+          {/* left column — sticky trip summary rail */}
+          <div className="lg:sticky lg:top-6 lg:self-start">
         {/* trip status pill */}
         <div className="mb-4 z-10 relative">
           <div
@@ -863,7 +870,7 @@ export default function TripDetail() {
         </div>
 
         {/* hero dashboard */}
-        <div className="bg-emerald-700 text-white rounded-[2.5rem] p-8 shadow-xl shadow-emerald-900/15 mb-10 flex flex-col items-center text-center relative overflow-hidden group">
+        <div className="bg-emerald-700 text-white rounded-[2.5rem] lg:rounded-[2rem] p-8 lg:p-6 shadow-xl shadow-emerald-900/15 mb-10 lg:mb-6 flex flex-col items-center text-center relative overflow-hidden group">
           <div
             className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/30 rounded-full blur-3xl -mr-16 -mt-16 group-hover:scale-110 transition-transform duration-700"
             aria-hidden="true"
@@ -938,7 +945,7 @@ export default function TripDetail() {
             </span>
           </div>
 
-          <div className="text-5xl font-black tracking-tighter relative z-10 my-2 drop-shadow-md">
+          <div className="text-5xl lg:text-4xl font-black tracking-tighter relative z-10 my-2 drop-shadow-md">
             <span className="text-2xl text-emerald-200 align-top mr-1">
               {currencySymbol}
             </span>
@@ -968,7 +975,7 @@ export default function TripDetail() {
 
         {/* 🔥 A2: collaborative-mode toggle is now a real switch */}
         {isOwner && trip.status !== "finished" && (
-          <div className="bg-white border-2 border-stone-100 rounded-3xl p-5 shadow-sm mb-10 flex items-center justify-between group hover:border-emerald-200 transition-colors animate-in slide-in-from-bottom-4 duration-500">
+          <div className="bg-white border-2 border-stone-100 rounded-3xl p-5 shadow-sm mb-10 lg:mb-6 flex items-center justify-between group hover:border-emerald-200 transition-colors animate-in slide-in-from-bottom-4 duration-500">
             <div className="flex flex-col">
               <span className="font-black text-stone-800 text-base flex items-center gap-2">
                 🌐 collaborative mode
@@ -1080,6 +1087,9 @@ export default function TripDetail() {
           )}
         </section>
 
+          </div>
+          {/* right column — the expense feed + settlement ledger */}
+          <div className="min-w-0">
         {/* expenses section */}
         <section className="animate-in fade-in slide-in-from-bottom-4 duration-500 delay-200">
           <div className="flex justify-between items-end mb-4 px-1">
@@ -2358,6 +2368,9 @@ export default function TripDetail() {
             </div>
           </section>
         )}
+          </div>
+          {/* /right column */}
+        </div>
       </div>
 
       <input
@@ -2550,7 +2563,7 @@ export default function TripDetail() {
 
       {isAddingExpense && (
         <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300">
-          <div className="bg-[#fdfbf7] w-full max-w-md h-[92vh] sm:h-auto sm:max-h-[92vh] rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500 overflow-hidden relative">
+          <div className="bg-[#fdfbf7] w-full max-w-md lg:max-w-3xl h-[92vh] sm:h-auto sm:max-h-[92vh] rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500 overflow-hidden relative">
             <div
               className="absolute top-3 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-stone-300 rounded-full sm:hidden"
               aria-hidden="true"

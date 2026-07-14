@@ -497,8 +497,8 @@ function QuickSplitContent() {
   const isWarmingUp = editId && !editingExpense;
 
   return (
-    <main className="flex min-h-screen flex-col items-center p-6 bg-[#fdfbf7] pb-40 font-sans selection:bg-emerald-200 selection:text-emerald-900">
-      <div className="w-full max-w-md relative">
+    <main className="flex min-h-screen flex-col items-center p-6 lg:p-10 bg-[#fdfbf7] pb-40 font-sans selection:bg-emerald-200 selection:text-emerald-900">
+      <div className="w-full max-w-md lg:max-w-5xl relative">
         <div className="flex justify-between items-center mb-8 pt-4">
           <button
             onClick={handleBack}
@@ -532,6 +532,9 @@ function QuickSplitContent() {
           </div>
         ) : (
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+            {/* desktop: crew + scan CTA in a sticky left rail, entry form on the right */}
+            <div className="lg:grid lg:grid-cols-[18rem_minmax(0,1fr)] lg:gap-8 lg:items-start">
+              <div className="lg:sticky lg:top-6 lg:self-start">
             <section className="mb-8">
               <div className="flex justify-between items-center mb-4 px-1">
                 <div className="flex items-center gap-2">
@@ -582,7 +585,6 @@ function QuickSplitContent() {
               )}
             </section>
 
-            <div className="relative">
               {!editingExpense &&
                 !showScanner &&
                 scanStage === "idle" &&
@@ -603,7 +605,9 @@ function QuickSplitContent() {
                     </div>
                   </div>
                 )}
-
+              </div>
+              {/* right: the entry form */}
+              <div className="relative min-w-0">
               <ExpenseForm
                 key={editingExpense?.id || (editId ? `edit-${editId}` : "new")}
                 members={members}
@@ -613,6 +617,7 @@ function QuickSplitContent() {
                 currencySymbol="Rp"
                 currencyCode="IDR"
               />
+            </div>
             </div>
           </div>
         )}
