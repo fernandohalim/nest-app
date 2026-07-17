@@ -2,6 +2,17 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
+    version: "3.0.2",
+    date: "jul 17, 2026",
+    title: "share snapshot polish 🖼️",
+    badge: "patch",
+    badgeColor: "bg-teal-100 text-teal-700 border-teal-200",
+    features: [
+      "refined the layout of shared trip and receipt snapshots — the card and its total are noticeably bigger now, and it sits properly on its green mat instead of floating in the middle of an empty picture.",
+      "refined the snapshot's details to use the space better: the category and date now share a line, and the whole crew fits on a single row.",
+    ],
+  },
+  {
     version: "3.0.1",
     date: "jul 17, 2026",
     title: "desktop tabs & share images 🩹",
@@ -12,12 +23,9 @@ export const releases: Release[] = [
       "fixed the desktop sidebar carrying a leftover search, or a half-finished merge selection, across a tab switch — it now clears them exactly like the phone's bottom bar always has.",
       "fixed shared receipt and trip images being cropped by whatsapp: every shared card is now the same fixed size, so there's nothing left for a chat app to trim.",
       "fixed a sliced shadow along the edge of shared receipt images.",
-      "refined shared cards to fill the frame properly — a bigger card, a bigger total, and the date and category tucked onto one line, so a receipt in a chat thread reads at a glance instead of floating in empty space.",
       "refined shared cards to cap very long titles, and to fold a long list of payers into a '+n more' chip — the shared image now looks the same whether a receipt has one payer or twenty.",
     ],
   },
-  // 3.0 is a MAJOR release with two halves: (1) merge receipts, and (2)
-  // responsive desktop design. Both shipped jul 14, 2026.
   {
     version: "3.0",
     date: "jul 14, 2026",
