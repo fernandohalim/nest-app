@@ -773,20 +773,25 @@ export default function UnifiedExpensePage() {
           className="w-[720px] h-[900px] bg-emerald-50 flex items-center justify-center relative font-sans overflow-hidden"
         >
           {/* decorative background blobs — on the frame, so they hug the
-              image's corners. sized to still read as corner accents now that
-              the card covers most of the canvas. */}
+              image's corners rather than floating mid-canvas. scaled up with
+              the frame itself (it's 720 wide now, not 450). */}
           <div className="absolute top-0 right-0 w-56 h-56 bg-emerald-200/40 rounded-bl-full mix-blend-multiply"></div>
           <div className="absolute bottom-0 left-0 w-44 h-44 bg-emerald-200/40 rounded-tr-full mix-blend-multiply"></div>
 
-          <div className="w-[620px] bg-white border-2 border-emerald-100 rounded-[3rem] p-12 shadow-xl relative z-10 flex flex-col items-center text-center">
+          {/* 500px, not wider: the card's job is to sit *on* the emerald mat,
+              not to become it. at 620 the mat collapsed to a rim and the
+              content went adrift — 500 keeps ~110px of mat each side and puts
+              the title/card ratio back near 0.08, where the original read
+              well. */}
+          <div className="w-[500px] bg-white border-2 border-emerald-100 rounded-[3rem] p-10 shadow-xl relative z-10 flex flex-col items-center text-center">
             {/* icon */}
-            <div className="w-20 h-20 bg-emerald-50 border-2 border-emerald-100 rounded-2xl flex items-center justify-center mb-5 shadow-sm">
-              <Emoji char="🧾" className="h-10! w-10!" />
+            <div className="w-22 h-22 bg-emerald-50 border-2 border-emerald-100 rounded-2xl flex items-center justify-center mb-5 shadow-sm">
+              <Emoji char="🧾" className="h-11! w-11!" />
             </div>
 
             {/* title — clamped: an unbounded title is one of the two things
                 that used to make this card's height unpredictable */}
-            <h1 className="text-4xl font-black text-stone-800 leading-tight mb-3 line-clamp-2">
+            <h1 className="text-[2.5rem] font-black text-stone-800 leading-tight mb-3 line-clamp-2">
               {expense.title}
             </h1>
 
@@ -802,10 +807,11 @@ export default function UnifiedExpensePage() {
               </span>
             </div>
 
-            {/* hero amount. the type stops at text-6xl on purpose: idr totals
-                run long, and a 9-figure amount at text-7xl overflows the
-                block. this size clears 11 digits with room. */}
-            <div className="w-full bg-[#fdfbf7] rounded-3xl p-8 mb-6 border-2 border-stone-100 shadow-inner">
+            {/* hero amount. p-6 rather than p-8 is load-bearing, not taste: at
+                500 wide a p-8 block leaves ~340px, and "Rp 2,089,505" already
+                needs ~324 of it. p-6 opens it to ~372 and clears a 10-digit
+                total. text-6xl is the matching ceiling — bigger overflows. */}
+            <div className="w-full bg-[#fdfbf7] rounded-3xl p-6 mb-6 border-2 border-stone-100 shadow-inner">
               <span className="text-xs font-black text-stone-400 uppercase tracking-widest block mb-2">
                 total expense
               </span>
