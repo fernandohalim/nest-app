@@ -12,6 +12,7 @@ export const releases: Release[] = [
       "fixed the desktop sidebar carrying a leftover search, or a half-finished merge selection, across a tab switch — it now clears them exactly like the phone's bottom bar always has.",
       "fixed shared receipt and trip images being cropped by whatsapp: every shared card is now the same fixed size, so there's nothing left for a chat app to trim.",
       "fixed a sliced shadow along the edge of shared receipt images.",
+      "refined shared cards to fill the frame properly — a bigger card, a bigger total, and the date and category tucked onto one line, so a receipt in a chat thread reads at a glance instead of floating in empty space.",
       "refined shared cards to cap very long titles, and to fold a long list of payers into a '+n more' chip — the shared image now looks the same whether a receipt has one payer or twenty.",
     ],
   },

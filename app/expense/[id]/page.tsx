@@ -773,35 +773,44 @@ export default function UnifiedExpensePage() {
           className="w-[720px] h-[900px] bg-emerald-50 flex items-center justify-center relative font-sans overflow-hidden"
         >
           {/* decorative background blobs — on the frame, so they hug the
-              image's corners rather than floating mid-canvas */}
-          <div className="absolute top-0 right-0 w-36 h-36 bg-emerald-200/40 rounded-bl-full mix-blend-multiply"></div>
-          <div className="absolute bottom-0 left-0 w-28 h-28 bg-emerald-200/40 rounded-tr-full mix-blend-multiply"></div>
+              image's corners. sized to still read as corner accents now that
+              the card covers most of the canvas. */}
+          <div className="absolute top-0 right-0 w-56 h-56 bg-emerald-200/40 rounded-bl-full mix-blend-multiply"></div>
+          <div className="absolute bottom-0 left-0 w-44 h-44 bg-emerald-200/40 rounded-tr-full mix-blend-multiply"></div>
 
-          <div className="w-[370px] bg-white border-2 border-emerald-100 rounded-[2.5rem] p-8 shadow-xl relative z-10 flex flex-col items-center text-center">
+          <div className="w-[620px] bg-white border-2 border-emerald-100 rounded-[3rem] p-12 shadow-xl relative z-10 flex flex-col items-center text-center">
             {/* icon */}
-            <div className="w-16 h-16 bg-emerald-50 border-2 border-emerald-100 rounded-2xl flex items-center justify-center mb-6 shadow-sm">
-              <Emoji char="🧾" className="h-8! w-8!" />
+            <div className="w-20 h-20 bg-emerald-50 border-2 border-emerald-100 rounded-2xl flex items-center justify-center mb-5 shadow-sm">
+              <Emoji char="🧾" className="h-10! w-10!" />
             </div>
 
-            {/* title & date — clamped: an unbounded title is one of the two
-                things that used to make this card's height unpredictable */}
-            <h1 className="text-3xl font-black text-stone-800 leading-tight mb-2 line-clamp-2">
+            {/* title — clamped: an unbounded title is one of the two things
+                that used to make this card's height unpredictable */}
+            <h1 className="text-4xl font-black text-stone-800 leading-tight mb-3 line-clamp-2">
               {expense.title}
             </h1>
-            <p className="font-bold text-stone-400 text-[10px] uppercase tracking-widest mb-3">
-              {formatDisplayDateTime(expense.expenseDate)}
-            </p>
-            <span className="font-bold px-3 py-1 bg-emerald-50 text-emerald-600 rounded-md text-[9px] uppercase tracking-widest mb-8 border border-emerald-100">
-              {expense.category}
-            </span>
 
-            {/* hero amount */}
-            <div className="w-full bg-[#fdfbf7] rounded-3xl p-6 mb-8 border-2 border-stone-100 shadow-inner">
-              <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest block mb-2">
+            {/* meta: category and date share one row. stacked, they cost ~90px
+                of height and left the card's width unused — the 4:5 canvas has
+                width to spare and height to save. */}
+            <div className="flex items-center justify-center gap-2.5 mb-8">
+              <span className="font-bold px-3 py-1.5 bg-emerald-50 text-emerald-600 rounded-lg text-[11px] uppercase tracking-widest border border-emerald-100">
+                {expense.category}
+              </span>
+              <span className="font-bold text-stone-400 text-[11px] uppercase tracking-widest">
+                {formatDisplayDateTime(expense.expenseDate)}
+              </span>
+            </div>
+
+            {/* hero amount. the type stops at text-6xl on purpose: idr totals
+                run long, and a 9-figure amount at text-7xl overflows the
+                block. this size clears 11 digits with room. */}
+            <div className="w-full bg-[#fdfbf7] rounded-3xl p-8 mb-6 border-2 border-stone-100 shadow-inner">
+              <span className="text-xs font-black text-stone-400 uppercase tracking-widest block mb-2">
                 total expense
               </span>
-              <span className="text-5xl font-black text-emerald-500 flex items-start justify-center">
-                <span className="text-2xl mt-1.5 mr-1">{currencySymbol}</span>
+              <span className="text-6xl font-black text-emerald-500 flex items-start justify-center">
+                <span className="text-3xl mt-2 mr-1.5">{currencySymbol}</span>
                 {formatMoney(expense.totalAmount, currencyCode)}
               </span>
             </div>
@@ -810,15 +819,15 @@ export default function UnifiedExpensePage() {
             <div className="w-full flex flex-col items-center gap-4 mb-8">
               {/* subtotal / adjustments (only shows if there's a difference) */}
               {expense.splitType === "exact" && Math.abs(difference) > 0 && (
-                <div className="w-full flex flex-col gap-2 bg-stone-50 p-4 rounded-2xl border border-stone-100">
-                  <div className="flex justify-between text-xs font-bold text-stone-500">
+                <div className="w-full flex flex-col gap-2.5 bg-stone-50 p-5 rounded-2xl border border-stone-100">
+                  <div className="flex justify-between text-sm font-bold text-stone-500">
                     <span>subtotal</span>
                     <span className="text-stone-700">
                       {currencySymbol}
                       {formatMoney(itemsSum, currencyCode)}
                     </span>
                   </div>
-                  <div className="flex justify-between text-xs font-bold text-stone-500">
+                  <div className="flex justify-between text-sm font-bold text-stone-500">
                     <span>{difference > 0 ? "tax & fees" : "discount"}</span>
                     <span className="text-stone-700">
                       {difference > 0 ? "+" : "-"}
@@ -831,14 +840,14 @@ export default function UnifiedExpensePage() {
 
               {/* paid by chips */}
               <div className="mt-2 flex flex-col items-center w-full">
-                <span className="text-[9px] font-black text-stone-300 uppercase tracking-widest mb-3">
+                <span className="text-[10px] font-black text-stone-300 uppercase tracking-widest mb-3">
                   paid by
                 </span>
                 <div className="flex flex-wrap gap-2 justify-center">
                   {payersEntries.slice(0, SHARE_PAYER_LIMIT).map(([id, amt]) => (
                     <span
                       key={id}
-                      className="text-[11px] font-extrabold bg-stone-100 border border-stone-200/60 text-stone-500 px-3 py-1.5 rounded-lg flex items-center gap-1.5"
+                      className="text-sm font-extrabold bg-stone-100 border border-stone-200/60 text-stone-500 px-3.5 py-2 rounded-xl flex items-center gap-1.5"
                     >
                       {getMemberName(id)}
                       {payersEntries.length > 1 && (
@@ -850,7 +859,7 @@ export default function UnifiedExpensePage() {
                     </span>
                   ))}
                   {payersEntries.length > SHARE_PAYER_LIMIT && (
-                    <span className="text-[11px] font-extrabold bg-stone-100 border border-stone-200/60 text-stone-400 px-3 py-1.5 rounded-lg">
+                    <span className="text-sm font-extrabold bg-stone-100 border border-stone-200/60 text-stone-400 px-3.5 py-2 rounded-xl">
                       +{payersEntries.length - SHARE_PAYER_LIMIT} more
                     </span>
                   )}
@@ -860,7 +869,7 @@ export default function UnifiedExpensePage() {
 
             <div className="w-full border-t-2 border-dashed border-stone-200 mb-6"></div>
 
-            <span className="text-[10px] font-black text-emerald-600/40 uppercase tracking-widest">
+            <span className="text-xs font-black text-emerald-600/40 uppercase tracking-widest">
               powered by nest.
             </span>
           </div>

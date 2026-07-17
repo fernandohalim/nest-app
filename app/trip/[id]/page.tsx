@@ -2652,50 +2652,53 @@ export default function TripDetail() {
             className="w-[720px] h-[900px] bg-emerald-50 flex items-center justify-center relative font-sans overflow-hidden"
           >
             {/* decorative background blobs — on the frame, so they hug the
-                image's corners rather than floating mid-canvas */}
-            <div className="absolute top-0 right-0 w-36 h-36 bg-emerald-200/40 rounded-bl-full mix-blend-multiply"></div>
-            <div className="absolute bottom-0 left-0 w-28 h-28 bg-emerald-200/40 rounded-tr-full mix-blend-multiply"></div>
+                image's corners. sized to still read as corner accents now that
+                the card covers most of the canvas. */}
+            <div className="absolute top-0 right-0 w-56 h-56 bg-emerald-200/40 rounded-bl-full mix-blend-multiply"></div>
+            <div className="absolute bottom-0 left-0 w-44 h-44 bg-emerald-200/40 rounded-tr-full mix-blend-multiply"></div>
 
-            <div className="w-[370px] bg-white border-2 border-emerald-100 rounded-[2.5rem] p-8 shadow-xl relative z-10 flex flex-col items-center text-center">
-              <div className="w-16 h-16 bg-emerald-50 border-2 border-emerald-100 rounded-2xl flex items-center justify-center mb-6 shadow-sm">
-                <Emoji char="🎒" className="h-8! w-8!" />
+            <div className="w-[620px] bg-white border-2 border-emerald-100 rounded-[3rem] p-12 shadow-xl relative z-10 flex flex-col items-center text-center">
+              <div className="w-20 h-20 bg-emerald-50 border-2 border-emerald-100 rounded-2xl flex items-center justify-center mb-5 shadow-sm">
+                <Emoji char="🎒" className="h-10! w-10!" />
               </div>
 
               {/* clamped: an unbounded trip name was the last thing that could
                   still change this card's height */}
-              <h1 className="text-3xl font-black text-stone-800 leading-tight mb-2 line-clamp-2">
+              <h1 className="text-4xl font-black text-stone-800 leading-tight mb-3 line-clamp-2">
                 {trip.name}
               </h1>
 
-              <span className="font-bold text-stone-400 text-[10px] uppercase tracking-widest mb-8 border-b-2 border-stone-100 pb-2 px-4">
+              <span className="font-bold text-stone-400 text-[11px] uppercase tracking-widest mb-8 border-b-2 border-stone-100 pb-2 px-5">
                 trip snapshot
               </span>
 
-              <div className="w-full bg-[#fdfbf7] rounded-3xl p-6 mb-8 border-2 border-stone-100 shadow-inner">
-                <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest block mb-2">
+              {/* hero amount — text-6xl, not larger: idr group totals run long
+                  and text-7xl overflows the block past ~9 digits. */}
+              <div className="w-full bg-[#fdfbf7] rounded-3xl p-8 mb-8 border-2 border-stone-100 shadow-inner">
+                <span className="text-xs font-black text-stone-400 uppercase tracking-widest block mb-2">
                   total group spend
                 </span>
-                <span className="text-5xl font-black text-emerald-500 flex items-start justify-center">
-                  <span className="text-2xl mt-1.5 mr-1">{currencySymbol}</span>
+                <span className="text-6xl font-black text-emerald-500 flex items-start justify-center">
+                  <span className="text-3xl mt-2 mr-1.5">{currencySymbol}</span>
                   {formatMoney(totalTripCost, currencyCode)}
                 </span>
               </div>
 
               <div className="flex flex-col items-center gap-3 mb-8 w-full">
-                <span className="text-[9px] font-black text-stone-300 uppercase tracking-widest">
+                <span className="text-[10px] font-black text-stone-300 uppercase tracking-widest">
                   the crew
                 </span>
                 <div className="flex gap-2 flex-wrap justify-center">
                   {trip.members.slice(0, 6).map((m) => (
                     <span
                       key={m.id}
-                      className="text-[11px] font-extrabold bg-stone-100 border border-stone-200/60 text-stone-500 px-3 py-1.5 rounded-lg"
+                      className="text-sm font-extrabold bg-stone-100 border border-stone-200/60 text-stone-500 px-3.5 py-2 rounded-xl"
                     >
                       {m.name}
                     </span>
                   ))}
                   {trip.members.length > 6 && (
-                    <span className="text-[11px] font-extrabold bg-stone-100 border border-stone-200/60 text-stone-400 px-3 py-1.5 rounded-lg">
+                    <span className="text-sm font-extrabold bg-stone-100 border border-stone-200/60 text-stone-400 px-3.5 py-2 rounded-xl">
                       +{trip.members.length - 6} more
                     </span>
                   )}
@@ -2704,7 +2707,7 @@ export default function TripDetail() {
 
               <div className="w-full border-t-2 border-dashed border-stone-200 mb-6"></div>
 
-              <span className="text-[10px] font-black text-emerald-600/40 uppercase tracking-widest">
+              <span className="text-xs font-black text-emerald-600/40 uppercase tracking-widest">
                 powered by nest.
               </span>
             </div>
