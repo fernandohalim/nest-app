@@ -18,6 +18,16 @@ const BARCODE_WIDTHS = [
   4, 8, 2, 4, 6, 8, 2, 6, 4, 8, 2, 6, 4, 4, 8, 2, 4, 6, 8, 2, 4,
 ];
 
+// the share card's payer chips wrap, so an unbounded payer list grew the card
+// without limit. cap it the way the trip card already caps "the crew", and let
+// the overflow collapse into a "+N more" chip.
+const SHARE_PAYER_LIMIT = 4;
+
+// 2x of the fixed 720x900 frame. lands on 1440x1800 — comfortably past the
+// ~1080px clients downscale to, while keeping the file about the same weight
+// as the old 3x capture of a narrower card.
+const SHARE_PIXEL_RATIO = 2;
+
 export default function UnifiedExpensePage() {
   const params = useParams();
   const router = useRouter();
@@ -27,7 +37,7 @@ export default function UnifiedExpensePage() {
   const showAlert = useAlertStore((s) => s.showAlert);
 
   const receiptRef = useRef<HTMLDivElement>(null);
-  const compactReceiptRef = useRef<HTMLDivElement>(null);
+  const shareFrameRef = useRef<HTMLDivElement>(null);
 
   const [isLoading, setIsLoading] = useState(true);
   const [isExporting, setIsExporting] = useState(false);
@@ -147,14 +157,14 @@ export default function UnifiedExpensePage() {
 
       let fileToShare: File | null = null;
 
-      if (compactReceiptRef.current) {
-        twemoji.parse(compactReceiptRef.current, {
+      if (shareFrameRef.current) {
+        twemoji.parse(shareFrameRef.current, {
           callback: (icon: string) => `/emoji/${icon}.svg`,
         });
         await new Promise((resolve) => setTimeout(resolve, 400));
-        const blob = await toBlob(compactReceiptRef.current, {
+        const blob = await toBlob(shareFrameRef.current, {
           cacheBust: true,
-          pixelRatio: 3,
+          pixelRatio: SHARE_PIXEL_RATIO,
           backgroundColor: "#fdfbf7",
         });
 
@@ -750,24 +760,32 @@ export default function UnifiedExpensePage() {
         </div>
       </div>
 
-      {/* off-screen receipt snapshot for exporting */}
+      {/* off-screen receipt snapshot for exporting.
+          the frame is fixed at 720x900 (4:5) and is what gets captured, so the
+          png is byte-identical in size for every receipt — messengers can't
+          crop what already fits. the card floats centred inside it: a short
+          receipt just gets more green around it rather than a shorter image.
+          everything variable below is hard-capped so the card can never grow
+          past the frame and clip. */}
       <div className="overflow-hidden absolute -left-2499.75 top-0 pointer-events-none">
         <div
-          ref={compactReceiptRef}
-          className="w-112.5 bg-emerald-50 p-10 flex flex-col relative font-sans shrink-0 shadow-2xl scale-100"
+          ref={shareFrameRef}
+          className="w-[720px] h-[900px] bg-emerald-50 flex items-center justify-center relative font-sans overflow-hidden"
         >
-          {/* decorative background blobs */}
+          {/* decorative background blobs — on the frame, so they hug the
+              image's corners rather than floating mid-canvas */}
           <div className="absolute top-0 right-0 w-36 h-36 bg-emerald-200/40 rounded-bl-full mix-blend-multiply"></div>
           <div className="absolute bottom-0 left-0 w-28 h-28 bg-emerald-200/40 rounded-tr-full mix-blend-multiply"></div>
 
-          <div className="bg-white border-2 border-emerald-100 rounded-[2.5rem] p-8 shadow-xl relative z-10 flex flex-col items-center text-center">
+          <div className="w-[370px] bg-white border-2 border-emerald-100 rounded-[2.5rem] p-8 shadow-xl relative z-10 flex flex-col items-center text-center">
             {/* icon */}
             <div className="w-16 h-16 bg-emerald-50 border-2 border-emerald-100 rounded-2xl flex items-center justify-center mb-6 shadow-sm">
               <Emoji char="🧾" className="h-8! w-8!" />
             </div>
 
-            {/* title & date */}
-            <h1 className="text-3xl font-black text-stone-800 leading-tight mb-2">
+            {/* title & date — clamped: an unbounded title is one of the two
+                things that used to make this card's height unpredictable */}
+            <h1 className="text-3xl font-black text-stone-800 leading-tight mb-2 line-clamp-2">
               {expense.title}
             </h1>
             <p className="font-bold text-stone-400 text-[10px] uppercase tracking-widest mb-3">
@@ -817,7 +835,7 @@ export default function UnifiedExpensePage() {
                   paid by
                 </span>
                 <div className="flex flex-wrap gap-2 justify-center">
-                  {payersEntries.map(([id, amt]) => (
+                  {payersEntries.slice(0, SHARE_PAYER_LIMIT).map(([id, amt]) => (
                     <span
                       key={id}
                       className="text-[11px] font-extrabold bg-stone-100 border border-stone-200/60 text-stone-500 px-3 py-1.5 rounded-lg flex items-center gap-1.5"
@@ -831,6 +849,11 @@ export default function UnifiedExpensePage() {
                       )}
                     </span>
                   ))}
+                  {payersEntries.length > SHARE_PAYER_LIMIT && (
+                    <span className="text-[11px] font-extrabold bg-stone-100 border border-stone-200/60 text-stone-400 px-3 py-1.5 rounded-lg">
+                      +{payersEntries.length - SHARE_PAYER_LIMIT} more
+                    </span>
+                  )}
                 </div>
               </div>
             </div>

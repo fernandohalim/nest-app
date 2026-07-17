@@ -51,16 +51,12 @@ function HomeContent() {
 
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
 
-  const currentTab = searchParams.get("tab");
-  const urlMode = currentTab === "quick" ? "quick" : "trips";
+  const urlMode = searchParams.get("tab") === "quick" ? "quick" : "trips";
 
-  const [viewMode, setLocalViewMode] = useState<"trips" | "quick">(urlMode);
-  const [prevTab, setPrevTab] = useState(currentTab);
-
-  if (currentTab !== prevTab) {
-    setLocalViewMode(urlMode);
-    setPrevTab(currentTab);
-  }
+  // the tab lives in the ui store so the desktop sidebar (which renders
+  // outside this page) can set it directly, exactly like the bottom nav does.
+  const viewMode = useUiStore((s) => s.homeView);
+  const setHomeView = useUiStore((s) => s.setHomeView);
 
   const [searchQuery, setSearchQuery] = useState(searchParams.get("q") || "");
   const [sortBy, setSortBy] = useState<SortType>(
@@ -92,11 +88,7 @@ function HomeContent() {
   }, [searchQuery, sortBy, showOnlyMine, includeSettled, router, searchParams]);
 
   const setViewMode = (mode: "trips" | "quick") => {
-    setLocalViewMode(mode);
-    setSearchQuery("");
-    setVisibleCount(5);
-    setIsSelecting(false);
-    setSelectedIds(new Set());
+    setHomeView(mode);
 
     const params = new URLSearchParams(searchParams.toString());
     if (mode === "quick") params.set("tab", "quick");
@@ -114,6 +106,25 @@ function HomeContent() {
   const [isSelecting, setIsSelecting] = useState(false);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [isMergeOpen, setIsMergeOpen] = useState(false);
+
+  // browser back/forward is the one case where the URL leads: adopt it.
+  // on mount this is already a no-op — the store seeds itself from the
+  // deep link — so it never looks like a switch and never wipes ?q=.
+  useEffect(() => {
+    setHomeView(urlMode);
+  }, [urlMode, setHomeView]);
+
+  // switching tabs resets the page-local view state. this hangs off viewMode
+  // rather than living in setViewMode so that *both* navs get it — the
+  // sidebar can't reach in here to call setViewMode.
+  const [prevView, setPrevView] = useState(viewMode);
+  if (viewMode !== prevView) {
+    setPrevView(viewMode);
+    setSearchQuery("");
+    setVisibleCount(5);
+    setIsSelecting(false);
+    setSelectedIds(new Set());
+  }
 
   const exitSelectMode = () => {
     setIsSelecting(false);

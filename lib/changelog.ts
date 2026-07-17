@@ -1,6 +1,20 @@
 import { Release } from "./types";
 
 export const releases: Release[] = [
+  {
+    version: "3.0.1",
+    date: "jul 17, 2026",
+    title: "desktop tabs & share images 🩹",
+    badge: "patch",
+    badgeColor: "bg-teal-100 text-teal-700 border-teal-200",
+    features: [
+      "fixed the desktop sidebar's trips and receipts tabs doing nothing when nest is saved to the mac dock — the tab now switches the moment you click it, instead of waiting on the address bar to catch up.",
+      "fixed the desktop sidebar carrying a leftover search, or a half-finished merge selection, across a tab switch — it now clears them exactly like the phone's bottom bar always has.",
+      "fixed shared receipt and trip images being cropped by whatsapp: every shared card is now the same fixed size, so there's nothing left for a chat app to trim.",
+      "fixed a sliced shadow along the edge of shared receipt images.",
+      "refined shared cards to cap very long titles, and to fold a long list of payers into a '+n more' chip — the shared image now looks the same whether a receipt has one payer or twenty.",
+    ],
+  },
   // 3.0 is a MAJOR release with two halves: (1) merge receipts, and (2)
   // responsive desktop design. Both shipped jul 14, 2026.
   {

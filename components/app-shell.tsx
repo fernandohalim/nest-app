@@ -1,10 +1,9 @@
 "use client";
 
-import { Suspense } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import { useTripStore } from "@/store/useTripStore";
-import { useUiStore } from "@/store/useUiStore";
+import { useUiStore, type HomeView } from "@/store/useUiStore";
 import CreateTripModal from "./create-trip-modal";
 import AboutModal from "./about-modal";
 import ProfileMenu from "./profile-menu";
@@ -45,18 +44,28 @@ function NavButton({
 function Sidebar() {
   const router = useRouter();
   const pathname = usePathname();
-  const searchParams = useSearchParams();
 
   const user = useTripStore((s) => s.user);
   const profile = useTripStore((s) => s.profile);
   const openActionMenu = useUiStore((s) => s.openActionMenu);
   const openAbout = useUiStore((s) => s.openAbout);
   const openProfile = useUiStore((s) => s.openProfile);
+  const homeView = useUiStore((s) => s.homeView);
+  const setHomeView = useUiStore((s) => s.setHomeView);
 
   const onHome = pathname === "/";
-  const tab = searchParams.get("tab");
-  const tripsActive = onHome && tab !== "quick";
-  const receiptsActive = onHome && tab === "quick";
+  // read the tab from the store, not the URL: the pill has to light up on the
+  // click, not one router round-trip later.
+  const tripsActive = onHome && homeView === "trips";
+  const receiptsActive = onHome && homeView === "quick";
+
+  // flip the tab in state first, then let the URL follow — same order the
+  // mobile bottom nav uses. the push is only load-bearing for the route
+  // change when we're not already on home.
+  const showTab = (mode: HomeView) => {
+    setHomeView(mode);
+    router.push(mode === "quick" ? "/?tab=quick" : "/");
+  };
 
   const avatarUrl = user?.user_metadata?.avatar_url;
   const fullName =
@@ -91,7 +100,7 @@ function Sidebar() {
       <nav className="flex flex-col gap-1.5">
         <NavButton
           active={tripsActive}
-          onClick={() => router.push("/")}
+          onClick={() => showTab("trips")}
           label="trips"
         >
           <svg
@@ -112,7 +121,7 @@ function Sidebar() {
 
         <NavButton
           active={receiptsActive}
-          onClick={() => router.push("/?tab=quick")}
+          onClick={() => showTab("quick")}
           label="receipts"
         >
           <svg
@@ -222,9 +231,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="lg:flex lg:items-start">
-      <Suspense fallback={null}>
-        <Sidebar />
-      </Suspense>
+      <Sidebar />
       <div className="flex-1 min-w-0">{children}</div>
 
       <ActionMenu />

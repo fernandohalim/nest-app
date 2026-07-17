@@ -29,6 +29,9 @@ import Emoji from "@/components/emoji";
 
 export { getCurrencySymbol };
 
+// 2x of the fixed 720x900 frame — 1440x1800 out. matches the receipt card.
+const SHARE_PIXEL_RATIO = 2;
+
 export default function TripDetail() {
   const params = useParams();
   const router = useRouter();
@@ -219,7 +222,7 @@ export default function TripDetail() {
         await new Promise((resolve) => setTimeout(resolve, 400));
         const blob = await toBlob(shareCardRef.current, {
           cacheBust: true,
-          pixelRatio: 3,
+          pixelRatio: SHARE_PIXEL_RATIO,
           backgroundColor: "#fdfbf7",
         });
 
@@ -2637,23 +2640,30 @@ export default function TripDetail() {
         />
       )}
 
-      {/* off-screen trip snapshot for exporting */}
+      {/* off-screen trip snapshot for exporting.
+          fixed 720x900 (4:5) frame, same as the receipt card — the png is the
+          same size for every trip, so it can't be crop-clipped. the card
+          floats centred; "the crew" was already capped at 6, and the trip name
+          is clamped below, so it can never outgrow the frame. */}
       {trip && (
         <div className="overflow-hidden absolute -left-2499.75 top-0 pointer-events-none">
           <div
             ref={shareCardRef}
-            className="w-112.5 bg-emerald-50 p-10 flex flex-col relative font-sans"
+            className="w-[720px] h-[900px] bg-emerald-50 flex items-center justify-center relative font-sans overflow-hidden"
           >
-            {/* decorative background blobs */}
+            {/* decorative background blobs — on the frame, so they hug the
+                image's corners rather than floating mid-canvas */}
             <div className="absolute top-0 right-0 w-36 h-36 bg-emerald-200/40 rounded-bl-full mix-blend-multiply"></div>
             <div className="absolute bottom-0 left-0 w-28 h-28 bg-emerald-200/40 rounded-tr-full mix-blend-multiply"></div>
 
-            <div className="bg-white border-2 border-emerald-100 rounded-[2.5rem] p-8 shadow-xl relative z-10 flex flex-col items-center text-center">
+            <div className="w-[370px] bg-white border-2 border-emerald-100 rounded-[2.5rem] p-8 shadow-xl relative z-10 flex flex-col items-center text-center">
               <div className="w-16 h-16 bg-emerald-50 border-2 border-emerald-100 rounded-2xl flex items-center justify-center mb-6 shadow-sm">
                 <Emoji char="🎒" className="h-8! w-8!" />
               </div>
 
-              <h1 className="text-3xl font-black text-stone-800 leading-tight mb-2">
+              {/* clamped: an unbounded trip name was the last thing that could
+                  still change this card's height */}
+              <h1 className="text-3xl font-black text-stone-800 leading-tight mb-2 line-clamp-2">
                 {trip.name}
               </h1>
 
