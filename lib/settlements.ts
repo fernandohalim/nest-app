@@ -260,3 +260,52 @@ export function calculateSettlements(trip: Trip): Transaction[] {
 
   return transactions;
 }
+
+// the "before simplifying" view (3.2): every unpaid share, totalled per
+// debtor → payer pair, with no netting across people. a multi-payer bill
+// splits each debtor's share across payers by how much each fronted (same
+// proportional rule as settled-share crediting above). settled shares are
+// already paid, so they drop out — which keeps these raw debts' per-person
+// net identical to the balances calculateSettlements simplifies.
+export interface RawDebt extends Transaction {
+  billCount: number;
+}
+
+export function calculateRawDebts(trip: Trip): RawDebt[] {
+  if (!trip || trip.members.length === 0) return [];
+  const memberById = new Map(trip.members.map((m) => [m.id, m]));
+  const pairs = new Map<string, RawDebt>();
+
+  trip.expenses.forEach((exp) => {
+    const totalPaid = Object.values(exp.paidBy || {}).reduce(
+      (s, v) => s + v,
+      0,
+    );
+    if (totalPaid <= 0) return;
+
+    Object.entries(exp.owedBy || {}).forEach(([debtorId, owed]) => {
+      if (!owed || owed <= 0 || exp.settledShares?.[debtorId]) return;
+      const from = memberById.get(debtorId);
+      if (!from) return;
+
+      Object.entries(exp.paidBy || {}).forEach(([payerId, paid]) => {
+        if (payerId === debtorId || paid <= 0) return;
+        const to = memberById.get(payerId);
+        if (!to) return;
+        const amount = (paid / totalPaid) * owed;
+        const key = `${debtorId}>${payerId}`;
+        const pair = pairs.get(key);
+        if (pair) {
+          pair.amount += amount;
+          pair.billCount += 1;
+        } else {
+          pairs.set(key, { from, to, amount, billCount: 1 });
+        }
+      });
+    });
+  });
+
+  return Array.from(pairs.values())
+    .filter((p) => p.amount >= 0.01)
+    .sort((a, b) => b.amount - a.amount);
+}

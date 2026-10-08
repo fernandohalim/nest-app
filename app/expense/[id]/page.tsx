@@ -48,6 +48,13 @@ export default function UnifiedExpensePage() {
   // creator of a quick split — the only one who can keep / stop keeping it
   const [createdBy, setCreatedBy] = useState<string | null>(null);
   const [isTogglingKeep, setIsTogglingKeep] = useState(false);
+  // 3.2: non-creators can bookmark a quick split onto their home list. it's
+  // only a shortcut — it never keeps the receipt alive.
+  const [isSaved, setIsSaved] = useState(false);
+  const [isTogglingSave, setIsTogglingSave] = useState(false);
+  // once the user taps the bookmark, a slow initial lookup must not
+  // overwrite their choice when it finally resolves
+  const saveTouchedRef = useRef(false);
   const [tripData, setTripData] = useState<{
     id: string;
     name: string;
@@ -122,6 +129,53 @@ export default function UnifiedExpensePage() {
     };
     fetchData();
   }, [expenseId]);
+
+  useEffect(() => {
+    if (!user || !expense || createdBy === user.id) return;
+    let cancelled = false;
+    supabase
+      .from("user_receipts")
+      .select("expense_id")
+      .eq("user_id", user.id)
+      .eq("expense_id", expense.id)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (!cancelled && !saveTouchedRef.current) setIsSaved(Boolean(data));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, expense?.id, createdBy]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const handleToggleSave = async () => {
+    if (!user) return router.push("/login");
+    if (!expense || isTogglingSave) return;
+    const next = !isSaved;
+    saveTouchedRef.current = true;
+    setIsTogglingSave(true);
+    setIsSaved(next);
+    const { error } = next
+      ? await supabase
+          .from("user_receipts")
+          .insert({ user_id: user.id, expense_id: expense.id })
+      : await supabase
+          .from("user_receipts")
+          .delete()
+          .match({ user_id: user.id, expense_id: expense.id });
+    setIsTogglingSave(false);
+
+    if (error) {
+      setIsSaved(!next);
+      showAlert("couldn't update your receipts. try again!", "error ❌");
+      return;
+    }
+    showAlert(
+      next
+        ? "added to your receipts for easy access. it still auto-deletes unless whoever made it keeps it 📌"
+        : "removed from your receipts.",
+      next ? "saved ✨" : "unsaved 🔗",
+    );
+  };
 
   const handleExportImage = async () => {
     if (!receiptRef.current) return;
@@ -348,6 +402,31 @@ export default function UnifiedExpensePage() {
             </button>
           )}
 
+          {!tripData && !isCreator && (
+            <button
+              onClick={handleToggleSave}
+              disabled={isTogglingSave}
+              aria-label={isSaved ? "remove from my receipts" : "save to my receipts"}
+              aria-pressed={isSaved}
+              className={`w-11 h-11 rounded-full transition-all flex items-center justify-center hover:scale-110 hover:-translate-y-0.5 active:scale-95 disabled:opacity-70 ${isSaved ? "text-emerald-600 bg-emerald-100 border border-emerald-200" : "text-stone-400 bg-white border border-stone-100 shadow-sm"}`}
+            >
+              <svg
+                className="w-5 h-5"
+                fill={isSaved ? "currentColor" : "none"}
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z"
+                />
+              </svg>
+            </button>
+          )}
+
           {tripData && (
             <button
               onClick={() =>
@@ -437,7 +516,9 @@ export default function UnifiedExpensePage() {
                   ? "this receipt won't be auto-deleted."
                   : isCreator
                     ? "receipts auto-delete after 7 days unless you keep them."
-                    : "receipts auto-delete after 7 days. ask whoever made it to keep it, or save the image."}
+                    : isSaved
+                      ? "saved to your receipts, but only whoever made it can keep it. save the image to be safe."
+                      : "receipts auto-delete after 7 days. ask whoever made it to keep it, or save the image."}
               </span>
             </div>
             <button

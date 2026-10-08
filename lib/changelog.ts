@@ -2,6 +2,19 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
+    version: "3.2",
+    date: "oct 8, 2026",
+    title: "bookmarks & the shortcut 🔖",
+    badge: "feature",
+    badgeColor: "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200",
+    features: [
+      "added saving someone else's receipt to your receipts list — tap the bookmark on any receipt shared with you and it stays one tap away, tagged with who made it. saving isn't keeping: it still auto-deletes unless whoever made it keeps it 📌. removing it only drops it from your list, never the receipt itself.",
+      "added a before / simplified toggle to 'who pays who' — see every payment people would make bill by bill, then watch it fold down into the fewest transfers, with the same totals for everyone.",
+      "refined a trip's bills into slim rows grouped by day, each with its category icon, who paid, and how many have paid back — tap one to open its full breakdown in a sheet.",
+      "refined the changelog: the latest release up top, older ones grouped by version and folded away, and every change tagged as new, refined or fixed so you can scan it at a glance.",
+    ],
+  },
+  {
     version: "3.1.1",
     date: "oct 8, 2026",
     title: "tidier lists 🧹",

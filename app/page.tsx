@@ -35,6 +35,7 @@ interface QuickSplitRow {
   ephemeral_members?: Member[];
   is_kept?: boolean;
   retention_from?: string;
+  created_by?: string | null;
 }
 
 function HomeContent() {
@@ -155,6 +156,9 @@ function HomeContent() {
   };
 
   const [quickSplits, setQuickSplits] = useState<Expense[]>([]);
+  // 3.2: receipts other people made that this user bookmarked → creator's
+  // nickname (keyed by expense id). absent = the user's own receipt.
+  const [savedFrom, setSavedFrom] = useState<Record<string, string>>({});
   const [isLoadingQuick, setIsLoadingQuick] = useState(false);
 
   const sortOptions = [
@@ -192,16 +196,62 @@ function HomeContent() {
     const fetchQuickSplits = async () => {
       if (!userId) return;
       setIsLoadingQuick(true);
-      const { data, error } = await supabase
-        .from("expenses")
-        .select("*")
-        .is("trip_id", null)
-        .eq("created_by", userId)
-        .order("created_at", { ascending: false });
+      const [ownRes, savedRes] = await Promise.all([
+        supabase
+          .from("expenses")
+          .select("*")
+          .is("trip_id", null)
+          .eq("created_by", userId)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("user_receipts")
+          .select("expenses(*)")
+          .eq("user_id", userId),
+      ]);
+      const { data, error } = ownRes;
+
+      // bookmarked receipts: drop anything merged into a trip since (trip_id
+      // set) and anything the user made themselves (already in ownRes).
+      const savedRows = (
+        (savedRes.data ?? []) as unknown as {
+          expenses: QuickSplitRow | QuickSplitRow[] | null;
+        }[]
+      )
+        .flatMap((r) =>
+          Array.isArray(r.expenses) ? r.expenses : r.expenses ? [r.expenses] : [],
+        )
+        .filter(
+          (e) =>
+            !(e as QuickSplitRow & { trip_id?: string | null }).trip_id &&
+            e.created_by !== userId,
+        );
+
+      const creatorIds = Array.from(
+        new Set(savedRows.map((e) => e.created_by).filter(Boolean)),
+      ) as string[];
+      const nicknames: Record<string, string> = {};
+      if (creatorIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from("profiles")
+          .select("user_id, nickname")
+          .in("user_id", creatorIds);
+        (profiles ?? []).forEach((p) => {
+          nicknames[p.user_id] = p.nickname;
+        });
+      }
 
       if (cancelled) return;
       if (data && !error) {
-        const mappedData: Expense[] = (data as QuickSplitRow[]).map((exp) => ({
+        const nextSavedFrom: Record<string, string> = {};
+        savedRows.forEach((e) => {
+          nextSavedFrom[e.id] =
+            (e.created_by && nicknames[e.created_by]) || "";
+        });
+        setSavedFrom(nextSavedFrom);
+        const mappedData: Expense[] = [
+          ...(data as QuickSplitRow[]),
+          ...savedRows,
+        ].map((exp) => ({
           id: exp.id,
           title: exp.title,
           totalAmount: exp.total_amount,
@@ -234,6 +284,28 @@ function HomeContent() {
     e: React.MouseEvent,
   ) => {
     e.stopPropagation();
+    if (id in savedFrom) {
+      // someone else's receipt — only drop the bookmark, never the receipt
+      showConfirm(
+        `remove "${title}" from your receipts? the receipt itself stays, you can save it again from its link.`,
+        async () => {
+          const { error } = await supabase
+            .from("user_receipts")
+            .delete()
+            .match({ user_id: userId, expense_id: id });
+          if (!error) {
+            setQuickSplits((prev) => prev.filter((exp) => exp.id !== id));
+          } else {
+            showAlert("failed to remove the receipt.", "error ❌");
+          }
+        },
+        {
+          title: "remove from my receipts? 🔖",
+          confirmText: "yes, remove it",
+        },
+      );
+      return;
+    }
     showConfirm(
       `are you sure you want to delete "${title}"?`,
       async () => {
@@ -332,7 +404,7 @@ function HomeContent() {
           <div className="flex items-center gap-2">
             {viewMode === "quick" &&
               !isLoadingQuick &&
-              quickSplits.length > 0 &&
+              quickSplits.some((e) => !(e.id in savedFrom)) &&
               !isSelecting && (
                 <button
                   onClick={() => setIsSelecting(true)}
@@ -507,7 +579,9 @@ function HomeContent() {
                       </span>
                       <button
                         onClick={() => {
-                          const allIds = processedQuickSplits.map((e) => e.id);
+                          const allIds = processedQuickSplits
+                            .filter((e) => !(e.id in savedFrom))
+                            .map((e) => e.id);
                           const allSelected = allIds.every((id) =>
                             selectedIds.has(id),
                           );
@@ -517,9 +591,9 @@ function HomeContent() {
                         }}
                         className="text-xs font-black text-emerald-600 hover:text-emerald-800 uppercase tracking-wider transition-colors"
                       >
-                        {processedQuickSplits.every((e) =>
-                          selectedIds.has(e.id),
-                        )
+                        {processedQuickSplits
+                          .filter((e) => !(e.id in savedFrom))
+                          .every((e) => selectedIds.has(e.id))
                           ? "clear all"
                           : "select all"}
                       </button>
@@ -575,6 +649,7 @@ function HomeContent() {
                         onDelete={(e) =>
                           handleDeleteQuickSplit(expense.id, expense.title, e)
                         }
+                        savedFrom={savedFrom[expense.id]}
                       />
                     )}
                   />

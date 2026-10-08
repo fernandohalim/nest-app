@@ -6,7 +6,7 @@ import { useTripStore } from "@/store/useTripStore";
 import { useAlertStore } from "@/store/useAlertStore";
 import { v4 as uuidv4 } from "uuid";
 import ExpenseForm from "@/components/expense-form";
-import { calculateSettlements } from "@/lib/settlements";
+import { calculateRawDebts, calculateSettlements } from "@/lib/settlements";
 import { Expense, ExpenseItem } from "@/lib/types";
 import { supabase } from "@/lib/supabase";
 import CustomSelect from "@/components/custom-select";
@@ -27,6 +27,7 @@ import { getAvatarColor, getInitials } from "@/lib/avatars";
 import { toBlob } from "html-to-image";
 import twemoji from "@twemoji/api";
 import Emoji from "@/components/emoji";
+import { CATEGORY_EMOJI } from "@/components/home-list";
 
 export { getCurrencySymbol };
 
@@ -158,6 +159,68 @@ export default function TripDetail() {
         }),
     [trip?.expenses, filterCategory, sortBy],
   );
+
+  // 3.2: day-grouped feed when sorted by date; amount sorts stay one flat list
+  const expenseGroups = useMemo(() => {
+    if (sortBy !== "newest" && sortBy !== "oldest") {
+      return [{ key: "all", label: "", total: 0, items: processedExpenses }];
+    }
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(today.getDate() - 1);
+    const dayKey = (d: Date) =>
+      `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+    const groups: {
+      key: string;
+      label: string;
+      total: number;
+      items: Expense[];
+    }[] = [];
+    processedExpenses.forEach((exp) => {
+      const d = new Date(exp.expenseDate.replace(" ", "T"));
+      const key = Number.isNaN(d.getTime()) ? "unknown" : dayKey(d);
+      let group = groups.find((g) => g.key === key);
+      if (!group) {
+        const label =
+          key === "unknown"
+            ? "no date"
+            : key === dayKey(today)
+              ? "today"
+              : key === dayKey(yesterday)
+                ? "yesterday"
+                : d
+                    .toLocaleDateString(undefined, {
+                      weekday: "short",
+                      month: "short",
+                      day: "numeric",
+                      ...(d.getFullYear() !== today.getFullYear()
+                        ? { year: "numeric" as const }
+                        : {}),
+                    })
+                    .toLowerCase();
+        group = { key, label, total: 0, items: [] };
+        groups.push(group);
+      }
+      group.items.push(exp);
+      group.total += exp.totalAmount;
+    });
+    return groups;
+  }, [processedExpenses, sortBy]);
+
+  const sheetExpense = expandedExpenseId
+    ? trip?.expenses.find((e) => e.id === expandedExpenseId)
+    : undefined;
+
+  useEffect(() => {
+    if (!expandedExpenseId) return;
+    const onKey = (e: KeyboardEvent) => {
+      // the payer breakdown can stack on top — let it close first
+      if (e.key === "Escape" && !payerBreakdownExpense)
+        setExpandedExpenseId(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [expandedExpenseId, payerBreakdownExpense]);
 
   const usedCategories = useMemo(
     () =>
@@ -407,6 +470,49 @@ export default function TripDetail() {
     () => (trip ? calculateSettlements(trip) : []),
     [trip],
   );
+  const rawDebts = useMemo(() => (trip ? calculateRawDebts(trip) : []), [trip]);
+
+  // 3.2 before/after toggle: the outgoing rows fold away first ("out"), then
+  // the other view staggers in while the payment counter ticks to its count.
+  const [settleView, setSettleView] = useState<"before" | "after">("after");
+  const [settlePhase, setSettlePhase] = useState<"idle" | "out">("idle");
+  const switchSettleView = (next: "before" | "after") => {
+    if (next === settleView || settlePhase === "out") return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setSettleView(next);
+      return;
+    }
+    setSettlePhase("out");
+    window.setTimeout(() => {
+      setSettleView(next);
+      setSettlePhase("idle");
+    }, 240);
+  };
+
+  const settleTarget =
+    settleView === "before" ? rawDebts.length : settlements.length;
+  const [shownPaymentCount, setShownPaymentCount] = useState(settleTarget);
+  const shownPaymentRef = useRef(settleTarget);
+  useEffect(() => {
+    const from = shownPaymentRef.current;
+    if (from === settleTarget) return;
+    const reduce = window.matchMedia(
+      "(prefers-reduced-motion: reduce)",
+    ).matches;
+    const startAt = performance.now();
+    const duration = reduce ? 0 : 480;
+    let raf = 0;
+    const tick = (now: number) => {
+      const t = duration ? Math.min(1, (now - startAt) / duration) : 1;
+      const eased = 1 - Math.pow(1 - t, 3);
+      const value = Math.round(from + (settleTarget - from) * eased);
+      shownPaymentRef.current = value;
+      setShownPaymentCount(value);
+      if (t < 1) raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [settleTarget]);
 
   // ──────────────────────────────────────────────────────────────────────────
   // 🔥 L11 + L2: memoized ledger math. The L2 fix is applied surgically in
@@ -1153,7 +1259,7 @@ export default function TripDetail() {
             </div>
           )}
 
-          <div className="space-y-4">
+          <div className="space-y-5">
             {processedExpenses.length === 0 ? (
               <div className="text-center py-16 bg-white rounded-4xl shadow-sm border-2 border-dashed border-stone-200">
                 <div
@@ -1170,47 +1276,159 @@ export default function TripDetail() {
                 </span>
               </div>
             ) : (
-              processedExpenses.map((exp) => {
-                const payersEntries = Object.entries(exp.paidBy);
-                const isMultiPayer = payersEntries.length > 1;
-                const singlePayerName = !isMultiPayer
-                  ? getMemberName(payersEntries[0][0])
-                  : "";
-                const isExpanded = expandedExpenseId === exp.id;
-                const itemsSum =
-                  exp.splitType === "exact" && exp.items
-                    ? exp.items.reduce((acc, item) => acc + item.price, 0)
-                    : 0;
-                const difference = exp.totalAmount - itemsSum;
+              expenseGroups.map((group) => (
+                <div key={group.key}>
+                  {group.label && (
+                    <div className="flex items-baseline justify-between px-2 mb-1.5">
+                      <span className="text-[11px] font-black text-stone-400 uppercase tracking-widest">
+                        {group.label}
+                      </span>
+                      <span className="text-[11px] font-bold text-stone-400 tabular-nums">
+                        {currencySymbol}
+                        {formatMoney(group.total, currencyCode)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="bg-white rounded-3xl border-2 border-stone-100 shadow-sm divide-y divide-stone-100 overflow-hidden">
+                    {group.items.map((exp) => {
+                      const payerIds = Object.keys(exp.paidBy);
+                      const payerLabel =
+                        payerIds.length > 1
+                          ? `${payerIds.length} payers`
+                          : `${getMemberName(payerIds[0])} paid`;
+                      const splitLabel =
+                        exp.splitType === "exact"
+                          ? "by item"
+                          : exp.splitType === "equal"
+                            ? "equally"
+                            : "custom";
+                      // people who owe a share someone else fronted
+                      const debtorIds = Object.entries(exp.owedBy)
+                        .filter(([id, amt]) => amt > 0 && !exp.paidBy[id])
+                        .map(([id]) => id);
+                      const settledCount = debtorIds.filter(
+                        (id) => exp.settledShares?.[id],
+                      ).length;
+                      const allSettled =
+                        debtorIds.length > 0 &&
+                        settledCount === debtorIds.length;
+                      // inside a day group the time is enough; flat lists
+                      // (amount sorts) need the date back
+                      const when = formatDisplayDateTime(
+                        exp.expenseDate,
+                        group.label
+                          ? { hour: "numeric", minute: "2-digit" }
+                          : { month: "short", day: "numeric" },
+                      ).toLowerCase();
+                      return (
+                        <button
+                          key={exp.id}
+                          onClick={() => setExpandedExpenseId(exp.id)}
+                          aria-haspopup="dialog"
+                          className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-stone-50/80 active:bg-stone-100 transition-colors group"
+                        >
+                          <div
+                            className="shrink-0 w-11 h-11 rounded-2xl bg-stone-50 flex items-center justify-center text-lg"
+                            aria-hidden="true"
+                          >
+                            {CATEGORY_EMOJI[exp.category || "other"] ?? "🧾"}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-extrabold text-[15px] text-stone-800 truncate group-hover:text-emerald-700 transition-colors">
+                              {exp.title}
+                            </p>
+                            <p className="text-xs font-bold text-stone-400 truncate">
+                              {when} · {payerLabel} · {splitLabel}
+                            </p>
+                          </div>
+                          <div className="shrink-0 flex flex-col items-end gap-0.5">
+                            <span className="text-[15px] font-black text-stone-800 tabular-nums">
+                              <span className="text-stone-400 font-bold mr-0.5">
+                                {currencySymbol}
+                              </span>
+                              {formatMoney(exp.totalAmount, currencyCode)}
+                            </span>
+                            {settledCount > 0 && (
+                              <span
+                                className={`text-[10px] font-black tabular-nums ${allSettled ? "text-emerald-600" : "text-stone-400"}`}
+                              >
+                                {allSettled
+                                  ? "all paid ✓"
+                                  : `${settledCount}/${debtorIds.length} paid`}
+                              </span>
+                            )}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
 
-                return (
+          {/* 3.2: bill details live in a sheet so the feed stays scannable */}
+          {sheetExpense &&
+            (() => {
+              const exp = sheetExpense;
+              const payersEntries = Object.entries(exp.paidBy);
+              const isMultiPayer = payersEntries.length > 1;
+              const itemsSum =
+                exp.splitType === "exact" && exp.items
+                  ? exp.items.reduce((acc, item) => acc + item.price, 0)
+                  : 0;
+              const difference = exp.totalAmount - itemsSum;
+              return (
+                <div
+                  className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300"
+                  role="dialog"
+                  aria-modal="true"
+                  aria-labelledby="expense-sheet-title"
+                  onClick={() => setExpandedExpenseId(null)}
+                >
                   <div
-                    key={exp.id}
-                    className="bg-white rounded-3xl shadow-sm border-2 border-stone-100 overflow-hidden group hover:border-emerald-200 hover:shadow-md transition-all duration-300"
+                    className="bg-[#fdfbf7] w-full max-w-md lg:max-w-lg max-h-[90dvh] rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500 overflow-hidden relative"
+                    onClick={(e) => e.stopPropagation()}
                   >
-                    <button
-                      onClick={() =>
-                        setExpandedExpenseId(isExpanded ? null : exp.id)
-                      }
-                      aria-expanded={isExpanded}
-                      className="w-full flex justify-between items-start p-4 sm:p-5 text-left active:bg-stone-50 transition-colors gap-3"
-                    >
-                      <div className="flex-1 min-w-0">
-                        {/* date */}
-                        <span className="text-[10px] font-black text-stone-400 tracking-widest uppercase mb-1 block">
-                          {formatDisplayDateTime(exp.expenseDate)}
-                        </span>
-                        {/* title */}
-                        <p className="text-base sm:text-lg font-extrabold text-stone-800 truncate mb-2">
-                          {exp.title}
-                        </p>
-                        {/* metadata pills */}
-                        <div className="flex items-center flex-wrap gap-1.5 sm:gap-2 mb-1.5">
-                          <span className="px-1.5 py-0.5 sm:px-2 sm:py-0.5 bg-stone-100 text-stone-500 rounded-md text-[9px] sm:text-[10px] tracking-widest uppercase shrink-0 font-bold">
+                    <div
+                      className="absolute top-3 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-stone-300 rounded-full sm:hidden"
+                      aria-hidden="true"
+                    ></div>
+                    {/* header: what, when, how much, who paid */}
+                    <div className="px-6 pt-8 sm:pt-6 pb-5 border-b-2 border-stone-100 bg-white">
+                      <div className="flex items-start gap-3">
+                        <div
+                          className="shrink-0 w-12 h-12 rounded-2xl bg-stone-50 flex items-center justify-center text-2xl"
+                          aria-hidden="true"
+                        >
+                          {CATEGORY_EMOJI[exp.category || "other"] ?? "🧾"}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <h2
+                            id="expense-sheet-title"
+                            className="text-lg font-black text-stone-800 leading-tight break-words"
+                          >
+                            {exp.title}
+                          </h2>
+                          <p className="text-[11px] font-bold text-stone-400 mt-0.5">
+                            {formatDisplayDateTime(exp.expenseDate).toLowerCase()}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => setExpandedExpenseId(null)}
+                          aria-label="close"
+                          className="shrink-0 w-9 h-9 bg-stone-100 rounded-full flex items-center justify-center text-stone-500 hover:bg-stone-200 active:scale-90 transition-all font-bold"
+                        >
+                          ×
+                        </button>
+                      </div>
+                      <div className="flex items-end justify-between gap-3 mt-4">
+                        <div className="flex items-center flex-wrap gap-1.5 min-w-0">
+                          <span className="px-2 py-0.5 bg-stone-100 text-stone-500 rounded-md text-[10px] tracking-widest uppercase font-bold">
                             {exp.category || "other"}
                           </span>
                           <span
-                            className={`px-1.5 py-0.5 sm:px-2 sm:py-0.5 rounded-md text-[9px] sm:text-[10px] tracking-widest uppercase shrink-0 border font-bold ${exp.splitType === "exact" ? "border-indigo-100 text-indigo-500 bg-indigo-50" : exp.splitType === "equal" ? "border-emerald-100 text-emerald-500 bg-emerald-50" : "border-amber-100 text-amber-500 bg-amber-50"}`}
+                            className={`px-2 py-0.5 rounded-md text-[10px] tracking-widest uppercase border font-bold ${exp.splitType === "exact" ? "border-indigo-100 text-indigo-500 bg-indigo-50" : exp.splitType === "equal" ? "border-emerald-100 text-emerald-500 bg-emerald-50" : "border-amber-100 text-amber-500 bg-amber-50"}`}
                           >
                             {exp.splitType === "exact"
                               ? "by item"
@@ -1218,85 +1436,42 @@ export default function TripDetail() {
                                 ? "equally"
                                 : "custom"}
                           </span>
-                        </div>
-                        {/* 🔥 finding #2 + #3: paid-by gets its own row, never truncated */}
-                        <div className="flex items-center gap-1.5 text-[11px] sm:text-xs font-bold text-stone-500">
                           {isMultiPayer ? (
-                            <span
-                              role="button"
-                              tabIndex={0}
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setPayerBreakdownExpense(exp);
-                              }}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" || e.key === " ") {
-                                  e.preventDefault();
-                                  e.stopPropagation();
-                                  setPayerBreakdownExpense(exp);
-                                }
-                              }}
+                            <button
+                              onClick={() => setPayerBreakdownExpense(exp)}
                               aria-label={`view breakdown for ${payersEntries.length} payers`}
                               className="inline-flex items-center gap-1 px-2 py-0.5 bg-stone-100 text-stone-600 hover:bg-stone-200 rounded-md text-[10px] font-black tracking-widest uppercase transition-colors active:scale-95"
                             >
                               👥 {payersEntries.length} payers
-                              <span
-                                className="text-stone-400"
-                                aria-hidden="true"
-                              >
+                              <span className="text-stone-400" aria-hidden="true">
                                 ›
                               </span>
-                            </span>
+                            </button>
                           ) : (
-                            <span className="truncate">
+                            <span className="text-xs font-bold text-stone-500 truncate">
                               paid by{" "}
-                              <span className="text-stone-700">
-                                {singlePayerName}
+                              <span className="text-stone-800">
+                                {getMemberName(payersEntries[0][0])}
                               </span>
                             </span>
                           )}
                         </div>
-                      </div>
-                      <div className="text-right shrink-0 pl-2">
-                        <p className="text-lg sm:text-xl font-black text-emerald-600">
-                          {/* 🔥 U10/U14 */}
+                        <span className="shrink-0 text-2xl font-black text-emerald-600 tabular-nums leading-none">
                           {currencySymbol}
                           {formatMoney(exp.totalAmount, currencyCode)}
-                        </p>
-                        <p className="text-[10px] sm:text-xs font-bold text-stone-400 mt-1 flex items-center justify-end gap-1">
-                          {isExpanded ? "close" : "details"}
-                          <span
-                            className={`w-4 h-4 sm:w-5 sm:h-5 flex items-center justify-center bg-stone-100 rounded-full transition-transform duration-300 ${isExpanded ? "rotate-180 bg-emerald-100 text-emerald-600" : ""}`}
-                            aria-hidden="true"
-                          >
-                            <svg
-                              className="w-2.5 h-2.5 sm:w-3 sm:h-3"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth={3}
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                d="M19 9l-7 7-7-7"
-                              />
-                            </svg>
-                          </span>
-                        </p>
+                        </span>
                       </div>
-                    </button>
+                    </div>
 
-                    {isExpanded && (
-                      <div className="p-5 border-t-2 border-stone-100 bg-stone-50/50 animate-in slide-in-from-top-2 duration-200">
+                    <div className="flex-1 overflow-y-auto px-5 py-5">
                         {exp.splitType === "exact" &&
                           exp.items &&
                           exp.items.length > 0 && (
-                            <div className="mb-6 space-y-3">
+                            <div className="mb-5 space-y-2">
                               <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest px-1">
                                 receipt items
                               </span>
-                              <div className="bg-white rounded-2xl p-4 flex flex-col gap-3 border border-stone-100 shadow-sm">
+                              <div className="bg-white rounded-2xl px-4 py-3 flex flex-col gap-2.5 border border-stone-100 shadow-sm">
                                 {exp.items.map((item) => (
                                   <div
                                     key={item.id}
@@ -1320,7 +1495,7 @@ export default function TripDetail() {
                                 ))}
                               </div>
                               {Math.abs(difference) > 0 && (
-                                <div className="p-4 bg-amber-50 border-2 border-amber-100 rounded-2xl text-xs sm:text-sm font-bold text-amber-800 flex items-start gap-3 shadow-sm">
+                                <div className="px-4 py-3 bg-amber-50 border border-amber-100 rounded-2xl text-xs font-bold text-amber-800 flex items-start gap-2.5">
                                   <span
                                     className="text-xl leading-none"
                                     aria-hidden="true"
@@ -1349,10 +1524,11 @@ export default function TripDetail() {
                             </div>
                           )}
 
-                        <div className="space-y-3 mb-6">
+                        <div className="space-y-2">
                           <span className="text-[10px] font-black text-stone-400 uppercase tracking-widest px-1">
                             who owes what
                           </span>
+                          <div className="bg-white rounded-2xl border border-stone-100 shadow-sm divide-y divide-stone-100 overflow-hidden">
                           {Object.entries(exp.owedBy).map(
                             ([memberId, amount]) => {
                               const isPayer = payersEntries.some(
@@ -1389,7 +1565,7 @@ export default function TripDetail() {
                               return (
                                 <div
                                   key={memberId}
-                                  className="flex flex-col bg-white p-3.5 sm:p-4 rounded-2xl shadow-sm border border-stone-100 hover:shadow-md transition-shadow"
+                                  className="flex flex-col px-4 py-3"
                                 >
                                   <div className="flex justify-between items-center w-full">
                                     <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -1571,6 +1747,10 @@ export default function TripDetail() {
                             },
                           )}
                         </div>
+                        </div>
+                    </div>
+
+                    <div className="px-5 pt-3 pb-8 sm:pb-5 bg-white border-t-2 border-stone-100">
                         <div className="flex gap-2 sm:gap-3">
                           {canEdit ? (
                             <>
@@ -1636,13 +1816,11 @@ export default function TripDetail() {
                             </button>
                           )}
                         </div>
-                      </div>
-                    )}
+                    </div>
                   </div>
-                );
-              })
-            )}
-          </div>
+                </div>
+              );
+            })()}
         </section>
 
         {/* ledger */}
@@ -1662,8 +1840,63 @@ export default function TripDetail() {
               </div>
             </div>
 
+            {/* 3.2: before/after — the raw per-pair debts vs the simplified
+                transfers, so people can see the shortcut isn't magic */}
+            {rawDebts.length > 0 && (
+              <div className="mb-4 bg-white border-2 border-stone-100 rounded-3xl p-3 shadow-sm">
+                <div
+                  role="tablist"
+                  aria-label="payment view"
+                  className="relative grid grid-cols-2 bg-stone-100 rounded-2xl p-1"
+                >
+                  <div
+                    className="absolute top-1 bottom-1 left-1 w-[calc(50%-0.25rem)] bg-white rounded-xl shadow-sm transition-transform duration-300 ease-out"
+                    style={{
+                      transform:
+                        settleView === "after"
+                          ? "translateX(100%)"
+                          : "translateX(0)",
+                    }}
+                    aria-hidden="true"
+                  ></div>
+                  {(["before", "after"] as const).map((view) => (
+                    <button
+                      key={view}
+                      role="tab"
+                      aria-selected={settleView === view}
+                      onClick={() => switchSettleView(view)}
+                      className={`relative z-10 py-2 text-xs font-black rounded-xl transition-colors ${settleView === view ? "text-stone-800" : "text-stone-400 hover:text-stone-600"}`}
+                    >
+                      {view === "before" ? "before 🧾" : "simplified ✨"}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex items-center gap-3 px-2 pt-3 pb-1">
+                  <span
+                    key={settleView}
+                    className={`settle-pop text-3xl font-black tabular-nums leading-none ${settleView === "after" ? "text-emerald-600" : "text-stone-800"}`}
+                  >
+                    {shownPaymentCount}
+                  </span>
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-xs font-black text-stone-700">
+                      {shownPaymentCount === 1 ? "payment" : "payments"}{" "}
+                      {settleView === "before"
+                        ? "if everyone pays back per bill"
+                        : "after simplifying"}
+                    </span>
+                    <span className="text-[11px] font-bold text-stone-400">
+                      {rawDebts.length > settlements.length
+                        ? `${rawDebts.length} → ${settlements.length} · ${rawDebts.length - settlements.length} fewer transfer${rawDebts.length - settlements.length === 1 ? "" : "s"}, same totals`
+                        : "already as simple as it gets"}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* who pays who */}
-            {settlements.length === 0 ? (
+            {(settleView === "before" ? rawDebts : settlements).length === 0 ? (
               <div className="bg-emerald-50 border-2 border-emerald-200 rounded-3xl p-6 text-center transform hover:rotate-1 transition-transform">
                 <div className="text-4xl mb-2" aria-hidden="true">
                   ⚖️
@@ -1672,17 +1905,59 @@ export default function TripDetail() {
                   everything is perfectly balanced!
                 </span>
                 <p className="text-emerald-600 font-bold text-xs mt-1">
-                  no one owes anyone a dime.
+                  {rawDebts.length > 0
+                    ? "the debts cancel each other out, so no one pays anyone."
+                    : "no one owes anyone a dime."}
                 </p>
               </div>
+            ) : settleView === "before" ? (
+              <div key="before" className="space-y-2" role="tabpanel">
+                {rawDebts.map((debt, index) => (
+                  <div
+                    key={`${debt.from.id}>${debt.to.id}`}
+                    className={`${settlePhase === "out" ? "settle-row-out" : "settle-row-in"} flex items-center gap-3 px-4 py-3 bg-white border-2 border-stone-100 rounded-2xl`}
+                    style={{
+                      animationDelay: `${Math.min(index, 12) * (settlePhase === "out" ? 18 : 35)}ms`,
+                    }}
+                  >
+                    <div
+                      className={`w-8 h-8 shrink-0 rounded-full flex items-center justify-center text-[11px] font-black border ${getAvatarColor(debt.from.name)}`}
+                      aria-hidden="true"
+                    >
+                      {getInitials(debt.from.name)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-extrabold text-stone-800 truncate">
+                        {debt.from.name}{" "}
+                        <span className="text-stone-400 font-bold">→</span>{" "}
+                        {debt.to.name}
+                      </p>
+                      <p className="text-[11px] font-bold text-stone-400">
+                        from {debt.billCount}{" "}
+                        {debt.billCount === 1 ? "bill" : "bills"}
+                      </p>
+                    </div>
+                    <span className="shrink-0 text-sm font-black text-stone-700 tabular-nums">
+                      {currencySymbol}
+                      {formatMoney(debt.amount, currencyCode)}
+                    </span>
+                  </div>
+                ))}
+              </div>
             ) : (
-              <div className="space-y-4 relative">
+              <div key="after" className="space-y-4 relative" role="tabpanel">
                 <div
                   className="absolute left-6 top-6 bottom-6 w-1 bg-stone-200 rounded-full z-0"
                   aria-hidden="true"
                 ></div>
                 {settlements.map((settlement, index) => (
-                  <div key={index} className="relative z-10 flex flex-col">
+                  <div
+                    key={index}
+                    className={`${settlePhase === "out" ? "settle-row-out" : "settle-row-in"} relative z-10 flex flex-col`}
+                    style={{
+                      animationDelay: `${Math.min(index, 12) * (settlePhase === "out" ? 18 : 60)}ms`,
+                    }}
+                  >
                     <div className="flex justify-between items-center p-4 sm:p-5 bg-stone-900 text-white rounded-4xl shadow-xl shadow-stone-900/10 hover:-translate-y-1 transition-all text-left w-full gap-2 relative z-20 group">
                       <div className="flex items-center gap-2 sm:gap-4 flex-1 min-w-0">
                         <div

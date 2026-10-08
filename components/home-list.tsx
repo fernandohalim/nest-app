@@ -182,7 +182,7 @@ function TripTile({ trip }: { trip: Trip }) {
   );
 }
 
-const CATEGORY_EMOJI: Record<string, string> = {
+export const CATEGORY_EMOJI: Record<string, string> = {
   "food & bev": "🍔",
   shopping: "🛍️",
   transportation: "⛽",
@@ -293,6 +293,7 @@ export function ReceiptRow({
   isSelected,
   onOpen,
   onDelete,
+  savedFrom,
 }: {
   expense: Expense;
   retention: RetentionInfo;
@@ -300,7 +301,12 @@ export function ReceiptRow({
   isSelected: boolean;
   onOpen: () => void;
   onDelete: (e: React.MouseEvent) => void;
+  // set when this is someone else's receipt the user bookmarked (3.2): it
+  // can't be merged, and the trash button only removes the bookmark.
+  savedFrom?: string;
 }) {
+  const isSaved = savedFrom !== undefined;
+  const isLocked = isSelecting && isSaved;
   const emoji = CATEGORY_EMOJI[expense.category || "other"] ?? "🧾";
   const date = formatDisplayDate(expense.expenseDate.replace(" ", "T"), {
     month: "short",
@@ -318,11 +324,13 @@ export function ReceiptRow({
   );
   return (
     <button
-      onClick={onOpen}
-      aria-pressed={isSelecting ? isSelected : undefined}
-      className={`${rowClass} ${isSelected ? "bg-emerald-50/70" : "hover:bg-stone-50/80 active:bg-stone-100"}`}
+      onClick={isLocked ? undefined : onOpen}
+      disabled={isLocked}
+      title={isLocked ? "saved receipts can't be merged" : undefined}
+      aria-pressed={isSelecting && !isLocked ? isSelected : undefined}
+      className={`${rowClass} ${isLocked ? "opacity-40 cursor-not-allowed" : isSelected ? "bg-emerald-50/70" : "hover:bg-stone-50/80 active:bg-stone-100"}`}
     >
-      {isSelecting ? (
+      {isSelecting && !isLocked ? (
         <div
           className={`shrink-0 w-11 h-11 rounded-2xl border-2 flex items-center justify-center transition-all ${
             isSelected
@@ -354,9 +362,27 @@ export function ReceiptRow({
         </div>
       )}
       <div className="flex-1 min-w-0">
-        <h3 className="font-extrabold text-[15px] text-stone-800 truncate group-hover:text-emerald-700 transition-colors">
-          {expense.title}
-        </h3>
+        <div className="flex items-center gap-1.5 min-w-0">
+          <h3 className="font-extrabold text-[15px] text-stone-800 truncate group-hover:text-emerald-700 transition-colors">
+            {expense.title}
+          </h3>
+          {isSaved && (
+            <span
+              className="shrink-0 max-w-[45%] inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-sky-50 border border-sky-100 text-sky-600 text-[10px] font-black"
+              title={`saved from ${savedFrom || "someone"}`}
+            >
+              <svg
+                className="w-2.5 h-2.5 shrink-0"
+                fill="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path d="M5 5a2 2 0 012-2h10a2 2 0 012 2v16l-7-3.5L5 21V5z" />
+              </svg>
+              <span className="truncate">from {savedFrom || "someone"}</span>
+            </span>
+          )}
+        </div>
         {/* phones: date, status and amount share the meta line so the title
             keeps the full width. desktop: they become columns (see below). */}
         <div className="flex items-center gap-1.5 min-w-0 lg:hidden">
@@ -379,16 +405,36 @@ export function ReceiptRow({
           onClick={onDelete}
           role="button"
           tabIndex={0}
-          aria-label={`delete ${expense.title}`}
-          title="delete"
+          aria-label={
+            isSaved
+              ? `remove ${expense.title} from my receipts`
+              : `delete ${expense.title}`
+          }
+          title={isSaved ? "remove from my receipts" : "delete"}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
               e.preventDefault();
               onDelete(e as unknown as React.MouseEvent);
             }
           }}
-          className="shrink-0 -mr-1 w-8 h-8 rounded-full flex items-center justify-center text-stone-300 hover:bg-rose-500 hover:text-white focus:bg-rose-500 focus:text-white transition-all lg:opacity-0 lg:group-hover:opacity-100 lg:focus:opacity-100"
+          className={`shrink-0 -mr-1 w-8 h-8 rounded-full flex items-center justify-center text-stone-300 hover:text-white focus:text-white transition-all lg:opacity-0 lg:group-hover:opacity-100 lg:focus:opacity-100 ${isSaved ? "hover:bg-stone-700 focus:bg-stone-700" : "hover:bg-rose-500 focus:bg-rose-500"}`}
         >
+          {isSaved ? (
+            <svg
+              className="w-4 h-4"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2.5}
+                d="M6 18L18 6M6 6l12 12"
+              />
+            </svg>
+          ) : (
           <svg
             className="w-4 h-4"
             fill="none"
@@ -403,6 +449,7 @@ export function ReceiptRow({
               d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
             />
           </svg>
+          )}
         </div>
       )}
     </button>
