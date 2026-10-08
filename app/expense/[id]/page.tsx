@@ -336,7 +336,9 @@ export default function UnifiedExpensePage() {
         </button>
 
         <div className="flex items-center gap-2">
-          {!tripData && isOwner && (
+          {/* the creator can always edit, even after removing themselves
+              from the split */}
+          {!tripData && (isOwner || isCreator) && (
             <button
               onClick={() => router.push(`/quick-split?edit=${expense.id}`)}
               aria-label="edit receipt"

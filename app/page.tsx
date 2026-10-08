@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, Suspense, useMemo } from "react";
+import { useState, useEffect, Suspense, useMemo, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useTripStore } from "@/store/useTripStore";
 import { useAlertStore } from "@/store/useAlertStore";
@@ -9,7 +9,14 @@ import { supabase } from "@/lib/supabase";
 import { Expense, Member } from "@/lib/types";
 import MergeModal from "@/components/merge-modal";
 import LoadingState from "@/components/loading-state";
-import { formatDisplayDate } from "@/lib/datetime";
+import {
+  LIST_PAGE_SIZE,
+  ListFooter,
+  ListSections,
+  ReceiptRow,
+  TripRow,
+  groupByMonth,
+} from "@/components/home-list";
 import { getRetention } from "@/lib/retention";
 import Image from "next/image";
 
@@ -103,7 +110,11 @@ function HomeContent() {
   };
 
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [visibleCount, setVisibleCount] = useState(5);
+  const [visibleCount, setVisibleCount] = useState(LIST_PAGE_SIZE);
+  const loadMore = useCallback(
+    () => setVisibleCount((prev) => prev + LIST_PAGE_SIZE),
+    [],
+  );
 
   // 🪄 merge mode: multi-select quick splits and fold them into a trip
   const [isSelecting, setIsSelecting] = useState(false);
@@ -124,7 +135,7 @@ function HomeContent() {
   if (viewMode !== prevView) {
     setPrevView(viewMode);
     setSearchQuery("");
-    setVisibleCount(5);
+    setVisibleCount(LIST_PAGE_SIZE);
     setIsSelecting(false);
     setSelectedIds(new Set());
   }
@@ -171,17 +182,24 @@ function HomeContent() {
   //
   // after: WHERE trip_id IS NULL AND created_by = auth.uid(). when RLS is
   // enabled later, this constraint becomes architectural too.
+  //
+  // keyed on the user's id, not the user object: supabase re-emits auth
+  // events (e.g. on tab refocus) with a fresh object for the same person,
+  // which used to refetch and flash the spinner every time.
+  const userId = user?.id;
   useEffect(() => {
+    let cancelled = false;
     const fetchQuickSplits = async () => {
-      if (!user) return;
+      if (!userId) return;
       setIsLoadingQuick(true);
       const { data, error } = await supabase
         .from("expenses")
         .select("*")
         .is("trip_id", null)
-        .eq("created_by", user.id)
+        .eq("created_by", userId)
         .order("created_at", { ascending: false });
 
+      if (cancelled) return;
       if (data && !error) {
         const mappedData: Expense[] = (data as QuickSplitRow[]).map((exp) => ({
           id: exp.id,
@@ -204,7 +222,10 @@ function HomeContent() {
     if (viewMode === "quick") {
       fetchQuickSplits();
     }
-  }, [user, viewMode]);
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, viewMode]);
 
   // 🔥 U5 follow-through: severity is now explicit, not inferred from title.
   const handleDeleteQuickSplit = (
@@ -373,7 +394,7 @@ function HomeContent() {
                         value={searchQuery}
                         onChange={(e) => {
                           setSearchQuery(e.target.value);
-                          setVisibleCount(5);
+                          setVisibleCount(LIST_PAGE_SIZE);
                         }}
                         aria-label="search receipts"
                         className="w-full pl-11 pr-4 py-4 text-sm font-bold border-2 border-stone-100 shadow-sm rounded-2xl focus:outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 transition-all bg-white text-stone-700 placeholder:text-stone-300"
@@ -443,7 +464,7 @@ function HomeContent() {
                                 onClick={() => {
                                   setSortBy(option.value as SortType);
                                   setIsFilterOpen(false);
-                                  setVisibleCount(5);
+                                  setVisibleCount(LIST_PAGE_SIZE);
                                 }}
                                 className={`flex items-center gap-3 w-full px-3 py-3 text-left text-[13px] font-black rounded-xl transition-colors ${
                                   sortBy === option.value
@@ -529,147 +550,42 @@ function HomeContent() {
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {displayedQuickSplits.map((expense) => {
-                    const retention = getRetention(
-                      expense.retentionFrom || expense.createdAt,
-                      currentTime,
-                    );
-
-                    return (
-                      <button
-                        key={expense.id}
-                        onClick={() =>
+                <>
+                  <ListSections
+                    sections={groupByMonth(
+                      displayedQuickSplits,
+                      (e) => e.createdAt,
+                      sortBy === "newest" || sortBy === "oldest",
+                    )}
+                    getKey={(e) => e.id}
+                    renderItem={(expense) => (
+                      <ReceiptRow
+                        expense={expense}
+                        retention={getRetention(
+                          expense.retentionFrom || expense.createdAt,
+                          currentTime,
+                        )}
+                        isSelecting={isSelecting}
+                        isSelected={selectedIds.has(expense.id)}
+                        onOpen={() =>
                           isSelecting
                             ? toggleSelected(expense.id)
                             : router.push(`/expense/${expense.id}?from=quick`)
                         }
-                        className={`w-full bg-white p-5 rounded-3xl shadow-sm border-2 transition-all text-left flex justify-between items-center group active:scale-[0.98] ${
-                          isSelecting && selectedIds.has(expense.id)
-                            ? "border-emerald-400 ring-4 ring-emerald-100"
-                            : "border-stone-100 hover:shadow-md hover:border-emerald-200"
-                        }`}
-                      >
-                        <div className="flex flex-col gap-2 pr-4 min-w-0 flex-1">
-                          <h3 className="font-extrabold text-stone-800 text-lg truncate group-hover:text-emerald-700 transition-colors">
-                            {expense.title}
-                          </h3>
-                          <div className="flex items-center flex-wrap gap-2 text-[10px] font-black uppercase tracking-widest">
-                            <span className="text-stone-400">
-                              {/* 🔥 U10: locale-aware date display */}
-                              {formatDisplayDate(
-                                expense.expenseDate.replace(" ", "T"),
-                              ).toUpperCase()}
-                            </span>
-                            <span className="text-stone-300">•</span>
-                            {expense.isKept ? (
-                              <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-600">
-                                📌 kept
-                              </span>
-                            ) : (
-                              <span
-                                className={`px-2 py-0.5 rounded-md ${retention.isUrgent ? "bg-rose-50 text-rose-500" : "bg-amber-50 text-amber-500"}`}
-                              >
-                                ⏳ {retention.shortLabel}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        {isSelecting ? (
-                          <div
-                            className={`shrink-0 w-8 h-8 rounded-full border-2 flex items-center justify-center transition-all ${
-                              selectedIds.has(expense.id)
-                                ? "bg-emerald-500 border-emerald-500 text-white"
-                                : "bg-white border-stone-200 text-transparent"
-                            }`}
-                            aria-hidden="true"
-                          >
-                            <svg
-                              className="w-4 h-4"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth={3}
-                                d="M5 13l4 4L19 7"
-                              />
-                            </svg>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2">
-                            <div
-                              onClick={(e) =>
-                                handleDeleteQuickSplit(
-                                  expense.id,
-                                  expense.title,
-                                  e,
-                                )
-                              }
-                              role="button"
-                              tabIndex={0}
-                              aria-label={`delete ${expense.title}`}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" || e.key === " ") {
-                                  e.preventDefault();
-                                  handleDeleteQuickSplit(
-                                    expense.id,
-                                    expense.title,
-                                    e as unknown as React.MouseEvent,
-                                  );
-                                }
-                              }}
-                              className="shrink-0 w-10 h-10 rounded-full bg-stone-50 flex items-center justify-center text-stone-400 hover:bg-rose-500 hover:text-white transition-colors"
-                            >
-                              <svg
-                                className="w-4 h-4"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                                aria-hidden="true"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2.5}
-                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                                />
-                              </svg>
-                            </div>
-                            <div
-                              className="shrink-0 w-10 h-10 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-500 group-hover:bg-emerald-500 group-hover:text-white transition-colors"
-                              aria-hidden="true"
-                            >
-                              <svg
-                                className="w-5 h-5 group-hover:translate-x-0.5 transition-transform"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
-                              >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth={2.5}
-                                  d="M9 5l7 7-7 7"
-                                />
-                              </svg>
-                            </div>
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                  {hasMoreQuick && (
-                    <button
-                      onClick={() => setVisibleCount((prev) => prev + 5)}
-                      className="w-full lg:col-span-full py-4 bg-stone-100 text-stone-500 font-black rounded-3xl hover:bg-stone-200 active:scale-95 transition-all text-sm border-2 border-stone-200/50 hover:border-stone-300 border-dashed"
-                    >
-                      load more receipts ⬇️
-                    </button>
-                  )}
-                </div>
+                        onDelete={(e) =>
+                          handleDeleteQuickSplit(expense.id, expense.title, e)
+                        }
+                      />
+                    )}
+                  />
+                  <ListFooter
+                    hasMore={hasMoreQuick}
+                    onLoadMore={loadMore}
+                    shown={displayedQuickSplits.length}
+                    total={processedQuickSplits.length}
+                    noun="receipt"
+                  />
+                </>
               )}
             </>
           ) : (
@@ -684,7 +600,7 @@ function HomeContent() {
                         value={searchQuery}
                         onChange={(e) => {
                           setSearchQuery(e.target.value);
-                          setVisibleCount(5);
+                          setVisibleCount(LIST_PAGE_SIZE);
                         }}
                         aria-label="search trips"
                         className="w-full pl-11 pr-4 py-4 text-sm font-bold border-2 border-stone-100 shadow-sm rounded-2xl focus:outline-none focus:border-emerald-400 focus:ring-4 focus:ring-emerald-100 transition-all bg-white text-stone-700 placeholder:text-stone-300"
@@ -760,7 +676,7 @@ function HomeContent() {
                                 aria-checked={showOnlyMine}
                                 onChange={() => {
                                   setShowOnlyMine(!showOnlyMine);
-                                  setVisibleCount(5);
+                                  setVisibleCount(LIST_PAGE_SIZE);
                                 }}
                                 className="sr-only peer"
                               />
@@ -785,7 +701,7 @@ function HomeContent() {
                                 aria-checked={showOnlyKept}
                                 onChange={() => {
                                   setShowOnlyKept(!showOnlyKept);
-                                  setVisibleCount(5);
+                                  setVisibleCount(LIST_PAGE_SIZE);
                                 }}
                                 className="sr-only peer"
                               />
@@ -810,7 +726,7 @@ function HomeContent() {
                                 onClick={() => {
                                   setSortBy(option.value as SortType);
                                   setIsFilterOpen(false);
-                                  setVisibleCount(5);
+                                  setVisibleCount(LIST_PAGE_SIZE);
                                 }}
                                 className={`flex items-center gap-3 w-full px-3 py-3 text-left text-[13px] font-black rounded-xl transition-colors ${
                                   sortBy === option.value
@@ -857,96 +773,34 @@ function HomeContent() {
                   </p>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-                  {displayedTrips.map((trip) => (
-                    <button
-                      key={trip.id}
-                      onClick={() => router.push(`/trip/${trip.id}`)}
-                      className="w-full bg-white p-5 sm:p-6 rounded-3xl shadow-sm border-2 transition-all text-left flex justify-between items-center group active:scale-[0.98] border-stone-100 hover:shadow-md hover:border-emerald-200"
-                    >
-                      <div className="flex flex-col gap-2 pr-4 min-w-0">
-                        <h3
-                          className="font-extrabold text-lg sm:text-xl truncate transition-colors text-stone-800 group-hover:text-emerald-700"
-                        >
-                          {trip.name}
-                        </h3>
-                        <div className="flex flex-col gap-1.5 text-[10px] sm:text-xs font-bold text-stone-400 uppercase tracking-wider">
-                          <div className="flex items-center flex-wrap gap-2">
-                            <span className="border px-2 py-0.5 rounded-md flex items-center gap-1 shrink-0 bg-stone-50 border-stone-100 text-stone-500">
-                              {trip.owner_id === user?.id
-                                ? "you"
-                                : trip.owner_name}{" "}
-                              👑
-                            </span>
-                            {trip.members && trip.members.length > 0 && (
-                              <>
-                                <span>•</span>
-                                <span className="shrink-0">
-                                  {trip.members.length}{" "}
-                                  {trip.members.length === 1
-                                    ? "member"
-                                    : "members"}
-                                </span>
-                              </>
-                            )}
-                            <span>•</span>
-                            <span className="shrink-0">
-                              {/* 🔥 U10: locale-aware */}
-                              {formatDisplayDate(trip.createdAt).toUpperCase()}
-                            </span>
-                          </div>
-                          <div className="flex items-center">
-                            {trip.is_kept ? (
-                              <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-600 font-black">
-                                📌 kept
-                              </span>
-                            ) : (
-                              (() => {
-                                const retention = getRetention(
-                                  trip.updatedAt || trip.createdAt,
-                                  currentTime,
-                                );
-                                return (
-                                  <span
-                                    className={`px-2 py-0.5 rounded-md font-black ${retention.isUrgent ? "bg-rose-50 text-rose-500" : "bg-amber-50 text-amber-500"}`}
-                                  >
-                                    ⏳ {retention.shortLabel}
-                                  </span>
-                                );
-                              })()
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                      <div
-                        className="shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition-colors shadow-sm border bg-stone-50 border-stone-100 text-stone-400 group-hover:bg-emerald-100 group-hover:text-emerald-600 group-hover:border-emerald-200 group-hover:-rotate-45"
-                        aria-hidden="true"
-                      >
-                        <svg
-                          className="w-5 h-5 sm:w-6 sm:h-6"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2.5}
-                            d="M5 12h14M12 5l7 7-7 7"
-                          />
-                        </svg>
-                      </div>
-                    </button>
-                  ))}
-                  {hasMoreTrips && (
-                    <button
-                      onClick={() => setVisibleCount((prev) => prev + 5)}
-                      className="w-full lg:col-span-full py-4 bg-stone-100 text-stone-500 font-black rounded-3xl hover:bg-stone-200 active:scale-95 transition-all text-sm border-2 border-stone-200/50 hover:border-stone-300 border-dashed"
-                    >
-                      load more trips ⬇️
-                    </button>
-                  )}
-                </div>
+                <>
+                  <ListSections
+                    sections={groupByMonth(
+                      displayedTrips,
+                      (t) => t.createdAt,
+                      sortBy === "newest" || sortBy === "oldest",
+                    )}
+                    getKey={(t) => t.id}
+                    renderItem={(trip) => (
+                      <TripRow
+                        trip={trip}
+                        isOwner={trip.owner_id === user?.id}
+                        retention={getRetention(
+                          trip.updatedAt || trip.createdAt,
+                          currentTime,
+                        )}
+                        onOpen={() => router.push(`/trip/${trip.id}`)}
+                      />
+                    )}
+                  />
+                  <ListFooter
+                    hasMore={hasMoreTrips}
+                    onLoadMore={loadMore}
+                    shown={displayedTrips.length}
+                    total={processedTrips.length}
+                    noun="trip"
+                  />
+                </>
               )}
             </>
           )}
@@ -970,10 +824,12 @@ function HomeContent() {
             onClick={() => setIsInfoModalOpen(false)}
           >
             <div
-              className="bg-[#fdfbf7] w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500 overflow-hidden relative pb-8 sm:pb-0"
+              className="bg-[#fdfbf7] w-full max-w-md max-h-[90dvh] rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500 overflow-hidden relative"
               onClick={(e) => e.stopPropagation()}
             >
-              <div className="px-6 py-5 pt-8 sm:pt-6 border-b-2 border-stone-100 flex justify-between items-center bg-white z-10 shadow-sm">
+              {/* header stays pinned; only the body scrolls, so the title and
+                  close button can never be pushed off a short screen */}
+              <div className="shrink-0 px-6 py-5 border-b-2 border-stone-100 flex justify-between items-center bg-white z-10 shadow-sm">
                 <h2
                   id="how-nest-works-title"
                   className="text-2xl font-black text-stone-800"
@@ -983,55 +839,74 @@ function HomeContent() {
                 <button
                   onClick={() => setIsInfoModalOpen(false)}
                   aria-label="close"
-                  className="w-10 h-10 bg-stone-100 rounded-full flex items-center justify-center text-stone-500 hover:bg-stone-200 active:scale-90 transition-all font-bold text-lg"
+                  className="shrink-0 w-10 h-10 bg-stone-100 rounded-full flex items-center justify-center text-stone-500 hover:bg-stone-200 active:scale-90 transition-all font-bold text-lg"
                 >
                   ×
                 </button>
               </div>
-              <div className="p-6 space-y-4 bg-stone-50">
-                <div className="bg-white p-5 rounded-3xl border-2 border-stone-100 shadow-sm">
-                  <div className="text-3xl mb-2" aria-hidden="true">
-                    🎒
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 sm:p-5 space-y-3 bg-stone-50 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
+                {[
+                  {
+                    icon: "🎒",
+                    title: "trips",
+                    body: (
+                      <>
+                        dedicated spaces for ongoing group expenses (holidays,
+                        housemates). tap &quot;mark paid&quot; on a share once
+                        someone pays you back.
+                      </>
+                    ),
+                  },
+                  {
+                    icon: "🧾",
+                    title: "receipts",
+                    body: (
+                      <>
+                        quick, standalone splits for single events (a shared
+                        dinner). merge a few into a trip anytime.
+                      </>
+                    ),
+                  },
+                  {
+                    icon: "📌",
+                    title: "keeping",
+                    highlight: true,
+                    body: (
+                      <>
+                        to keep things tidy, anything you don&apos;t keep
+                        auto-deletes after 7 days — trips count from their last
+                        activity, receipts from when they were made. tap{" "}
+                        <span className="text-emerald-600">
+                          keep forever 📌
+                        </span>{" "}
+                        to save one. only the trip owner or the receipt&apos;s
+                        creator can keep it. stop keeping anytime and it gets a
+                        fresh 7 days. merged receipts follow their trip&apos;s
+                        rule.
+                      </>
+                    ),
+                  },
+                ].map((card) => (
+                  <div
+                    key={card.title}
+                    className={`bg-white p-4 rounded-3xl border-2 shadow-sm flex gap-3.5 ${card.highlight ? "border-emerald-100" : "border-stone-100"}`}
+                  >
+                    <div
+                      className="shrink-0 w-11 h-11 rounded-2xl bg-stone-50 flex items-center justify-center text-xl"
+                      aria-hidden="true"
+                    >
+                      {card.icon}
+                    </div>
+                    <div className="min-w-0">
+                      <h3 className="font-extrabold text-base text-stone-800">
+                        {card.title}
+                      </h3>
+                      <p className="text-[13px] font-bold text-stone-400 mt-0.5 leading-relaxed">
+                        {card.body}
+                      </p>
+                    </div>
                   </div>
-                  <h3 className="font-extrabold text-lg text-stone-800">
-                    trips
-                  </h3>
-                  <p className="text-sm font-bold text-stone-400 mt-1 leading-relaxed">
-                    dedicated spaces for ongoing group expenses (holidays,
-                    housemates). tap &quot;mark paid&quot; on a share once
-                    someone pays you back.
-                  </p>
-                </div>
-                <div className="bg-white p-5 rounded-3xl border-2 border-stone-100 shadow-sm">
-                  <div className="text-3xl mb-2" aria-hidden="true">
-                    🧾
-                  </div>
-                  <h3 className="font-extrabold text-lg text-stone-800">
-                    receipts
-                  </h3>
-                  <p className="text-sm font-bold text-stone-400 mt-1 leading-relaxed">
-                    quick, standalone splits for single events (a shared
-                    dinner). merge a few into a trip anytime.
-                  </p>
-                </div>
-                <div className="bg-white p-5 rounded-3xl border-2 border-emerald-100 shadow-sm">
-                  <div className="text-3xl mb-2" aria-hidden="true">
-                    📌
-                  </div>
-                  <h3 className="font-extrabold text-lg text-stone-800">
-                    keeping
-                  </h3>
-                  <p className="text-sm font-bold text-stone-400 mt-1 leading-relaxed">
-                    to keep things tidy, anything you don&apos;t keep
-                    auto-deletes after 7 days — trips count from their last
-                    activity, receipts from when they were made. tap{" "}
-                    <span className="text-emerald-600">keep forever 📌</span>{" "}
-                    to save one. only the trip owner or the receipt&apos;s
-                    creator can keep it. stop keeping anytime and it gets a
-                    fresh 7 days. merged receipts follow their trip&apos;s
-                    rule.
-                  </p>
-                </div>
+                ))}
               </div>
             </div>
           </div>

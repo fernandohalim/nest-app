@@ -2,6 +2,23 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
+    version: "3.1.1",
+    date: "oct 8, 2026",
+    title: "tidier lists 🧹",
+    badge: "patch",
+    badgeColor: "bg-teal-100 text-teal-700 border-teal-200",
+    features: [
+      "refined the trips and receipts lists into slim rows grouped by month — about twice as many fit on screen, and each one still shows its keep / countdown badge at a glance.",
+      "added the total to every receipt in the list, plus a category icon, so you can spot the right one without opening it. trips get an icon too, taken from the first emoji in their name.",
+      "refined the lists on desktop into neat columns — date, status and amount line up down the page instead of floating around a grid of cards.",
+      "removed the 'load more' button: the next batch now loads by itself as you scroll, and the end of the list tells you when you've seen everything.",
+      "fixed trips in the list never showing how many members they have.",
+      "fixed the 'edit receipt' button disappearing if you removed yourself from a receipt you made — whoever made it can always edit it now.",
+      "fixed the 'how nest works' sheet being cut off on smaller phones — the title and close button now stay put and the content scrolls.",
+      "fixed the receipts tab sometimes flashing its loading spinner again when you came back to the app.",
+    ],
+  },
+  {
     version: "3.1",
     date: "oct 7, 2026",
     title: "keep forever 📌",

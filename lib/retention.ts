@@ -34,6 +34,8 @@ export interface RetentionInfo {
   label: string;
   // "today" / "3 days left" — compact form for cards
   shortLabel: string;
+  // "today" / "3d" — tightest form, for list rows
+  tinyLabel: string;
 }
 
 export function getRetention(
@@ -68,6 +70,7 @@ export function getRetention(
       daysLeft === 0
         ? "expires today"
         : `${daysLeft} day${daysLeft !== 1 ? "s" : ""} left`,
+    tinyLabel: daysLeft === 0 ? "today" : `${daysLeft}d`,
   };
 }
 
