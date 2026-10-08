@@ -22,6 +22,7 @@ import {
   isZeroDecimalCurrency,
 } from "@/lib/format";
 import { formatDisplayDateTime, timeAgo } from "@/lib/datetime";
+import { getRetention, RETENTION_RULE } from "@/lib/retention";
 import { getAvatarColor, getInitials } from "@/lib/avatars";
 import { toBlob } from "html-to-image";
 import twemoji from "@twemoji/api";
@@ -51,17 +52,15 @@ export default function TripDetail() {
   const fetchTrip = useTripStore((s) => s.fetchTrip);
   const subscribeToTrip = useTripStore((s) => s.subscribeToTrip);
   const toggleCollaborative = useTripStore((s) => s.toggleCollaborative);
+  const setTripKept = useTripStore((s) => s.setTripKept);
   const isLoading = useTripStore((s) => s.isLoading);
   const isSyncing = useTripStore((s) => s.isSyncing);
 
   const trip = trips.find((t) => t.id === tripId);
-  const lastActive = new Date(
-    trip?.updatedAt || trip?.createdAt || Date.now(),
-  ).getTime();
-  const daysSinceActive = Math.floor(
-    (Date.now() - lastActive) / (1000 * 60 * 60 * 24),
-  );
-  const daysLeft = Math.max(0, 7 - daysSinceActive);
+  // 3.1: trips not kept auto-delete 7 days after their last activity
+  const retention = getRetention(trip?.updatedAt || trip?.createdAt);
+  const isKept = Boolean(trip?.is_kept);
+  const isExpiringSoon = !isKept && retention.isUrgent;
 
   const currencyCode = trip?.currency || "IDR";
   const currencySymbol = getCurrencySymbol(currencyCode);
@@ -84,7 +83,7 @@ export default function TripDetail() {
     if (!targetExpenseId) return;
 
     const expense = trip.expenses.find((e) => e.id === targetExpenseId);
-    if (expense && canEdit && trip.status !== "finished") {
+    if (expense && canEdit) {
       setEditingExpense(expense);
       setIsAddingExpense(true);
       // clean the URL so a refresh doesn't re-open the modal
@@ -671,7 +670,8 @@ export default function TripDetail() {
           🪹
         </div>
         <p className="text-sm text-stone-500 font-bold">
-          hmm, couldn&apos;t find this trip.
+          hmm, couldn&apos;t find this trip. it may have been deleted, or
+          auto-deleted after 7 days without being kept.
         </p>
         <button
           onClick={handleSmartBack}
@@ -798,61 +798,61 @@ export default function TripDetail() {
         <div className="lg:grid lg:grid-cols-2 lg:gap-8 lg:items-start">
           {/* left column — sticky trip summary rail */}
           <div className="lg:sticky lg:top-6 lg:self-start">
-        {/* trip status pill */}
+        {/* retention pill — kept trips are never auto-deleted; everything
+            else counts down 7 days from the last activity. owner-only keep. */}
         <div className="mb-4 z-10 relative">
           <div
-            className={`flex items-center w-full px-5 sm:px-6 py-3.5 shadow-sm backdrop-blur-xl border rounded-full transition-colors duration-500 ${trip.status === "finished" ? "bg-emerald-50 border-emerald-200" : daysLeft <= 2 ? "bg-rose-50 border-rose-200" : "bg-white border-stone-200"}`}
+            className={`flex items-center w-full px-5 sm:px-6 py-3.5 shadow-sm backdrop-blur-xl border rounded-full transition-colors duration-500 ${isKept ? "bg-emerald-50 border-emerald-200" : isExpiringSoon ? "bg-rose-50 border-rose-200" : "bg-white border-stone-200"}`}
           >
             <div className="relative flex items-center justify-center shrink-0 mr-4">
-              {trip.status === "settled" ? (
-                <span className="relative z-10 text-lg" aria-hidden="true">
-                  ✨
-                </span>
-              ) : daysLeft <= 2 ? (
-                <span
-                  className="relative z-10 text-lg animate-pulse"
-                  aria-hidden="true"
-                >
-                  ⚠️
-                </span>
-              ) : (
-                <span className="relative z-10 text-lg" aria-hidden="true">
-                  ⏳
-                </span>
-              )}
+              <span
+                className={`relative z-10 text-lg ${isExpiringSoon ? "animate-pulse" : ""}`}
+                aria-hidden="true"
+              >
+                {isKept ? "📌" : isExpiringSoon ? "⚠️" : "⏳"}
+              </span>
             </div>
             <div className="flex flex-col flex-1 min-w-0 justify-center pt-0.5">
               <span
-                className={`text-[11px] font-black tracking-widest uppercase leading-none truncate ${trip.status === "finished" ? "text-emerald-800" : daysLeft <= 2 ? "text-rose-800" : "text-stone-800"}`}
+                className={`text-[11px] font-black tracking-widest uppercase leading-none truncate ${isKept ? "text-emerald-800" : isExpiringSoon ? "text-rose-800" : "text-stone-800"}`}
               >
-                {trip.status === "finished"
-                  ? "saved permanently"
-                  : `expires in ${daysLeft} day${daysLeft !== 1 ? "s" : ""}`}
+                {isKept ? "kept forever" : retention.label}
               </span>
               <span
-                className={`text-[9px] font-bold mt-1 tracking-wider uppercase truncate ${trip.status === "finished" ? "text-emerald-600" : daysLeft <= 2 ? "text-rose-600" : "text-stone-500"}`}
+                className={`text-[9px] font-bold mt-1 tracking-wider uppercase truncate ${isKept ? "text-emerald-600" : isExpiringSoon ? "text-rose-600" : "text-stone-500"}`}
               >
-                {trip.status === "finished"
-                  ? "locked & secured"
-                  : `last active ${timeAgo(trip.updatedAt || trip.createdAt)}`}
+                {isKept
+                  ? "won't be auto-deleted"
+                  : isOwner
+                    ? `last active ${timeAgo(trip.updatedAt || trip.createdAt)}`
+                    : "ask the trip owner to keep it"}
               </span>
             </div>
+            {isOwner && !isKept && (
+              <button
+                onClick={async () => {
+                  await setTripKept(trip.id, true);
+                  showAlert(
+                    "this trip won't be auto-deleted. stop keeping it anytime from trip settings.",
+                    "kept forever 📌",
+                  );
+                }}
+                className="shrink-0 mr-2 px-3 h-9 rounded-full bg-stone-900 text-white text-[11px] font-black hover:bg-stone-800 active:scale-95 transition-all shadow-sm"
+              >
+                keep 📌
+              </button>
+            )}
             <button
-              onClick={() => {
-                if (trip.status === "finished") {
-                  showAlert(
-                    "this trip is safely locked and stored permanently in the database. no cleanup robots will touch it! ✨",
-                    "trip secured 🔒",
-                  );
-                } else {
-                  showAlert(
-                    "mark this trip as 'settled' in the settings menu to save it permanently. otherwise, the database will automatically clean it up to save space!",
-                    "retention policy ⏳",
-                  );
-                }
-              }}
+              onClick={() =>
+                showAlert(
+                  isKept
+                    ? `${RETENTION_RULE} this trip is kept${isOwner ? " — stop keeping it from trip settings" : ""}.`
+                    : RETENTION_RULE,
+                  "how keeping works 📌",
+                )
+              }
               aria-label="retention policy info"
-              className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center transition-all active:scale-90 ${trip.status === "finished" ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200" : daysLeft <= 2 ? "bg-rose-100 text-rose-700 hover:bg-rose-200" : "bg-stone-100 text-stone-500 hover:bg-stone-200 hover:text-stone-800"}`}
+              className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center transition-all active:scale-90 ${isKept ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200" : isExpiringSoon ? "bg-rose-100 text-rose-700 hover:bg-rose-200" : "bg-stone-100 text-stone-500 hover:bg-stone-200 hover:text-stone-800"}`}
             >
               <svg
                 className="w-5 h-5"
@@ -885,37 +885,33 @@ export default function TripDetail() {
 
           <div className="flex flex-wrap justify-center gap-2 mb-4 relative z-10">
             <div className="px-4 py-1.5 bg-white/10 backdrop-blur-md rounded-full text-xs font-bold tracking-widest uppercase border border-white/20">
-              {trip.status === "finished"
-                ? "🔒 settled trip"
-                : "💸 active trip"}
+              {isKept ? "📌 kept trip" : "💸 active trip"}
             </div>
-            {trip.status !== "finished" && (
-              <div
-                className={`px-4 py-1.5 backdrop-blur-md rounded-full text-xs font-bold tracking-widest uppercase border flex items-center gap-1.5 transition-colors ${trip.is_collaborative ? "bg-emerald-400/30 border-emerald-300/50 text-white shadow-[0_0_10px_rgba(52,211,153,0.2)]" : "bg-black/20 border-white/10 text-stone-200"}`}
-              >
-                {trip.is_collaborative ? (
-                  <>
-                    <span
-                      className="text-base leading-none pb-0.5"
-                      aria-hidden="true"
-                    >
-                      🤝
-                    </span>{" "}
-                    open to edit
-                  </>
-                ) : (
-                  <>
-                    <span
-                      className="text-base leading-none pb-0.5"
-                      aria-hidden="true"
-                    >
-                      👀
-                    </span>{" "}
-                    view only
-                  </>
-                )}
-              </div>
-            )}
+            <div
+              className={`px-4 py-1.5 backdrop-blur-md rounded-full text-xs font-bold tracking-widest uppercase border flex items-center gap-1.5 transition-colors ${trip.is_collaborative ? "bg-emerald-400/30 border-emerald-300/50 text-white shadow-[0_0_10px_rgba(52,211,153,0.2)]" : "bg-black/20 border-white/10 text-stone-200"}`}
+            >
+              {trip.is_collaborative ? (
+                <>
+                  <span
+                    className="text-base leading-none pb-0.5"
+                    aria-hidden="true"
+                  >
+                    🤝
+                  </span>{" "}
+                  open to edit
+                </>
+              ) : (
+                <>
+                  <span
+                    className="text-base leading-none pb-0.5"
+                    aria-hidden="true"
+                  >
+                    👀
+                  </span>{" "}
+                  view only
+                </>
+              )}
+            </div>
           </div>
 
           <div className="text-[10px] sm:text-xs font-black tracking-widest text-emerald-200/80 uppercase mb-1.5 relative z-10 flex items-center justify-center gap-1.5">
@@ -977,7 +973,7 @@ export default function TripDetail() {
         </div>
 
         {/* 🔥 A2: collaborative-mode toggle is now a real switch */}
-        {isOwner && trip.status !== "finished" && (
+        {isOwner && (
           <div className="bg-white border-2 border-stone-100 rounded-3xl p-5 shadow-sm mb-10 lg:mb-6 flex items-center justify-between group hover:border-emerald-200 transition-colors animate-in slide-in-from-bottom-4 duration-500">
             <div className="flex flex-col">
               <span className="font-black text-stone-800 text-base flex items-center gap-2">
@@ -1046,7 +1042,7 @@ export default function TripDetail() {
                 </svg>
               </button>
             </div>
-            {canEdit && trip.status !== "finished" && (
+            {canEdit && (
               <button
                 onClick={() => setIsMemberModalOpen(true)}
                 className="group flex items-center gap-2.5 text-xs font-bold px-3 py-1.5 sm:px-4 sm:py-2 bg-white border-2 border-stone-200 text-stone-600 rounded-xl hover:bg-stone-800 hover:text-white hover:border-stone-800 transition-all active:scale-95 shadow-sm"
@@ -1365,8 +1361,7 @@ export default function TripDetail() {
                               const canMarkPaid =
                                 !isPayer &&
                                 canEdit &&
-                                !isMultiPayer &&
-                                trip.status !== "finished";
+                                !isMultiPayer;
                               const isSettled =
                                 exp.settledShares?.[memberId] || false;
                               const extra = exp.adjustments?.[memberId];
@@ -1577,7 +1572,7 @@ export default function TripDetail() {
                           )}
                         </div>
                         <div className="flex gap-2 sm:gap-3">
-                          {canEdit && trip.status !== "finished" ? (
+                          {canEdit ? (
                             <>
                               <button
                                 onClick={() =>
@@ -2386,7 +2381,7 @@ export default function TripDetail() {
       />
 
       {/* 🔥 U15: subtle FAB stack — scan and manual now share visual weight */}
-      {!isAddingExpense && canEdit && trip.status !== "finished" && (
+      {!isAddingExpense && canEdit && (
         <div className="fixed bottom-8 right-8 lg:bottom-12 lg:right-12 flex flex-col gap-3 z-40 items-end animate-in slide-in-from-bottom-8 duration-500">
           <button
             onClick={() => {

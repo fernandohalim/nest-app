@@ -2,6 +2,22 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
+    version: "3.1",
+    date: "oct 7, 2026",
+    title: "keep forever 📌",
+    badge: "feature",
+    badgeColor: "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200",
+    features: [
+      "added 'keep forever 📌' for trips and receipts — anything you keep is never auto-deleted. trip owners keep a trip right from its status pill or trip settings, and a receipt's creator keeps it from the receipt page.",
+      "refined the cleanup rule to be the same everywhere: anything you don't keep auto-deletes after 7 days. trips count from their last activity, receipts from when they were made, and stopping a keep always starts a fresh 7 days.",
+      "removed the 'settled' trip status — it used to double as the only way to save a trip, which meant saying everyone had paid just to stop it disappearing. 'mark paid' on each share is still how you track who's paid back. every trip you'd already settled is now kept.",
+      "added the keep / countdown badge to every trip card on the home screen, so a trip never vanishes without warning — including trips other people shared with you.",
+      "refined merging so merged receipts follow their trip's rule, with a heads-up in the merge sheet when the trip isn't kept.",
+      "fixed the countdown saying '1 day left' when a trip or receipt was really going within hours — it now says 'expires today' on the actual last day.",
+      "refined 'how nest works' to explain keeping in one place, and the filter's 'include settled' is now 'kept only 📌'.",
+    ],
+  },
+  {
     version: "3.0.2",
     date: "jul 17, 2026",
     title: "share snapshot polish 🖼️",

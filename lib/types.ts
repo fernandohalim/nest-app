@@ -25,6 +25,11 @@ export interface Expense {
   expenseDate: string;
   createdAt: string;
   category?: string;
+
+  // retention (3.1) — only meaningful for quick splits (no trip). a merged
+  // receipt follows its trip's rule, so these are reset on merge.
+  isKept?: boolean;
+  retentionFrom?: string;
 }
 
 export interface Trip {
@@ -38,7 +43,9 @@ export interface Trip {
   updatedAt?: string;
   owner_id?: string;
   owner_name?: string;
-  status?: string;
+  // kept trips are never auto-deleted; everything else is reaped after 7 days
+  // without activity (updatedAt). owner-only toggle.
+  is_kept?: boolean;
   is_collaborative?: boolean;
 }
 

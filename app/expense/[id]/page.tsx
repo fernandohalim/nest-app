@@ -13,6 +13,7 @@ import { formatDisplayDateTime } from "@/lib/datetime";
 import twemoji from "@twemoji/api";
 import Emoji from "@/components/emoji";
 import { getAvatarColor } from "@/lib/avatars";
+import { getRetention, RETENTION_RULE } from "@/lib/retention";
 
 const BARCODE_WIDTHS = [
   4, 8, 2, 4, 6, 8, 2, 6, 4, 8, 2, 6, 4, 4, 8, 2, 4, 6, 8, 2, 4,
@@ -44,6 +45,9 @@ export default function UnifiedExpensePage() {
   const [isSharing, setIsSharing] = useState(false);
   const [expense, setExpense] = useState<Expense | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
+  // creator of a quick split — the only one who can keep / stop keeping it
+  const [createdBy, setCreatedBy] = useState<string | null>(null);
+  const [isTogglingKeep, setIsTogglingKeep] = useState(false);
   const [tripData, setTripData] = useState<{
     id: string;
     name: string;
@@ -93,8 +97,11 @@ export default function UnifiedExpensePage() {
         expenseDate: expData.expense_date,
         createdAt: expData.created_at,
         category: expData.category || "other",
+        isKept: expData.is_kept ?? false,
+        retentionFrom: expData.retention_from || expData.created_at,
       };
       setExpense(mappedExp);
+      setCreatedBy(expData.created_by ?? null);
 
       if (expData.trip_id) {
         const [tripRes, membersRes] = await Promise.all([
@@ -144,6 +151,42 @@ export default function UnifiedExpensePage() {
     } finally {
       setIsExporting(false);
     }
+  };
+
+  // "stop keeping" restarts a fresh 7-day countdown (retention_from = now), so
+  // un-keeping an old receipt never gets it reaped at the very next cron run.
+  const handleToggleKeep = async () => {
+    if (!expense || isTogglingKeep) return;
+    const nextKept = !expense.isKept;
+    const nowIso = new Date().toISOString();
+    const update = nextKept
+      ? { is_kept: true }
+      : { is_kept: false, retention_from: nowIso };
+
+    setIsTogglingKeep(true);
+    const prev = expense;
+    setExpense({
+      ...expense,
+      isKept: nextKept,
+      retentionFrom: nextKept ? expense.retentionFrom : nowIso,
+    });
+    const { error } = await supabase
+      .from("expenses")
+      .update(update)
+      .eq("id", expense.id);
+    setIsTogglingKeep(false);
+
+    if (error) {
+      setExpense(prev);
+      showAlert("couldn't update this receipt. try again!", "error ❌");
+      return;
+    }
+    showAlert(
+      nextKept
+        ? "this receipt won't be auto-deleted. stop keeping it anytime."
+        : "this receipt will auto-delete in 7 days unless you keep it again.",
+      nextKept ? "kept forever 📌" : "no longer kept ⏳",
+    );
   };
 
   const handleShare = async () => {
@@ -221,7 +264,8 @@ export default function UnifiedExpensePage() {
           💨
         </div>
         <p className="text-stone-500 font-bold text-sm">
-          this receipt doesn&apos;t exist or expired.
+          this receipt doesn&apos;t exist, or it auto-deleted after 7 days
+          without being kept.
         </p>
         <button
           onClick={() => router.push("/")}
@@ -255,12 +299,10 @@ export default function UnifiedExpensePage() {
       members.some((m) => m.id === user.id));
 
   const isQuickSplit = !tripData;
-  const createdAtMs = new Date(expense.createdAt).getTime();
-  const daysSinceCreated = Math.floor(
-    (Date.now() - createdAtMs) / (1000 * 60 * 60 * 24),
-  );
-  const daysLeft = Math.max(0, 7 - daysSinceCreated);
-  const isExpiringSoon = isQuickSplit && daysLeft <= 2;
+  const isCreator = Boolean(user && createdBy && user.id === createdBy);
+  const isKept = Boolean(expense.isKept);
+  const retention = getRetention(expense.retentionFrom || expense.createdAt);
+  const isExpiringSoon = isQuickSplit && !isKept && retention.isUrgent;
 
   return (
     <main className="flex min-h-screen flex-col items-center p-4 sm:p-6 bg-[#fdfbf7] pb-10 font-sans selection:bg-emerald-200 selection:text-emerald-900">
@@ -353,37 +395,89 @@ export default function UnifiedExpensePage() {
         <div className="contents lg:flex lg:flex-col lg:gap-6 lg:col-start-2 lg:row-start-1">
       {isQuickSplit && (
         <div
-          className={`w-full max-w-md lg:max-w-none mb-6 lg:mb-0 animate-in slide-in-from-top-4 duration-500 z-10 rounded-2xl border-2 p-4 flex items-center gap-3 shadow-sm ${
-            isExpiringSoon
-              ? "bg-rose-50 border-rose-200"
-              : "bg-amber-50 border-amber-100"
+          className={`w-full max-w-md lg:max-w-none mb-6 lg:mb-0 animate-in slide-in-from-top-4 duration-500 z-10 rounded-2xl border-2 p-4 shadow-sm ${
+            isKept
+              ? "bg-emerald-50 border-emerald-200"
+              : isExpiringSoon
+                ? "bg-rose-50 border-rose-200"
+                : "bg-amber-50 border-amber-100"
           }`}
         >
-          <div
-            className={`text-2xl shrink-0 ${isExpiringSoon ? "animate-pulse" : ""}`}
-            aria-hidden="true"
-          >
-            {isExpiringSoon ? "⚠️" : "⏳"}
-          </div>
-          <div className="flex flex-col flex-1 min-w-0">
-            <span
-              className={`text-[11px] font-black tracking-widest uppercase leading-none ${
-                isExpiringSoon ? "text-rose-800" : "text-amber-800"
+          <div className="flex items-center gap-3">
+            <div
+              className={`text-2xl shrink-0 ${isExpiringSoon ? "animate-pulse" : ""}`}
+              aria-hidden="true"
+            >
+              {isKept ? "📌" : isExpiringSoon ? "⚠️" : "⏳"}
+            </div>
+            <div className="flex flex-col flex-1 min-w-0">
+              <span
+                className={`text-[11px] font-black tracking-widest uppercase leading-none ${
+                  isKept
+                    ? "text-emerald-800"
+                    : isExpiringSoon
+                      ? "text-rose-800"
+                      : "text-amber-800"
+                }`}
+              >
+                {isKept ? "kept forever" : retention.label}
+              </span>
+              <span
+                className={`text-[10px] font-bold mt-1 tracking-wider ${
+                  isKept
+                    ? "text-emerald-600"
+                    : isExpiringSoon
+                      ? "text-rose-600"
+                      : "text-amber-600"
+                }`}
+              >
+                {isKept
+                  ? "this receipt won't be auto-deleted."
+                  : isCreator
+                    ? "receipts auto-delete after 7 days unless you keep them."
+                    : "receipts auto-delete after 7 days. ask whoever made it to keep it, or save the image."}
+              </span>
+            </div>
+            <button
+              onClick={() => showAlert(RETENTION_RULE, "how keeping works 📌")}
+              aria-label="retention policy info"
+              className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center transition-all active:scale-90 ${
+                isKept
+                  ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
+                  : isExpiringSoon
+                    ? "bg-rose-100 text-rose-700 hover:bg-rose-200"
+                    : "bg-amber-100 text-amber-700 hover:bg-amber-200"
               }`}
             >
-              {daysLeft === 0
-                ? "expires today"
-                : `expires in ${daysLeft} day${daysLeft !== 1 ? "s" : ""}`}
-            </span>
-            <span
-              className={`text-[10px] font-bold mt-1 tracking-wider ${
-                isExpiringSoon ? "text-rose-600" : "text-amber-600"
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2.5}
+                  d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                />
+              </svg>
+            </button>
+          </div>
+          {isCreator && (
+            <button
+              onClick={handleToggleKeep}
+              disabled={isTogglingKeep}
+              className={`mt-3 w-full py-2.5 rounded-xl text-xs font-black transition-all active:scale-[0.98] disabled:opacity-60 ${
+                isKept
+                  ? "bg-white border-2 border-emerald-200 text-emerald-700 hover:border-rose-200 hover:text-rose-600"
+                  : "bg-stone-900 text-white shadow-sm hover:bg-stone-800"
               }`}
             >
-              quick splits self-destruct after 7 days. save the image to keep
-              it.
-            </span>
-          </div>
+              {isKept ? "stop keeping" : "keep forever 📌"}
+            </button>
+          )}
         </div>
       )}
 

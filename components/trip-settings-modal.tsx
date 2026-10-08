@@ -23,7 +23,7 @@ export default function TripSettingsModal({
 
   const updateTripDetails = useTripStore((s) => s.updateTripDetails);
   const deleteTrip = useTripStore((s) => s.deleteTrip);
-  const updateTripStatus = useTripStore((s) => s.updateTripStatus);
+  const setTripKept = useTripStore((s) => s.setTripKept);
   const showConfirm = useAlertStore((s) => s.showConfirm);
 
   const [editTripName, setEditTripName] = useState(trip.name);
@@ -57,15 +57,28 @@ export default function TripSettingsModal({
     );
   };
 
-  const toggleStatus = async () => {
-    await updateTripStatus(
-      trip.id,
-      trip.status === "finished" ? "ongoing" : "finished",
-    );
-    onClose();
-  };
+  const isKept = Boolean(trip.is_kept);
 
-  const isFinished = trip.status === "finished";
+  // stopping a keep restarts a fresh 7-day countdown (the trips trigger bumps
+  // updated_at), so confirm it rather than flipping silently.
+  const toggleKeep = () => {
+    if (!isKept) {
+      setTripKept(trip.id, true);
+      onClose();
+      return;
+    }
+    showConfirm(
+      "this trip will auto-delete after 7 days without activity unless you keep it again.",
+      async () => {
+        await setTripKept(trip.id, false);
+        onClose();
+      },
+      {
+        title: "stop keeping this trip? ⏳",
+        confirmText: "stop keeping",
+      },
+    );
+  };
 
   return (
     <div
@@ -135,10 +148,12 @@ export default function TripSettingsModal({
           <div className="flex justify-between items-center p-4 bg-stone-50 rounded-2xl border-2 border-stone-100">
             <div>
               <h4 className="text-base font-black text-stone-800">
-                mark trip as settled 🔒
+                keep forever 📌
               </h4>
               <p className="text-xs font-bold text-stone-500 mt-1">
-                {isFinished ? "re-open the trip?" : "mark as late trip?"}
+                {isKept
+                  ? "kept — won't be auto-deleted"
+                  : "won't be auto-deleted after 7 days"}
               </p>
             </div>
             {/* 🔥 A2: real switch input */}
@@ -146,18 +161,18 @@ export default function TripSettingsModal({
               <input
                 type="checkbox"
                 role="switch"
-                checked={isFinished}
-                aria-checked={isFinished}
-                aria-label="mark trip as settled"
-                onChange={toggleStatus}
+                checked={isKept}
+                aria-checked={isKept}
+                aria-label="keep this trip forever"
+                onChange={toggleKeep}
                 className="sr-only peer"
               />
               <span
-                className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors active:scale-95 peer-focus-visible:ring-4 peer-focus-visible:ring-emerald-100 ${isFinished ? "bg-emerald-500" : "bg-stone-300"}`}
+                className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors active:scale-95 peer-focus-visible:ring-4 peer-focus-visible:ring-emerald-100 ${isKept ? "bg-emerald-500" : "bg-stone-300"}`}
                 aria-hidden="true"
               >
                 <span
-                  className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-sm transition-transform ${isFinished ? "translate-x-7" : "translate-x-1"}`}
+                  className={`inline-block h-6 w-6 transform rounded-full bg-white shadow-sm transition-transform ${isKept ? "translate-x-7" : "translate-x-1"}`}
                 />
               </span>
             </label>

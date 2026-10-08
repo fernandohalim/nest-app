@@ -8,7 +8,9 @@
 --   * p_new_members  : members to INSERT into the trip (client-generated uuids)
 --   * p_expenses     : per-expense, the already-remapped member-keyed JSON
 --                      (paid_by / owed_by / adjustments / items). settled_shares
---                      is intentionally reset to null on merge.
+--                      is intentionally reset to null on merge, and is_kept is
+--                      reset to false: a merged receipt follows its trip's
+--                      retention rule (3.1), never its own.
 --
 -- Security model: RLS is OFF on these tables, so this function runs as the
 -- caller (SECURITY INVOKER, the default) and manually guards every source
@@ -48,7 +50,7 @@ begin
   if p_target_trip_id is null then
     v_trip := gen_random_uuid();
     insert into public.trips
-      (id, name, date, currency, created_at, updated_at, owner_id, owner_name, status)
+      (id, name, date, currency, created_at, updated_at, owner_id, owner_name)
     values (
       v_trip,
       coalesce(nullif(trim(p_new_trip->>'name'), ''), 'merged trip'),
@@ -57,8 +59,7 @@ begin
       now(),
       now(),
       v_uid,
-      coalesce(nullif(p_new_trip->>'owner_name', ''), 'me'),
-      'ongoing'
+      coalesce(nullif(p_new_trip->>'owner_name', ''), 'me')
     );
   else
     select owner_id into v_owner from public.trips where id = p_target_trip_id;
@@ -108,7 +109,8 @@ begin
       adjustments    = nullif(e->'adjustments', 'null'::jsonb),
       items          = nullif(e->'items', 'null'::jsonb),
       settled_shares = null,
-      ephemeral_members = null
+      ephemeral_members = null,
+      is_kept        = false
     where id = (e->>'id')::uuid;
   end loop;
 

@@ -381,7 +381,8 @@ export default function MergeModal({
                               {t.name}
                             </span>
                             <span className="text-[10px] font-black text-stone-400 uppercase tracking-wider">
-                              {t.currency} · {t.status}
+                              {t.currency} ·{" "}
+                              {t.is_kept ? "📌 kept" : "⏳ auto-deletes"}
                             </span>
                           </div>
                           {existingTripId === t.id && (
@@ -393,6 +394,18 @@ export default function MergeModal({
                       ))}
                     </div>
                   )}
+                </div>
+              )}
+
+              {/* 3.1 retention: merged receipts follow the trip's rule, so a
+                  kept receipt loses its keep when the target trip isn't kept */}
+              {(targetMode === "new" ||
+                (existingTripId &&
+                  !ownedTrips.find((t) => t.id === existingTripId)?.is_kept)) && (
+                <div className="bg-amber-50/70 border border-amber-100 rounded-2xl p-3 text-xs font-bold text-amber-700/90 leading-relaxed">
+                  ⏳ {targetMode === "new" ? "a new trip isn't" : "this trip isn't"}{" "}
+                  kept — it auto-deletes after 7 quiet days. merged receipts
+                  follow the trip, so keep the trip 📌 to save them.
                 </div>
               )}
             </div>

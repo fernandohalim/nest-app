@@ -463,7 +463,12 @@ function QuickSplitContent() {
         });
       }
 
-      showAlert("receipt saved perfectly to your dashboard!", "saved ✨");
+      showAlert(
+        editId
+          ? "receipt updated!"
+          : "receipt saved to your dashboard! it auto-deletes after 7 days unless you keep it 📌",
+        "saved ✨",
+      );
       router.push(`/expense/${expense.id}?from=quick`);
     } catch (err) {
       console.error(err);

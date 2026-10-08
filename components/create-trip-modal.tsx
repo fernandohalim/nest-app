@@ -47,7 +47,7 @@ export default function CreateTripModal({
       members: [],
       expenses: [],
       createdAt: new Date().toISOString(),
-      status: "ongoing",
+      is_kept: false,
     };
 
     await addTrip(newTrip);

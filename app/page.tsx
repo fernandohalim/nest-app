@@ -10,6 +10,7 @@ import { Expense, Member } from "@/lib/types";
 import MergeModal from "@/components/merge-modal";
 import LoadingState from "@/components/loading-state";
 import { formatDisplayDate } from "@/lib/datetime";
+import { getRetention } from "@/lib/retention";
 import Image from "next/image";
 
 type SortType = "newest" | "oldest" | "a_z" | "z_a";
@@ -25,6 +26,8 @@ interface QuickSplitRow {
   created_at: string;
   category: string;
   ephemeral_members?: Member[];
+  is_kept?: boolean;
+  retention_from?: string;
 }
 
 function HomeContent() {
@@ -65,8 +68,8 @@ function HomeContent() {
   const [showOnlyMine, setShowOnlyMine] = useState(
     searchParams.get("mine") === "true",
   );
-  const [includeSettled, setIncludeSettled] = useState(
-    searchParams.get("settled") === "true",
+  const [showOnlyKept, setShowOnlyKept] = useState(
+    searchParams.get("kept") === "true",
   );
 
   useEffect(() => {
@@ -78,14 +81,14 @@ function HomeContent() {
     else params.delete("sort");
     if (showOnlyMine) params.set("mine", "true");
     else params.delete("mine");
-    if (includeSettled) params.set("settled", "true");
-    else params.delete("settled");
+    if (showOnlyKept) params.set("kept", "true");
+    else params.delete("kept");
 
     const newQuery = params.toString();
     if (newQuery !== searchParams.toString()) {
       router.replace(`/?${newQuery}`, { scroll: false });
     }
-  }, [searchQuery, sortBy, showOnlyMine, includeSettled, router, searchParams]);
+  }, [searchQuery, sortBy, showOnlyMine, showOnlyKept, router, searchParams]);
 
   const setViewMode = (mode: "trips" | "quick") => {
     setHomeView(mode);
@@ -151,7 +154,7 @@ function HomeContent() {
   ];
 
   const hasActiveTripFilters =
-    showOnlyMine || includeSettled || sortBy !== "newest";
+    showOnlyMine || showOnlyKept || sortBy !== "newest";
   const hasActiveQuickFilters = sortBy !== "newest";
 
   useEffect(() => {
@@ -190,6 +193,8 @@ function HomeContent() {
           expenseDate: exp.expense_date || exp.created_at,
           createdAt: exp.created_at,
           category: exp.category || "other",
+          isKept: exp.is_kept ?? false,
+          retentionFrom: exp.retention_from || exp.created_at,
         }));
         setQuickSplits(mappedData);
       }
@@ -233,7 +238,7 @@ function HomeContent() {
   const processedTrips = useMemo(
     () =>
       trips
-        .filter((t) => (includeSettled ? true : t.status !== "finished"))
+        .filter((t) => (showOnlyKept ? t.is_kept : true))
         .filter((t) => t.name.toLowerCase().includes(searchQuery.toLowerCase()))
         .filter((t) => (showOnlyMine ? t.owner_id === user?.id : true))
         .sort((a, b) => {
@@ -249,7 +254,7 @@ function HomeContent() {
           if (sortBy === "z_a") return b.name.localeCompare(a.name);
           return 0;
         }),
-    [trips, includeSettled, searchQuery, showOnlyMine, sortBy, user?.id],
+    [trips, showOnlyKept, searchQuery, showOnlyMine, sortBy, user?.id],
   );
 
   const displayedTrips = useMemo(
@@ -520,17 +525,16 @@ function HomeContent() {
                   <p className="text-sm font-bold text-stone-400 px-4">
                     {searchQuery
                       ? "try a different name."
-                      : "snap a receipt directly from the + button. it lives here for 7 days!"}
+                      : "snap a receipt directly from the + button. it auto-deletes after 7 days unless you keep it 📌"}
                   </p>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
                   {displayedQuickSplits.map((expense) => {
-                    const createdAt = new Date(expense.createdAt).getTime();
-                    const daysSince = Math.floor(
-                      (currentTime - createdAt) / (1000 * 60 * 60 * 24),
+                    const retention = getRetention(
+                      expense.retentionFrom || expense.createdAt,
+                      currentTime,
                     );
-                    const daysLeft = Math.max(0, 7 - daysSince);
 
                     return (
                       <button
@@ -558,11 +562,17 @@ function HomeContent() {
                               ).toUpperCase()}
                             </span>
                             <span className="text-stone-300">•</span>
-                            <span
-                              className={`px-2 py-0.5 rounded-md ${daysLeft <= 2 ? "bg-rose-50 text-rose-500" : "bg-amber-50 text-amber-500"}`}
-                            >
-                              ⏳ {daysLeft} day{daysLeft !== 1 ? "s" : ""} left
-                            </span>
+                            {expense.isKept ? (
+                              <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-600">
+                                📌 kept
+                              </span>
+                            ) : (
+                              <span
+                                className={`px-2 py-0.5 rounded-md ${retention.isUrgent ? "bg-rose-50 text-rose-500" : "bg-amber-50 text-amber-500"}`}
+                              >
+                                ⏳ {retention.shortLabel}
+                              </span>
+                            )}
                           </div>
                         </div>
                         {isSelecting ? (
@@ -766,25 +776,25 @@ function HomeContent() {
 
                             <label className="flex items-center justify-between cursor-pointer group">
                               <span className="text-sm font-bold text-stone-600 group-hover:text-stone-800 transition-colors">
-                                include settled
+                                kept only 📌
                               </span>
                               <input
                                 type="checkbox"
                                 role="switch"
-                                checked={includeSettled}
-                                aria-checked={includeSettled}
+                                checked={showOnlyKept}
+                                aria-checked={showOnlyKept}
                                 onChange={() => {
-                                  setIncludeSettled(!includeSettled);
+                                  setShowOnlyKept(!showOnlyKept);
                                   setVisibleCount(5);
                                 }}
                                 className="sr-only peer"
                               />
                               <div
-                                className={`w-11 h-6 rounded-full p-1 transition-colors duration-300 ${includeSettled ? "bg-emerald-500" : "bg-stone-200"}`}
+                                className={`w-11 h-6 rounded-full p-1 transition-colors duration-300 ${showOnlyKept ? "bg-emerald-500" : "bg-stone-200"}`}
                                 aria-hidden="true"
                               >
                                 <div
-                                  className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-300 ${includeSettled ? "translate-x-5" : "translate-x-0"}`}
+                                  className={`w-4 h-4 bg-white rounded-full shadow-sm transition-transform duration-300 ${showOnlyKept ? "translate-x-5" : "translate-x-0"}`}
                                 ></div>
                               </div>
                             </label>
@@ -852,31 +862,17 @@ function HomeContent() {
                     <button
                       key={trip.id}
                       onClick={() => router.push(`/trip/${trip.id}`)}
-                      className={`w-full bg-white p-5 sm:p-6 rounded-3xl shadow-sm border-2 transition-all text-left flex justify-between items-center group active:scale-[0.98] ${
-                        trip.status === "finished"
-                          ? "border-stone-100 opacity-60 hover:opacity-100"
-                          : "border-stone-100 hover:shadow-md hover:border-emerald-200"
-                      }`}
+                      className="w-full bg-white p-5 sm:p-6 rounded-3xl shadow-sm border-2 transition-all text-left flex justify-between items-center group active:scale-[0.98] border-stone-100 hover:shadow-md hover:border-emerald-200"
                     >
                       <div className="flex flex-col gap-2 pr-4 min-w-0">
                         <h3
-                          className={`font-extrabold text-lg sm:text-xl truncate transition-colors ${
-                            trip.status === "finished"
-                              ? "text-stone-400 line-through decoration-stone-300 decoration-2"
-                              : "text-stone-800 group-hover:text-emerald-700"
-                          }`}
+                          className="font-extrabold text-lg sm:text-xl truncate transition-colors text-stone-800 group-hover:text-emerald-700"
                         >
                           {trip.name}
                         </h3>
                         <div className="flex flex-col gap-1.5 text-[10px] sm:text-xs font-bold text-stone-400 uppercase tracking-wider">
                           <div className="flex items-center flex-wrap gap-2">
-                            <span
-                              className={`border px-2 py-0.5 rounded-md flex items-center gap-1 shrink-0 ${
-                                trip.status === "finished"
-                                  ? "bg-stone-50 border-stone-200 text-stone-400"
-                                  : "bg-stone-50 border-stone-100 text-stone-500"
-                              }`}
-                            >
+                            <span className="border px-2 py-0.5 rounded-md flex items-center gap-1 shrink-0 bg-stone-50 border-stone-100 text-stone-500">
                               {trip.owner_id === user?.id
                                 ? "you"
                                 : trip.owner_name}{" "}
@@ -899,14 +895,31 @@ function HomeContent() {
                               {formatDisplayDate(trip.createdAt).toUpperCase()}
                             </span>
                           </div>
+                          <div className="flex items-center">
+                            {trip.is_kept ? (
+                              <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-600 font-black">
+                                📌 kept
+                              </span>
+                            ) : (
+                              (() => {
+                                const retention = getRetention(
+                                  trip.updatedAt || trip.createdAt,
+                                  currentTime,
+                                );
+                                return (
+                                  <span
+                                    className={`px-2 py-0.5 rounded-md font-black ${retention.isUrgent ? "bg-rose-50 text-rose-500" : "bg-amber-50 text-amber-500"}`}
+                                  >
+                                    ⏳ {retention.shortLabel}
+                                  </span>
+                                );
+                              })()
+                            )}
+                          </div>
                         </div>
                       </div>
                       <div
-                        className={`shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition-colors shadow-sm border ${
-                          trip.status === "finished"
-                            ? "bg-stone-50 border-stone-100 text-stone-300"
-                            : "bg-stone-50 border-stone-100 text-stone-400 group-hover:bg-emerald-100 group-hover:text-emerald-600 group-hover:border-emerald-200 group-hover:-rotate-45"
-                        }`}
+                        className="shrink-0 w-10 h-10 sm:w-12 sm:h-12 rounded-full flex items-center justify-center transition-colors shadow-sm border bg-stone-50 border-stone-100 text-stone-400 group-hover:bg-emerald-100 group-hover:text-emerald-600 group-hover:border-emerald-200 group-hover:-rotate-45"
                         aria-hidden="true"
                       >
                         <svg
@@ -985,8 +998,8 @@ function HomeContent() {
                   </h3>
                   <p className="text-sm font-bold text-stone-400 mt-1 leading-relaxed">
                     dedicated spaces for ongoing group expenses (holidays,
-                    housemates). these are saved permanently until you settle
-                    them.
+                    housemates). tap &quot;mark paid&quot; on a share once
+                    someone pays you back.
                   </p>
                 </div>
                 <div className="bg-white p-5 rounded-3xl border-2 border-stone-100 shadow-sm">
@@ -998,8 +1011,25 @@ function HomeContent() {
                   </h3>
                   <p className="text-sm font-bold text-stone-400 mt-1 leading-relaxed">
                     quick, standalone splits for single events (a shared
-                    dinner). these self-destruct after 7 days to keep your
-                    dashboard clean.
+                    dinner). merge a few into a trip anytime.
+                  </p>
+                </div>
+                <div className="bg-white p-5 rounded-3xl border-2 border-emerald-100 shadow-sm">
+                  <div className="text-3xl mb-2" aria-hidden="true">
+                    📌
+                  </div>
+                  <h3 className="font-extrabold text-lg text-stone-800">
+                    keeping
+                  </h3>
+                  <p className="text-sm font-bold text-stone-400 mt-1 leading-relaxed">
+                    to keep things tidy, anything you don&apos;t keep
+                    auto-deletes after 7 days — trips count from their last
+                    activity, receipts from when they were made. tap{" "}
+                    <span className="text-emerald-600">keep forever 📌</span>{" "}
+                    to save one. only the trip owner or the receipt&apos;s
+                    creator can keep it. stop keeping anytime and it gets a
+                    fresh 7 days. merged receipts follow their trip&apos;s
+                    rule.
                   </p>
                 </div>
               </div>

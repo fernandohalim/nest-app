@@ -18,6 +18,8 @@ interface SupabaseExpenseRow {
   expense_date: string;
   created_at: string;
   category: string;
+  is_kept?: boolean;
+  retention_from?: string;
 }
 
 interface SupabaseTripRow {
@@ -29,7 +31,7 @@ interface SupabaseTripRow {
   updated_at: string;
   owner_id: string;
   owner_name: string;
-  status: string;
+  is_kept: boolean;
   is_collaborative: boolean;
 }
 
@@ -46,6 +48,8 @@ const mapExpense = (exp: SupabaseExpenseRow): Expense => ({
   expenseDate: exp.expense_date,
   createdAt: exp.created_at,
   category: exp.category || "other",
+  isKept: exp.is_kept ?? false,
+  retentionFrom: exp.retention_from || exp.created_at,
 });
 
 interface TripStore {
@@ -69,7 +73,7 @@ interface TripStore {
     newName: string,
     newCurrency: string,
   ) => Promise<void>;
-  updateTripStatus: (tripId: string, status: string) => Promise<void>;
+  setTripKept: (tripId: string, isKept: boolean) => Promise<void>;
   deleteTrip: (tripId: string) => Promise<void>;
 
   addMember: (tripId: string, member: Member) => Promise<void>;
@@ -250,7 +254,7 @@ export const useTripStore = create<TripStore>((set, get) => ({
       updatedAt: t.updated_at || t.created_at,
       owner_id: t.owner_id,
       owner_name: t.owner_name,
-      status: t.status || "ongoing",
+      is_kept: t.is_kept ?? false,
       members: [],
       expenses: [],
       is_collaborative: t.is_collaborative || false,
@@ -294,7 +298,7 @@ export const useTripStore = create<TripStore>((set, get) => ({
       updatedAt: tripRes.data.updated_at || tripRes.data.created_at,
       owner_id: tripRes.data.owner_id,
       owner_name: tripRes.data.owner_name,
-      status: tripRes.data.status || "ongoing",
+      is_kept: tripRes.data.is_kept ?? false,
       members: membersRes.data || [],
       expenses: (expensesRes.data || []).map(mapExpense),
       is_collaborative: tripRes.data.is_collaborative || false,
@@ -346,7 +350,6 @@ export const useTripStore = create<TripStore>((set, get) => ({
       created_at: trip.createdAt,
       owner_id: currentUser.id,
       owner_name: displayName,
-      status: trip.status || "ongoing",
     });
     set({ isSyncing: false });
   },
@@ -355,7 +358,14 @@ export const useTripStore = create<TripStore>((set, get) => ({
     set({ isSyncing: true });
     set((state) => ({
       trips: state.trips.map((t) =>
-        t.id === tripId ? { ...t, name: newName, currency: newCurrency } : t,
+        t.id === tripId
+          ? {
+              ...t,
+              name: newName,
+              currency: newCurrency,
+              updatedAt: new Date().toISOString(),
+            }
+          : t,
       ),
     }));
     await supabase
@@ -365,12 +375,18 @@ export const useTripStore = create<TripStore>((set, get) => ({
     set({ isSyncing: false });
   },
 
-  updateTripStatus: async (tripId, status) => {
+  // the trips_touch_updated_at trigger bumps updated_at on this write, so
+  // "stop keeping" restarts a fresh 7-day countdown — mirror that locally.
+  setTripKept: async (tripId, isKept) => {
     set({ isSyncing: true });
     set((state) => ({
-      trips: state.trips.map((t) => (t.id === tripId ? { ...t, status } : t)),
+      trips: state.trips.map((t) =>
+        t.id === tripId
+          ? { ...t, is_kept: isKept, updatedAt: new Date().toISOString() }
+          : t,
+      ),
     }));
-    await supabase.from("trips").update({ status }).eq("id", tripId);
+    await supabase.from("trips").update({ is_kept: isKept }).eq("id", tripId);
     set({ isSyncing: false });
   },
 
@@ -378,7 +394,13 @@ export const useTripStore = create<TripStore>((set, get) => ({
     set({ isSyncing: true });
     set((state) => ({
       trips: state.trips.map((t) =>
-        t.id === tripId ? { ...t, is_collaborative: isCollaborative } : t,
+        t.id === tripId
+          ? {
+              ...t,
+              is_collaborative: isCollaborative,
+              updatedAt: new Date().toISOString(),
+            }
+          : t,
       ),
     }));
     await supabase
