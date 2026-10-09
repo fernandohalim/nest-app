@@ -107,6 +107,8 @@ export default function TripDetail() {
   const [editingExpense, setEditingExpense] = useState<Expense | undefined>(
     undefined,
   );
+  // id of the scanned draft whose category came from the scanner
+  const [autoCategoryId, setAutoCategoryId] = useState<string | null>(null);
   const [expandedExpenseId, setExpandedExpenseId] = useState<string | null>(
     null,
   );
@@ -444,9 +446,10 @@ export default function TripDetail() {
         items: formattedItems,
         expenseDate: data.date || new Date().toISOString(),
         createdAt: new Date().toISOString(),
-        category: data.category || "other",
+        category: data.category || "food & bev",
       };
 
+      setAutoCategoryId(data.category ? scannedExpense.id : null);
       setEditingExpense(scannedExpense);
       setIsAddingExpense(true);
     } catch {
@@ -2860,6 +2863,9 @@ export default function TripDetail() {
               <ExpenseForm
                 members={trip.members}
                 initialExpense={editingExpense}
+                categoryAutoDetected={
+                  !!editingExpense && editingExpense.id === autoCategoryId
+                }
                 onSave={handleSaveExpense}
                 onCancel={() => {
                   setIsAddingExpense(false);

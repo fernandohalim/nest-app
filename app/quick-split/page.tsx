@@ -296,6 +296,8 @@ function QuickSplitContent() {
     undefined,
   );
   const [showScanner, setShowScanner] = useState(false);
+  // id of the scanned draft whose category came from the scanner
+  const [autoCategoryId, setAutoCategoryId] = useState<string | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const hasOpenedScanner = useRef(false);
@@ -407,6 +409,7 @@ function QuickSplitContent() {
         category: data.category || "food & bev",
       };
 
+      setAutoCategoryId(data.category ? scannedExpense.id : null);
       setEditingExpense(scannedExpense);
     } catch {
       showAlert(
@@ -617,6 +620,9 @@ function QuickSplitContent() {
                 key={editingExpense?.id || (editId ? `edit-${editId}` : "new")}
                 members={members}
                 initialExpense={editingExpense}
+                categoryAutoDetected={
+                  !!editingExpense && editingExpense.id === autoCategoryId
+                }
                 onSave={handleSaveReceipt}
                 onCancel={() => router.push("/?tab=quick")}
                 currencySymbol="Rp"

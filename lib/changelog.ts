@@ -2,6 +2,21 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
+    version: "3.3",
+    date: "oct 9, 2026",
+    title: "a clearer receipt 🧾",
+    badge: "feature",
+    badgeColor: "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200",
+    features: [
+      "refined the receipt so the total sits right under the title — no more scrolling past every item to find the number you came for. the subtotal and tax lines only show up when there's something to explain.",
+      "refined save image and share into a bar pinned to the bottom of the screen, so they're always a thumb away on a long receipt. on desktop they sit in the side panel, which now stays put as you scroll.",
+      "refined the 7-day countdown into a slim pill above the receipt — tap it for the details and the keep forever 📌 button.",
+      "refined the top of the receipt into simple icons: edit ✏️ and bookmark 🔖.",
+      "added the category to every receipt — its icon leads the receipt, and the tag shows it too (🍔 food & bev, 🏨 hotel & stay…).",
+      "added an 'auto-detected' hint when a scanned receipt fills in the category, so you know to double-check it. scans that can't tell now fall back to food & bev everywhere.",
+    ],
+  },
+  {
     version: "3.2",
     date: "oct 8, 2026",
     title: "bookmarks & the shortcut 🔖",

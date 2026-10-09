@@ -14,6 +14,7 @@ import twemoji from "@twemoji/api";
 import Emoji from "@/components/emoji";
 import { getAvatarColor } from "@/lib/avatars";
 import { getRetention, RETENTION_RULE } from "@/lib/retention";
+import { CATEGORY_EMOJI } from "@/components/home-list";
 
 const BARCODE_WIDTHS = [
   4, 8, 2, 4, 6, 8, 2, 6, 4, 8, 2, 6, 4, 4, 8, 2, 4, 6, 8, 2, 4,
@@ -48,6 +49,8 @@ export default function UnifiedExpensePage() {
   // creator of a quick split — the only one who can keep / stop keeping it
   const [createdBy, setCreatedBy] = useState<string | null>(null);
   const [isTogglingKeep, setIsTogglingKeep] = useState(false);
+  // mobile shows retention as a one-line pill; tapping it opens the details
+  const [isRetentionOpen, setIsRetentionOpen] = useState(false);
   // 3.2: non-creators can bookmark a quick split onto their home list. it's
   // only a shortcut — it never keeps the receipt alive.
   const [isSaved, setIsSaved] = useState(false);
@@ -357,9 +360,78 @@ export default function UnifiedExpensePage() {
   const isKept = Boolean(expense.isKept);
   const retention = getRetention(expense.retentionFrom || expense.createdAt);
   const isExpiringSoon = isQuickSplit && !isKept && retention.isUrgent;
+  const canEdit = Boolean(tripData || isOwner || isCreator);
+  const category = expense.category || "other";
+  // "other" maps to ✨, which reads as decoration on a receipt header
+  const categoryEmoji =
+    category === "other" ? "🧾" : (CATEGORY_EMOJI[category] ?? "🧾");
+
+  // rendered twice: the sticky bar on mobile, the side rail on desktop
+  const renderActions = () => (
+    <>
+      <button
+        onClick={handleExportImage}
+        disabled={isExporting}
+        aria-label="save receipt as image"
+        className="flex-1 lg:flex-none py-3.5 bg-white border-2 border-stone-200 text-stone-700 font-black text-sm rounded-2xl hover:border-emerald-200 hover:text-emerald-600 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+      >
+        {isExporting ? (
+          <div
+            className="w-5 h-5 border-3 border-stone-300 border-t-transparent rounded-full animate-spin"
+            aria-hidden="true"
+          ></div>
+        ) : (
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2.5}
+              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
+            />
+          </svg>
+        )}
+        save image
+      </button>
+      <button
+        onClick={handleShare}
+        disabled={isSharing}
+        aria-label="share receipt"
+        className="flex-1 lg:flex-none py-3.5 bg-stone-900 text-white font-black text-sm rounded-2xl shadow-lg hover:bg-stone-800 active:scale-[0.98] transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+      >
+        {isSharing ? (
+          <div
+            className="w-5 h-5 border-3 border-white border-t-transparent rounded-full animate-spin"
+            aria-hidden="true"
+          ></div>
+        ) : (
+          <svg
+            className="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2.5}
+              d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8m-4-6l-4-4m0 0L8 6m4-4v13"
+            />
+          </svg>
+        )}
+        share
+      </button>
+    </>
+  );
 
   return (
-    <main className="flex min-h-screen flex-col items-center p-4 sm:p-6 bg-[#fdfbf7] pb-10 font-sans selection:bg-emerald-200 selection:text-emerald-900">
+    <main className="flex min-h-screen flex-col items-center p-4 sm:p-6 bg-[#fdfbf7] pb-32 lg:pb-10 font-sans selection:bg-emerald-200 selection:text-emerald-900">
       <div className="w-full max-w-md lg:max-w-4xl flex justify-between items-center mb-6">
         <button
           onClick={() => {
@@ -392,13 +464,33 @@ export default function UnifiedExpensePage() {
         <div className="flex items-center gap-2">
           {/* the creator can always edit, even after removing themselves
               from the split */}
-          {!tripData && (isOwner || isCreator) && (
+          {canEdit && (
             <button
-              onClick={() => router.push(`/quick-split?edit=${expense.id}`)}
-              aria-label="edit receipt"
-              className="px-4 h-11 flex items-center justify-center rounded-full bg-white shadow-sm border border-stone-100 text-stone-500 font-bold text-sm hover:text-emerald-600 hover:border-emerald-200 active:scale-95 transition-all"
+              onClick={() =>
+                router.push(
+                  tripData
+                    ? `/trip/${tripData.id}?openExpense=${expense.id}`
+                    : `/quick-split?edit=${expense.id}`,
+                )
+              }
+              aria-label={tripData ? "edit in trip" : "edit receipt"}
+              title={tripData ? "edit in trip" : "edit receipt"}
+              className="w-11 h-11 flex items-center justify-center rounded-full bg-white shadow-sm border border-stone-100 text-stone-500 hover:text-emerald-600 hover:scale-110 hover:-translate-y-0.5 active:scale-95 transition-all"
             >
-              edit receipt
+              <svg
+                className="w-5 h-5"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2.25}
+                  d="M15.232 5.232l3.536 3.536M9 13l6.232-6.232a2.5 2.5 0 113.536 3.536L12.536 16.536A4 4 0 0110.707 17.6L7 18.5l.9-3.707A4 4 0 019 13z"
+                />
+              </svg>
             </button>
           )}
 
@@ -427,32 +519,78 @@ export default function UnifiedExpensePage() {
             </button>
           )}
 
-          {tripData && (
-            <button
-              onClick={() =>
-                router.push(`/trip/${tripData.id}?openExpense=${expense.id}`)
-              }
-              aria-label="edit in trip"
-              className="px-4 h-11 flex items-center justify-center rounded-full bg-white shadow-sm border border-stone-100 text-stone-500 font-bold text-sm hover:text-emerald-600 hover:border-emerald-200 active:scale-95 transition-all"
-            >
-              edit in trip
-            </button>
-          )}
+        </div>
+      </div>
 
-          <button
-            onClick={handleShare}
-            disabled={isSharing}
-            aria-label="share receipt"
-            className="w-11 h-11 flex items-center justify-center rounded-full bg-white shadow-sm border border-stone-100 text-stone-500 hover:text-emerald-600 hover:scale-110 hover:-translate-y-0.5 active:scale-95 transition-all disabled:opacity-70 disabled:hover:scale-100 disabled:active:scale-100"
-          >
-            {isSharing ? (
-              <div
-                className="w-5 h-5 border-2 border-stone-200 border-t-emerald-500 rounded-full animate-spin"
+      {/* desktop: receipt on the left, its meta (expiry / linked trip) in a
+          side rail. the contents-wrappers keep the mobile stack byte-identical. */}
+      <div className="w-full max-w-md lg:max-w-4xl lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-6 lg:items-start">
+        <div className="contents lg:flex lg:flex-col lg:gap-6 lg:col-start-2 lg:row-start-1 lg:sticky lg:top-6">
+      {isQuickSplit && (
+        <div
+          className={`w-full max-w-md lg:max-w-none mb-4 lg:mb-0 z-10 rounded-2xl border-2 shadow-sm transition-[padding] lg:p-4 ${
+            isRetentionOpen ? "p-4" : "px-3.5 py-2.5"
+          } ${
+            isKept
+              ? "bg-emerald-50 border-emerald-200"
+              : isExpiringSoon
+                ? "bg-rose-50 border-rose-200"
+                : "bg-amber-50 border-amber-100"
+          }`}
+        >
+          <div className="flex items-center gap-3">
+            {/* mobile: the whole row toggles the details. desktop always
+                shows them, so the toggle goes inert there. */}
+            <button
+              type="button"
+              onClick={() => setIsRetentionOpen((v) => !v)}
+              aria-expanded={isRetentionOpen}
+              className="flex items-center gap-3 flex-1 min-w-0 text-left lg:pointer-events-none"
+            >
+              <span
+                className={`shrink-0 lg:text-2xl ${isRetentionOpen ? "text-2xl" : "text-lg"} ${isExpiringSoon ? "animate-pulse" : ""}`}
                 aria-hidden="true"
-              ></div>
-            ) : (
+              >
+                {isKept ? "📌" : isExpiringSoon ? "⚠️" : "⏳"}
+              </span>
+              <span className="flex flex-col flex-1 min-w-0">
+                <span
+                  className={`text-[11px] font-black tracking-widest uppercase leading-none ${
+                    isKept
+                      ? "text-emerald-800"
+                      : isExpiringSoon
+                        ? "text-rose-800"
+                        : "text-amber-800"
+                  }`}
+                >
+                  {isKept ? "kept forever" : retention.label}
+                </span>
+                <span
+                  className={`text-[10px] font-bold mt-1 tracking-wider lg:block ${isRetentionOpen ? "block" : "hidden"} ${
+                    isKept
+                      ? "text-emerald-600"
+                      : isExpiringSoon
+                        ? "text-rose-600"
+                        : "text-amber-600"
+                  }`}
+                >
+                  {isKept
+                    ? "this receipt won't be auto-deleted."
+                    : isCreator
+                      ? "receipts auto-delete after 7 days unless you keep them."
+                      : isSaved
+                        ? "saved to your receipts, but only whoever made it can keep it. save the image to be safe."
+                        : "receipts auto-delete after 7 days. ask whoever made it to keep it, or save the image."}
+                </span>
+              </span>
               <svg
-                className="w-5 h-5"
+                className={`w-4 h-4 shrink-0 transition-transform lg:hidden ${isRetentionOpen ? "rotate-180" : ""} ${
+                  isKept
+                    ? "text-emerald-600"
+                    : isExpiringSoon
+                      ? "text-rose-600"
+                      : "text-amber-600"
+                }`}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -462,69 +600,14 @@ export default function UnifiedExpensePage() {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2.5}
-                  d="M4 12v8a2 2 0 002 2h12a2 2 0 002-2v-8m-4-6l-4-4m0 0L8 6m4-4v13"
+                  d="M19 9l-7 7-7-7"
                 />
               </svg>
-            )}
-          </button>
-        </div>
-      </div>
-
-      {/* desktop: receipt on the left, its meta (expiry / linked trip) in a
-          side rail. the contents-wrappers keep the mobile stack byte-identical. */}
-      <div className="w-full max-w-md lg:max-w-4xl lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:gap-6 lg:items-start">
-        <div className="contents lg:flex lg:flex-col lg:gap-6 lg:col-start-2 lg:row-start-1">
-      {isQuickSplit && (
-        <div
-          className={`w-full max-w-md lg:max-w-none mb-6 lg:mb-0 animate-in slide-in-from-top-4 duration-500 z-10 rounded-2xl border-2 p-4 shadow-sm ${
-            isKept
-              ? "bg-emerald-50 border-emerald-200"
-              : isExpiringSoon
-                ? "bg-rose-50 border-rose-200"
-                : "bg-amber-50 border-amber-100"
-          }`}
-        >
-          <div className="flex items-center gap-3">
-            <div
-              className={`text-2xl shrink-0 ${isExpiringSoon ? "animate-pulse" : ""}`}
-              aria-hidden="true"
-            >
-              {isKept ? "📌" : isExpiringSoon ? "⚠️" : "⏳"}
-            </div>
-            <div className="flex flex-col flex-1 min-w-0">
-              <span
-                className={`text-[11px] font-black tracking-widest uppercase leading-none ${
-                  isKept
-                    ? "text-emerald-800"
-                    : isExpiringSoon
-                      ? "text-rose-800"
-                      : "text-amber-800"
-                }`}
-              >
-                {isKept ? "kept forever" : retention.label}
-              </span>
-              <span
-                className={`text-[10px] font-bold mt-1 tracking-wider ${
-                  isKept
-                    ? "text-emerald-600"
-                    : isExpiringSoon
-                      ? "text-rose-600"
-                      : "text-amber-600"
-                }`}
-              >
-                {isKept
-                  ? "this receipt won't be auto-deleted."
-                  : isCreator
-                    ? "receipts auto-delete after 7 days unless you keep them."
-                    : isSaved
-                      ? "saved to your receipts, but only whoever made it can keep it. save the image to be safe."
-                      : "receipts auto-delete after 7 days. ask whoever made it to keep it, or save the image."}
-              </span>
-            </div>
+            </button>
             <button
               onClick={() => showAlert(RETENTION_RULE, "how keeping works 📌")}
               aria-label="retention policy info"
-              className={`w-9 h-9 shrink-0 rounded-full flex items-center justify-center transition-all active:scale-90 ${
+              className={`w-9 h-9 shrink-0 rounded-full items-center justify-center transition-all active:scale-90 lg:flex ${isRetentionOpen ? "flex" : "hidden"} ${
                 isKept
                   ? "bg-emerald-100 text-emerald-700 hover:bg-emerald-200"
                   : isExpiringSoon
@@ -552,7 +635,7 @@ export default function UnifiedExpensePage() {
             <button
               onClick={handleToggleKeep}
               disabled={isTogglingKeep}
-              className={`mt-3 w-full py-2.5 rounded-xl text-xs font-black transition-all active:scale-[0.98] disabled:opacity-60 ${
+              className={`mt-3 w-full py-2.5 rounded-xl text-xs font-black transition-all active:scale-[0.98] disabled:opacity-60 lg:block ${isRetentionOpen ? "block" : "hidden"} ${
                 isKept
                   ? "bg-white border-2 border-emerald-200 text-emerald-700 hover:border-rose-200 hover:text-rose-600"
                   : "bg-stone-900 text-white shadow-sm hover:bg-stone-800"
@@ -565,7 +648,7 @@ export default function UnifiedExpensePage() {
       )}
 
       {tripData && (
-        <div className="w-full max-w-md lg:max-w-none mb-6 lg:mb-0 animate-in slide-in-from-top-4 duration-500 z-10">
+        <div className="w-full max-w-md lg:max-w-none mb-4 lg:mb-0 z-10">
           <button
             onClick={() => router.push(`/trip/${tripData.id}`)}
             className="w-full bg-white border-2 border-stone-100 rounded-3xl p-5 flex items-center justify-between shadow-sm hover:border-emerald-200 hover:shadow-md transition-all group active:scale-[0.98]"
@@ -600,8 +683,10 @@ export default function UnifiedExpensePage() {
         </div>
       )}
 
+      {/* desktop: save / share live in the rail. mobile gets the sticky bar. */}
+      <div className="hidden lg:flex flex-col gap-2.5">{renderActions()}</div>
         </div>
-        {/* receipt + save — the main column on desktop */}
+        {/* receipt — the main column on desktop */}
         <div className="contents lg:flex lg:flex-col lg:col-start-1 lg:row-start-1">
       {/* THE RECEIPT (captured by html-to-image) */}
       <div
@@ -611,17 +696,31 @@ export default function UnifiedExpensePage() {
         {/* HEADER */}
         <div className="p-6 sm:p-8 border-b-2 border-dashed border-stone-200 flex flex-col items-center text-center bg-white relative z-10">
           <div className="text-4xl mb-4" aria-hidden="true">
-            <Emoji char="🧾" />
+            <Emoji char={categoryEmoji} />
           </div>
           <h1 className="text-2xl font-black text-stone-800 leading-tight mb-2">
             {expense.title}
           </h1>
-          <p className="text-[11px] font-bold text-stone-400 uppercase tracking-widest">
-            {formatDisplayDateTime(expense.expenseDate)}
-          </p>
-          <span className="mt-3 font-bold px-3 py-1 bg-stone-50 border border-stone-100 text-stone-400 rounded-full text-[10px] uppercase tracking-widest">
-            {expense.category}
-          </span>
+          <div className="flex flex-wrap items-center justify-center gap-x-2.5 gap-y-1.5">
+            <span className="font-bold px-2.5 py-1 bg-stone-50 border border-stone-100 text-stone-500 rounded-full text-[10px] uppercase tracking-widest flex items-center gap-1">
+              <Emoji char={CATEGORY_EMOJI[category] ?? "✨"} />
+              {category}
+            </span>
+            <span className="text-[11px] font-bold text-stone-400 uppercase tracking-widest">
+              {formatDisplayDateTime(expense.expenseDate)}
+            </span>
+          </div>
+
+          {/* the number people open a receipt for — up top, not under the items */}
+          <div className="mt-6 w-full bg-emerald-50 border-2 border-emerald-100 rounded-2xl px-4 py-4">
+            <span className="text-[10px] font-black text-emerald-800/70 uppercase tracking-widest block mb-1">
+              total
+            </span>
+            <span className="text-4xl font-black text-emerald-600 inline-flex items-start justify-center tabular-nums break-all">
+              <span className="text-xl mt-1 mr-1">{currencySymbol}</span>
+              {formatMoney(expense.totalAmount, currencyCode)}
+            </span>
+          </div>
         </div>
 
         <div className="p-6 sm:p-8 bg-white relative z-10 flex flex-col">
@@ -659,14 +758,13 @@ export default function UnifiedExpensePage() {
               </div>
             )}
 
-          {/* SECTION 2: THE MATH */}
-          <div className="flex flex-col gap-3 mb-8">
-            <span className="text-[10px] font-black text-stone-300 uppercase tracking-widest border-b-2 border-stone-100 pb-2">
-              totals
-            </span>
-
-            {expense.splitType === "exact" && Math.abs(difference) > 0 && (
-              <>
+          {/* SECTION 2: THE MATH — the total itself lives in the header now, so
+              this only shows when there's a subtotal / tax line to explain it */}
+          {expense.splitType === "exact" && Math.abs(difference) > 0 && (
+            <div className="flex flex-col gap-3 mb-8">
+              <span className="text-[10px] font-black text-stone-300 uppercase tracking-widest border-b-2 border-stone-100 pb-2">
+                totals
+              </span>
                 <div className="flex justify-between text-sm text-stone-500">
                   <span className="font-bold">subtotal</span>
                   <span className="font-black">
@@ -684,19 +782,15 @@ export default function UnifiedExpensePage() {
                     {formatMoney(Math.abs(difference), currencyCode)}
                   </span>
                 </div>
-              </>
-            )}
-
-            <div className="flex justify-between items-end mt-2 p-4 bg-emerald-50 border-2 border-emerald-100 rounded-2xl">
-              <span className="text-[11px] font-black text-emerald-800 uppercase tracking-widest">
-                total
-              </span>
-              <span className="text-3xl font-black text-emerald-600">
-                {currencySymbol}
-                {formatMoney(expense.totalAmount, currencyCode)}
-              </span>
+              <div className="flex justify-between text-sm text-stone-800 pt-3 border-t-2 border-stone-100">
+                <span className="font-black">total</span>
+                <span className="font-black">
+                  {currencySymbol}
+                  {formatMoney(expense.totalAmount, currencyCode)}
+                </span>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* SECTION 3: THE SETTLEMENT */}
           <div className="flex flex-col gap-4 bg-stone-50 rounded-2xl p-5 border-2 border-stone-100">
@@ -904,37 +998,13 @@ export default function UnifiedExpensePage() {
           </div>
         </div>
       </div>
-
-      <button
-        onClick={handleExportImage}
-        disabled={isExporting}
-        aria-label="save receipt as image"
-        className="mt-8 w-full max-w-md lg:max-w-none py-4.5 bg-stone-900 text-white font-black text-base rounded-2xl shadow-xl hover:bg-stone-800 active:scale-[0.98] transition-all flex items-center justify-center gap-3 disabled:opacity-50"
-      >
-        {isExporting ? (
-          <div
-            className="w-5 h-5 border-3 border-white border-t-transparent rounded-full animate-spin"
-            aria-hidden="true"
-          ></div>
-        ) : (
-          <svg
-            className="w-5 h-5"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            aria-hidden="true"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              strokeWidth={2.5}
-              d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"
-            />
-          </svg>
-        )}
-        save receipt image
-      </button>
         </div>
+      </div>
+
+      {/* mobile: save / share pinned to the thumb, so a long receipt never
+          buries them */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 z-40 border-t border-stone-200/70 bg-white/95 backdrop-blur-xl shadow-[0_-10px_40px_rgba(0,0,0,0.08)] px-4 pt-3 pb-[calc(0.75rem+env(safe-area-inset-bottom))]">
+        <div className="max-w-md mx-auto flex gap-2.5">{renderActions()}</div>
       </div>
 
       {/* off-screen receipt snapshot for exporting.

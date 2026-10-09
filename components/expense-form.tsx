@@ -21,6 +21,8 @@ export interface ExpenseFormProps {
   onCancel: () => void;
   currencySymbol?: string;
   currencyCode?: string;
+  // the scanner picked the category — say so until the user changes it
+  categoryAutoDetected?: boolean;
 }
 
 const CATEGORIES = [
@@ -423,6 +425,7 @@ export default function ExpenseForm({
   onCancel,
   currencySymbol = "Rp",
   currencyCode = "IDR",
+  categoryAutoDetected = false,
 }: ExpenseFormProps) {
   const {
     title,
@@ -459,6 +462,9 @@ export default function ExpenseForm({
     difference,
     paidMatchesTotal,
   } = useExpenseFormLogic(members, initialExpense, onSave, currencyCode);
+
+  const [isCategoryTouched, setIsCategoryTouched] = useState(false);
+  const showAutoDetectedHint = categoryAutoDetected && !isCategoryTouched;
 
   const submitButtonClasses =
     "flex-[2] py-4.5 bg-stone-900 text-white rounded-2xl text-base font-black hover:bg-emerald-600 transition-all shadow-xl shadow-stone-900/20 hover:shadow-emerald-600/30 active:scale-95 disabled:bg-stone-300 disabled:shadow-none flex justify-center items-center";
@@ -514,10 +520,18 @@ export default function ExpenseForm({
           </label>
           <CustomSelect
             value={category}
-            onChange={(val) => setCategory(val)}
+            onChange={(val) => {
+              setCategory(val);
+              setIsCategoryTouched(true);
+            }}
             options={CATEGORIES}
             className="w-full h-full"
           />
+          {showAutoDetectedHint && (
+            <p className="absolute top-full left-1 right-0 mt-1.5 text-[10px] font-bold text-emerald-600 leading-tight">
+              ✨ auto-detected from the receipt
+            </p>
+          )}
         </div>
       </div>
 
