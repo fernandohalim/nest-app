@@ -7,6 +7,11 @@ import { useAlertStore } from "@/store/useAlertStore";
 import { v4 as uuidv4 } from "uuid";
 import ExpenseForm from "@/components/expense-form";
 import { calculateRawDebts, calculateSettlements } from "@/lib/settlements";
+import {
+  getEqualSplitWeights,
+  getTotalWeight,
+  isWeightedSplit,
+} from "@/lib/split";
 import { Expense, ExpenseItem } from "@/lib/types";
 import { supabase } from "@/lib/supabase";
 import CustomSelect from "@/components/custom-select";
@@ -557,6 +562,7 @@ export default function TripDetail() {
     splitType?: "exact" | "equal" | "adjustment";
     baseAmount?: number;
     memberCount?: number;
+    weightShare?: string;
     isSettledCredit?: boolean;
     originalTitle?: string;
   };
@@ -577,6 +583,8 @@ export default function TripDetail() {
     callouts?: LedgerCallout[];
     baseAmount?: number;
     memberCount?: number;
+    // weighted "equally" split (3.3.1), e.g. "2/4"
+    weightShare?: string;
   };
 
   type MemberDetail = {
@@ -602,6 +610,12 @@ export default function TripDetail() {
     trip.expenses.forEach((exp) => {
       const payerCount = Object.keys(exp.paidBy || {}).length;
       const memberCount = Object.keys(exp.owedBy || {}).length;
+      const equalWeights =
+        exp.splitType === "equal" ? getEqualSplitWeights(exp.owedBy) : null;
+      const equalTotalWeight =
+        equalWeights && isWeightedSplit(equalWeights)
+          ? getTotalWeight(equalWeights)
+          : 0;
 
       Object.entries(exp.paidBy || {}).forEach(([pId, pAmt]) => {
         if (result[pId]) {
@@ -696,9 +710,14 @@ export default function TripDetail() {
           });
         }
 
+        const weightShare = equalTotalWeight
+          ? `${equalWeights![id] || 1}/${equalTotalWeight}`
+          : undefined;
+
         result[id].owedItems.push({
           title: exp.title,
           amount: amt,
+          weightShare,
           subItems: subItems.length > 0 ? subItems : undefined,
           extra: exp.adjustments?.[id],
           isSettled,
@@ -729,6 +748,7 @@ export default function TripDetail() {
             splitType: exp.splitType,
             baseAmount,
             memberCount,
+            weightShare,
           });
 
           const totalPaidBy = Object.values(exp.paidBy || {}).reduce(
@@ -1381,6 +1401,15 @@ export default function TripDetail() {
                   ? exp.items.reduce((acc, item) => acc + item.price, 0)
                   : 0;
               const difference = exp.totalAmount - itemsSum;
+              const equalWeights =
+                exp.splitType === "equal"
+                  ? getEqualSplitWeights(exp.owedBy)
+                  : null;
+              const showEqualWeights =
+                !!equalWeights && isWeightedSplit(equalWeights);
+              const equalTotalWeight = equalWeights
+                ? getTotalWeight(equalWeights)
+                : 0;
               return (
                 <div
                   className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300"
@@ -1583,6 +1612,12 @@ export default function TripDetail() {
                                       >
                                         {getMemberName(memberId)}
                                       </span>
+                                      {showEqualWeights && (
+                                        <span className="text-[9px] font-black text-stone-500 bg-stone-100 border border-stone-200/60 px-1.5 py-0.5 rounded-md shrink-0 tabular-nums leading-none">
+                                          {equalWeights![memberId] || 1}/
+                                          {equalTotalWeight}
+                                        </span>
+                                      )}
                                     </div>
                                     <div className="flex items-center gap-3 shrink-0 pl-2">
                                       {canMarkPaid ? (
@@ -2193,6 +2228,11 @@ export default function TripDetail() {
                                             <span className="text-stone-400">
                                               split {item.memberCount} ways
                                             </span>
+                                            {item.weightShare && (
+                                              <span className="text-[9px] font-black text-stone-500 bg-stone-100 border border-stone-200/60 px-1.5 py-0.5 rounded-md tabular-nums leading-none">
+                                                {item.weightShare} share
+                                              </span>
+                                            )}
                                           </>
                                         )}
                                       </div>

@@ -14,6 +14,11 @@ import twemoji from "@twemoji/api";
 import Emoji from "@/components/emoji";
 import { getAvatarColor } from "@/lib/avatars";
 import { getRetention, RETENTION_RULE } from "@/lib/retention";
+import {
+  getEqualSplitWeights,
+  getTotalWeight,
+  isWeightedSplit,
+} from "@/lib/split";
 import { CATEGORY_EMOJI } from "@/components/home-list";
 
 const BARCODE_WIDTHS = [
@@ -345,6 +350,11 @@ export default function UnifiedExpensePage() {
       ? expense.items.reduce((acc, item) => acc + item.price, 0)
       : 0;
   const difference = expense.totalAmount - itemsSum;
+
+  const equalWeights =
+    expense.splitType === "equal" ? getEqualSplitWeights(expense.owedBy) : null;
+  const showEqualWeights = !!equalWeights && isWeightedSplit(equalWeights);
+  const equalTotalWeight = equalWeights ? getTotalWeight(equalWeights) : 0;
 
   const payersEntries = Object.entries(expense.paidBy);
 
@@ -908,8 +918,15 @@ export default function UnifiedExpensePage() {
                     className="flex flex-col gap-1.5 border-b border-stone-200/50 pb-3 last:border-0 last:pb-0"
                   >
                     <div className="flex justify-between items-center text-sm">
-                      <span className="font-extrabold text-stone-700">
-                        {getMemberName(memberId)}
+                      <span className="font-extrabold text-stone-700 flex items-center gap-1.5 min-w-0">
+                        <span className="truncate">
+                          {getMemberName(memberId)}
+                        </span>
+                        {showEqualWeights && (
+                          <span className="text-[9px] font-black text-stone-500 bg-stone-100 border border-stone-200/60 px-1.5 py-0.5 rounded-md shrink-0 tabular-nums leading-none">
+                            {equalWeights![memberId] || 1}/{equalTotalWeight}
+                          </span>
+                        )}
                       </span>
                       <span className="font-black text-stone-800">
                         {currencySymbol}

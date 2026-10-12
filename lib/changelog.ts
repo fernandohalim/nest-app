@@ -2,6 +2,18 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
+    version: "3.3.1",
+    date: "oct 12, 2026",
+    title: "bigger slices 🍕",
+    badge: "patch",
+    badgeColor: "bg-teal-100 text-teal-700 border-teal-200",
+    features: [
+      "added weighted shares to 'split equally' — tap a name again to give them x2, x3… of the bill, and the minus takes a share back. each person's amount updates as you go, just like the by-item pills.",
+      "added a live amount next to each person in 'custom' too — their slice of the even split plus any extra, so you can check the math before saving.",
+      "added the share (like 2/4) to weighted bills in the breakdown, the receipt and each person's ledger, so everyone can see why they owe more.",
+    ],
+  },
+  {
     version: "3.3",
     date: "oct 9, 2026",
     title: "a clearer receipt 🧾",

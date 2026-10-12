@@ -13,6 +13,7 @@ import {
   formatMoney,
 } from "@/lib/format";
 import { getCurrentLocalISO } from "@/lib/datetime";
+import { getEqualSplitWeights } from "@/lib/split";
 
 export interface ExpenseFormProps {
   members: Member[];
@@ -95,6 +96,13 @@ function useExpenseFormLogic(
       : members.map((m) => m.id),
   );
 
+  // "equally" weights (3.3.1) — only ticked members count; a missing entry is x1
+  const [weights, setWeights] = useState<Record<string, number>>(
+    initialExpense?.splitType === "equal"
+      ? getEqualSplitWeights(initialExpense.owedBy)
+      : {},
+  );
+
   const [adjustments, setAdjustments] = useState<Record<string, string>>(
     initialExpense?.adjustments
       ? Object.entries(initialExpense.adjustments).reduce(
@@ -127,6 +135,26 @@ function useExpenseFormLogic(
     setInvolvedIds((prev) =>
       prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
     );
+
+  // same feel as the by-item pills: tapping a ticked name adds a share,
+  // the minus takes one away and unticks them once they're back at x1
+  const increaseEqualWeight = (id: string) => {
+    if (!involvedIds.includes(id)) {
+      setInvolvedIds((prev) => [...prev, id]);
+      setWeights((prev) => ({ ...prev, [id]: 1 }));
+      return;
+    }
+    setWeights((prev) => ({ ...prev, [id]: (prev[id] || 1) + 1 }));
+  };
+
+  const decreaseEqualWeight = (id: string) => {
+    const current = weights[id] || 1;
+    if (current > 1) {
+      setWeights((prev) => ({ ...prev, [id]: current - 1 }));
+      return;
+    }
+    setInvolvedIds((prev) => prev.filter((i) => i !== id));
+  };
 
   const handleAddItem = () =>
     setItems([
@@ -242,9 +270,12 @@ function useExpenseFormLogic(
         );
         return;
       }
-      const splitAmount = totalAmountNum / involvedIds.length;
+      const totalWeight = involvedIds.reduce(
+        (s, id) => s + (weights[id] || 1),
+        0,
+      );
       involvedIds.forEach((id) => {
-        owedBy[id] = splitAmount;
+        owedBy[id] = (totalAmountNum * (weights[id] || 1)) / totalWeight;
       });
     } else if (splitType === "exact") {
       const validItems = items
@@ -380,6 +411,22 @@ function useExpenseFormLogic(
   const paidMatchesTotal =
     totalAmountNum > 0 &&
     isAmountEqual(currentPaidSum, totalAmountNum, currencyCode);
+  const equalTotalWeight = involvedIds.reduce(
+    (s, id) => s + (weights[id] || 1),
+    0,
+  );
+  // live per-person preview for "custom": same math as handleSubmit
+  const adjustmentsSum = Object.values(adjustments).reduce(
+    (s, val) => s + Math.max(0, parseFormattedNumber(val)),
+    0,
+  );
+  const adjustmentPerHead =
+    involvedIds.length > 0
+      ? (totalAmountNum - adjustmentsSum) / involvedIds.length
+      : 0;
+  const getAdjustmentShare = (id: string) =>
+    (involvedIds.includes(id) ? adjustmentPerHead : 0) +
+    Math.max(0, parseFormattedNumber(adjustments[id] || ""));
 
   return {
     title,
@@ -400,8 +447,14 @@ function useExpenseFormLogic(
     setSplitType,
     involvedIds,
     toggleInvolved,
+    weights,
+    increaseEqualWeight,
+    decreaseEqualWeight,
+    equalTotalWeight,
     adjustments,
     handleAdjustmentChange,
+    adjustmentsSum,
+    getAdjustmentShare,
     items,
     handleAddItem,
     handleRemoveItem,
@@ -446,8 +499,14 @@ export default function ExpenseForm({
     setSplitType,
     involvedIds,
     toggleInvolved,
+    weights,
+    increaseEqualWeight,
+    decreaseEqualWeight,
+    equalTotalWeight,
     adjustments,
     handleAdjustmentChange,
+    adjustmentsSum,
+    getAdjustmentShare,
     items,
     handleAddItem,
     handleRemoveItem,
@@ -683,7 +742,7 @@ export default function ExpenseForm({
               className="text-[11px] font-bold text-stone-400 animate-in fade-in slide-in-from-top-1 duration-300"
             >
               {splitType === "equal" &&
-                "the total is divided perfectly evenly among everyone selected."}
+                "divided evenly among everyone selected. tap a name again to give them a bigger share."}
               {splitType === "exact" &&
                 "assign specific receipt items to people. (tips/tax are auto-calculated!)"}
               {splitType === "adjustment" &&
@@ -697,19 +756,28 @@ export default function ExpenseForm({
             {members.map((m) => {
               const isTicked = involvedIds.includes(m.id);
               const hasAdjustment = !!adjustments[m.id];
+              const isEqual = splitType === "equal";
+              const weight = weights[m.id] || 1;
+              const onRowTap = () =>
+                isEqual ? increaseEqualWeight(m.id) : toggleInvolved(m.id);
 
               return (
                 <div
                   key={m.id}
-                  className={`flex items-center justify-between p-3.5 rounded-2xl border-2 transition-all cursor-pointer ${isTicked ? "bg-white border-emerald-400 shadow-sm" : hasAdjustment ? "bg-white border-stone-300 shadow-sm" : "bg-stone-50 border-stone-100 opacity-60 hover:opacity-100"}`}
-                  onClick={() => toggleInvolved(m.id)}
-                  role="checkbox"
-                  aria-checked={isTicked}
+                  className={`flex items-center justify-between p-3.5 rounded-2xl border-2 transition-all cursor-pointer select-none ${isTicked ? "bg-white border-emerald-400 shadow-sm" : hasAdjustment ? "bg-white border-stone-300 shadow-sm" : "bg-stone-50 border-stone-100 opacity-60 hover:opacity-100"}`}
+                  onClick={onRowTap}
+                  role={isEqual && isTicked ? "button" : "checkbox"}
+                  aria-checked={isEqual && isTicked ? undefined : isTicked}
+                  aria-label={
+                    isEqual && isTicked
+                      ? `increase ${m.name}'s share (currently x${weight})`
+                      : undefined
+                  }
                   tabIndex={0}
                   onKeyDown={(e) => {
                     if (e.key === " " || e.key === "Enter") {
                       e.preventDefault();
-                      toggleInvolved(m.id);
+                      onRowTap();
                     }
                   }}
                 >
@@ -739,21 +807,80 @@ export default function ExpenseForm({
                     >
                       {m.name}
                     </span>
+                    {isEqual && isTicked && weight > 1 && (
+                      <span className="-ml-2.5 bg-emerald-500 text-white px-1.5 py-0.5 rounded-md text-[10px] font-black leading-none animate-in zoom-in-95 duration-200">
+                        x{weight}
+                      </span>
+                    )}
                   </div>
 
+                  {isEqual && isTicked && (
+                    <div className="flex items-center gap-2 shrink-0">
+                      {totalAmountNum > 0 && (
+                        <span className="text-xs font-black text-emerald-600 tabular-nums">
+                          {currencySymbol}{" "}
+                          {formatMoney(
+                            (totalAmountNum * weight) / equalTotalWeight,
+                            currencyCode,
+                          )}
+                        </span>
+                      )}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          decreaseEqualWeight(m.id);
+                        }}
+                        aria-label={
+                          weight > 1
+                            ? `decrease ${m.name}'s share`
+                            : `remove ${m.name} from the split`
+                        }
+                        className="w-7 h-7 rounded-full flex items-center justify-center bg-stone-100 text-stone-400 hover:bg-rose-500 hover:text-white active:bg-rose-600 transition-colors"
+                      >
+                        <svg
+                          className="w-3 h-3"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                          aria-hidden="true"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={3}
+                            d="M20 12H4"
+                          />
+                        </svg>
+                      </button>
+                    </div>
+                  )}
+
                   {splitType === "adjustment" && (
-                    <input
-                      type="text"
-                      inputMode="decimal"
-                      placeholder="+ extra"
-                      value={adjustments[m.id] || ""}
-                      onChange={(e) =>
-                        handleAdjustmentChange(m.id, e.target.value)
-                      }
-                      onClick={(e) => e.stopPropagation()}
-                      aria-label={`extra adjustment for ${m.name}`}
-                      className={`w-20 text-right bg-transparent border-b-2 text-sm font-black focus:outline-none py-1 placeholder:font-bold transition-colors ${isTicked ? "border-emerald-100 text-emerald-600 focus:border-emerald-500 placeholder:text-emerald-200" : "border-stone-200 text-stone-600 focus:border-stone-400 placeholder:text-stone-300"}`}
-                    />
+                    <div className="flex items-center gap-3 shrink-0">
+                      {totalAmountNum > 0 &&
+                        adjustmentsSum <= totalAmountNum &&
+                        getAdjustmentShare(m.id) > 0 && (
+                          <span
+                            className={`text-xs font-black tabular-nums ${isTicked ? "text-emerald-600" : "text-stone-600"}`}
+                          >
+                            {currencySymbol}{" "}
+                            {formatMoney(getAdjustmentShare(m.id), currencyCode)}
+                          </span>
+                        )}
+                      <input
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="+ extra"
+                        value={adjustments[m.id] || ""}
+                        onChange={(e) =>
+                          handleAdjustmentChange(m.id, e.target.value)
+                        }
+                        onClick={(e) => e.stopPropagation()}
+                        aria-label={`extra adjustment for ${m.name}`}
+                        className={`w-20 text-right bg-transparent border-b-2 text-sm font-black focus:outline-none py-1 placeholder:font-bold transition-colors ${isTicked ? "border-emerald-100 text-emerald-600 focus:border-emerald-500 placeholder:text-emerald-200" : "border-stone-200 text-stone-600 focus:border-stone-400 placeholder:text-stone-300"}`}
+                      />
+                    </div>
                   )}
                 </div>
               );
