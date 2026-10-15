@@ -38,6 +38,7 @@ export default function VersionGuard() {
         showAlert(
           "downloading the latest magic... your app will refresh in a second! ✨",
           "new update found! 🚀",
+          "success",
         );
 
         // unregister service workers ONLY now, when we know the cache is stale

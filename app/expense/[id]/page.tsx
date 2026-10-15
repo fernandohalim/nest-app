@@ -174,7 +174,7 @@ export default function UnifiedExpensePage() {
 
     if (error) {
       setIsSaved(!next);
-      showAlert("couldn't update your receipts. try again!", "error ❌");
+      showAlert("couldn't update your receipts. try again!", "error ❌", "error");
       return;
     }
     showAlert(
@@ -182,6 +182,7 @@ export default function UnifiedExpensePage() {
         ? "added to your receipts for easy access. it still auto-deletes unless whoever made it keeps it 📌"
         : "removed from your receipts.",
       next ? "saved ✨" : "unsaved 🔗",
+      "success",
     );
   };
 
@@ -207,9 +208,9 @@ export default function UnifiedExpensePage() {
       link.href = dataUrl;
       link.click();
 
-      showAlert("receipt saved to your device! 📸", "exported ✨");
+      showAlert("receipt saved to your device! 📸", "exported ✨", "success");
     } catch {
-      showAlert("couldn't create the image. try again!", "error ❌");
+      showAlert("couldn't create the image. try again!", "error ❌", "error");
     } finally {
       setIsExporting(false);
     }
@@ -240,7 +241,7 @@ export default function UnifiedExpensePage() {
 
     if (error) {
       setExpense(prev);
-      showAlert("couldn't update this receipt. try again!", "error ❌");
+      showAlert("couldn't update this receipt. try again!", "error ❌", "error");
       return;
     }
     showAlert(
@@ -248,6 +249,7 @@ export default function UnifiedExpensePage() {
         ? "this receipt won't be auto-deleted. stop keeping it anytime."
         : "this receipt will auto-delete in 7 days unless you keep it again.",
       nextKept ? "kept forever 📌" : "no longer kept ⏳",
+      "success",
     );
   };
 
@@ -304,7 +306,7 @@ export default function UnifiedExpensePage() {
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
         navigator.clipboard.writeText(url);
-        showAlert("link copied! send it to the group 📱", "copied! 🔗");
+        showAlert("link copied! send it to the group 📱", "copied! 🔗", "success");
       }
     } finally {
       setIsSharing(false);
@@ -615,7 +617,7 @@ export default function UnifiedExpensePage() {
               </svg>
             </button>
             <button
-              onClick={() => showAlert(RETENTION_RULE, "how keeping works 📌")}
+              onClick={() => showAlert(RETENTION_RULE, "how keeping works 📌", "info")}
               aria-label="retention policy info"
               className={`w-9 h-9 shrink-0 rounded-full items-center justify-center transition-all active:scale-90 lg:flex ${isRetentionOpen ? "flex" : "hidden"} ${
                 isKept

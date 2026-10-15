@@ -19,6 +19,7 @@ import {
 } from "@/components/home-list";
 import { getRetention } from "@/lib/retention";
 import Image from "next/image";
+import { usePresence } from "@/lib/use-presence";
 
 type SortType = "newest" | "oldest" | "a_z" | "z_a";
 
@@ -61,6 +62,7 @@ function HomeContent() {
   const [currentTime] = useState(() => Date.now());
 
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
+  const infoPresence = usePresence(isInfoModalOpen);
 
   const urlMode = searchParams.get("tab") === "quick" ? "quick" : "trips";
 
@@ -296,7 +298,7 @@ function HomeContent() {
           if (!error) {
             setQuickSplits((prev) => prev.filter((exp) => exp.id !== id));
           } else {
-            showAlert("failed to remove the receipt.", "error ❌");
+            showAlert("failed to remove the receipt.", "error ❌", "error");
           }
         },
         {
@@ -313,7 +315,7 @@ function HomeContent() {
         if (!error) {
           setQuickSplits((prev) => prev.filter((exp) => exp.id !== id));
         } else {
-          showAlert("failed to delete the receipt.", "error ❌");
+          showAlert("failed to delete the receipt.", "error ❌", "error");
         }
       },
       {
@@ -890,8 +892,9 @@ function HomeContent() {
           selectedIds={Array.from(selectedIds)}
         />
 
-        {isInfoModalOpen && (
+        {infoPresence.render && (
           <div
+            data-closing={infoPresence.closing || undefined}
             className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-70 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300"
             role="dialog"
             aria-modal="true"

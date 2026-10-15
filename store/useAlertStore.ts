@@ -2,10 +2,14 @@ import { create } from "zustand";
 
 type AlertType = "alert" | "confirm";
 export type AlertSeverity = "default" | "destructive";
+// drives the alert's badge emoji. "warn" is the default — validation nudges
+// like "missing payer" — so only success / info / error calls pass one.
+export type AlertTone = "warn" | "error" | "success" | "info";
 
 interface AlertState {
   isOpen: boolean;
   type: AlertType;
+  tone: AlertTone;
   title: string;
   message: string;
   confirmText: string;
@@ -21,7 +25,7 @@ interface ShowConfirmOptions {
 }
 
 interface AlertActions {
-  showAlert: (message: string, title?: string) => void;
+  showAlert: (message: string, title?: string, tone?: AlertTone) => void;
   showConfirm: (
     message: string,
     onConfirm: () => void,
@@ -34,6 +38,7 @@ interface AlertActions {
 export const useAlertStore = create<AlertState & AlertActions>((set, get) => ({
   isOpen: false,
   type: "alert",
+  tone: "warn",
   title: "",
   message: "",
   confirmText: "got it",
@@ -41,10 +46,11 @@ export const useAlertStore = create<AlertState & AlertActions>((set, get) => ({
   severity: "default",
   onConfirmAction: undefined,
 
-  showAlert: (message, title = "hold up! 🛑") =>
+  showAlert: (message, title = "hold up! 🛑", tone = "warn") =>
     set({
       isOpen: true,
       type: "alert",
+      tone,
       message,
       title,
       confirmText: "got it!",

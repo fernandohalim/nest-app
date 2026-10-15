@@ -17,6 +17,7 @@ import {
 import { getAvatarColor, getInitials } from "@/lib/avatars";
 import { CURRENCIES } from "./create-trip-modal";
 import CustomSelect from "./custom-select";
+import { usePresence } from "@/lib/use-presence";
 
 interface MergeModalProps {
   isOpen: boolean;
@@ -120,7 +121,8 @@ export default function MergeModal({
     return map;
   }, [splits]);
 
-  if (!isOpen) return null;
+  const presence = usePresence(isOpen);
+  if (!presence.render) return null;
 
   const goToMembers = async () => {
     if (targetMode === "new" && !newTripName.trim()) {
@@ -225,7 +227,7 @@ export default function MergeModal({
       router.push(`/trip/${tripId}`);
     } catch (err) {
       console.error(err);
-      showAlert("couldn't finish the merge. please try again.", "error ❌");
+      showAlert("couldn't finish the merge. please try again.", "error ❌", "error");
       setSubmitting(false);
     }
   };
@@ -237,7 +239,7 @@ export default function MergeModal({
   );
 
   return (
-    <div
+    <div data-closing={presence.closing || undefined}
       className="fixed inset-0 z-70 flex items-end sm:items-center justify-center p-0 sm:p-4"
       role="dialog"
       aria-modal="true"

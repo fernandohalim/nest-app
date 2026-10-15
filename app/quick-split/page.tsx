@@ -415,6 +415,7 @@ function QuickSplitContent() {
       showAlert(
         "couldn't read that receipt, try another one!",
         "scan failed ❌",
+        "error",
       );
     } finally {
       setScanStage("idle");
@@ -471,11 +472,12 @@ function QuickSplitContent() {
           ? "receipt updated!"
           : "receipt saved to your dashboard! it auto-deletes after 7 days unless you keep it 📌",
         "saved ✨",
+        "success",
       );
       router.push(`/expense/${expense.id}?from=quick`);
     } catch (err) {
       console.error(err);
-      showAlert("failed to save the receipt. please try again.", "error ❌");
+      showAlert("failed to save the receipt. please try again.", "error ❌", "error");
     }
   };
 

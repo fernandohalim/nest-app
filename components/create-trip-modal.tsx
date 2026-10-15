@@ -6,6 +6,7 @@ import { v4 as uuidv4 } from "uuid";
 import { useTripStore } from "@/store/useTripStore";
 import { CreateTripModalProps } from "@/lib/types";
 import CustomSelect from "./custom-select";
+import { usePresence } from "@/lib/use-presence";
 
 export const CURRENCIES = [
   { value: "IDR", label: "🇮🇩 IDR (Rp)" },
@@ -30,7 +31,8 @@ export default function CreateTripModal({
   const [currency, setCurrency] = useState("IDR");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  if (!isOpen) return null;
+  const presence = usePresence(isOpen);
+  if (!presence.render) return null;
 
   const handleCreateTrip = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,7 +62,7 @@ export default function CreateTripModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-60 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300">
+    <div data-closing={presence.closing || undefined} className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-60 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300">
       <div className="fixed inset-0" onClick={onClose}></div>
 
       <div className="bg-[#fdfbf7] w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500 overflow-visible relative pb-8 sm:pb-0">

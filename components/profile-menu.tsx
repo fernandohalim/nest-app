@@ -6,6 +6,7 @@ import { useTripStore } from "@/store/useTripStore";
 import { useAlertStore } from "@/store/useAlertStore";
 import { validateNickname, NICKNAME_MAX_LEN } from "@/lib/nickname";
 import Image from "next/image";
+import { usePresence } from "@/lib/use-presence";
 
 interface ProfileModalProps {
   isOpen: boolean;
@@ -22,7 +23,8 @@ export default function ProfileMenu({ isOpen, onClose }: ProfileModalProps) {
   const [nicknameInput, setNicknameInput] = useState("");
   const [isSaving, setIsSaving] = useState(false);
 
-  if (!isOpen || !user) return null;
+  const presence = usePresence(isOpen);
+  if (!presence.render || !user) return null;
 
   const avatarUrl = user?.user_metadata?.avatar_url;
   const displayName =
@@ -59,11 +61,11 @@ export default function ProfileMenu({ isOpen, onClose }: ProfileModalProps) {
     try {
       setIsSaving(true);
       await updateNickname(trimmed);
-      showAlert("nickname updated! 🪪", "saved ✨");
+      showAlert("nickname updated! 🪪", "saved ✨", "success");
       setIsEditing(false);
     } catch (err) {
       console.error(err);
-      showAlert("couldn't save your nickname. try again?", "error ❌");
+      showAlert("couldn't save your nickname. try again?", "error ❌", "error");
     } finally {
       setIsSaving(false);
     }
@@ -75,7 +77,7 @@ export default function ProfileMenu({ isOpen, onClose }: ProfileModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-60 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300">
+    <div data-closing={presence.closing || undefined} className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-60 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300">
       <div className="fixed inset-0" onClick={onClose}></div>
 
       <div className="bg-[#fdfbf7] w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500 overflow-hidden relative pb-8 sm:pb-0">

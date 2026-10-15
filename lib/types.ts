@@ -47,6 +47,9 @@ export interface Trip {
   // without activity (updatedAt). owner-only toggle.
   is_kept?: boolean;
   is_collaborative?: boolean;
+  // home list only: sum of the trip's bills, fetched without the full
+  // expenses (which stay [] there). trip pages sum `expenses` instead.
+  totalSpent?: number;
 }
 
 export interface Release {

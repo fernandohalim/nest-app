@@ -7,6 +7,7 @@ import { useAlertStore } from "@/store/useAlertStore";
 import { Trip } from "@/lib/types";
 import CustomSelect from "./custom-select";
 import { CURRENCIES } from "./create-trip-modal";
+import { usePresence } from "@/lib/use-presence";
 
 interface TripSettingsModalProps {
   isOpen: boolean;
@@ -29,7 +30,8 @@ export default function TripSettingsModal({
   const [editTripName, setEditTripName] = useState(trip.name);
   const [editCurrency, setEditCurrency] = useState(trip.currency || "IDR");
 
-  if (!isOpen) return null;
+  const presence = usePresence(isOpen);
+  if (!presence.render) return null;
 
   const handleSaveDetails = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,7 +83,7 @@ export default function TripSettingsModal({
   };
 
   return (
-    <div
+    <div data-closing={presence.closing || undefined}
       className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-300"
       role="dialog"
       aria-modal="true"

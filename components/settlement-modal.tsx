@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Transaction, Member } from "@/lib/types";
 import { useAlertStore } from "@/store/useAlertStore";
 import { formatMoney } from "@/lib/format";
+import { usePresence } from "@/lib/use-presence";
 
 // 🔥 1. Perfectly typed interface to replace 'any'
 export interface MemberDetail {
@@ -69,15 +70,16 @@ export default function SettlementModal({
     }
   }
 
-  if (!isOpen) return null;
+  const presence = usePresence(isOpen);
+  if (!presence.render) return null;
 
   const handleShareProof = (resolutionText: string) => {
     navigator.clipboard.writeText(resolutionText);
-    showAlert("copied! paste this in the group chat.", "proof copied 🔗");
+    showAlert("copied! paste this in the group chat.", "proof copied 🔗", "success");
   };
 
   return (
-    <div className="fixed inset-0 z-100 flex items-end sm:items-center justify-center p-0 sm:px-4">
+    <div data-closing={presence.closing || undefined} className="fixed inset-0 z-100 flex items-end sm:items-center justify-center p-0 sm:px-4">
       <div
         className="absolute inset-0 bg-stone-900/60 backdrop-blur-sm transition-opacity"
         onClick={onClose}

@@ -2,6 +2,22 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
+    version: "3.4",
+    date: "oct 15, 2026",
+    title: "a livelier nest ✨",
+    badge: "feature",
+    badgeColor: "bg-fuchsia-100 text-fuchsia-700 border-fuchsia-200",
+    features: [
+      "refined the top of every trip into a brighter, flatter card — a dotted travel trail runs behind the name, and the total sits on its own white panel so it's the first thing you see.",
+      "fixed sheets and pop-ups appearing and vanishing in a blink — they now slide and fade in, and glide back out when you close them.",
+      "added a little roll to a trip's total whenever you add, edit or remove a bill, so you can actually see it change.",
+      "added a gentle slide-in for new trips, receipts and bills, so whatever just landed is easy to spot.",
+      "refined trips and receipts in the lists to share one layout: the name on top, who made it or the date next to the amount underneath, then the keep / countdown badge. trips now show their total spent (or 'no bills yet') instead of the member count — on desktop too.",
+      "refined the delete button on receipts to always show on desktop, not only when you hover.",
+      "fixed good news and tips popping up with a 🛑 stop sign — 'kept forever 📌', 'copied!' and the 'how it works' explainers now get ✨ and 💡, and real errors get 💥.",
+    ],
+  },
+  {
     version: "3.3.1",
     date: "oct 12, 2026",
     title: "bigger slices 🍕",

@@ -6,6 +6,7 @@ import { useAlertStore } from "@/store/useAlertStore";
 import { Trip } from "@/lib/types";
 import { v4 as uuidv4 } from "uuid";
 import { getAvatarColor, getInitials } from "@/lib/avatars";
+import { usePresence } from "@/lib/use-presence";
 
 interface MemberModalProps {
   isOpen: boolean;
@@ -28,7 +29,8 @@ export default function MemberModal({
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
   const [editMemberName, setEditMemberName] = useState("");
 
-  if (!isOpen) return null;
+  const presence = usePresence(isOpen);
+  if (!presence.render) return null;
 
   const handleAddMember = (e: React.FormEvent) => {
     e.preventDefault();
@@ -78,7 +80,7 @@ export default function MemberModal({
   };
 
   return (
-    <div
+    <div data-closing={presence.closing || undefined}
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"

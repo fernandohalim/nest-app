@@ -2,6 +2,7 @@
 
 import { useRouter } from "next/navigation";
 import { useUiStore } from "@/store/useUiStore";
+import { usePresence } from "@/lib/use-presence";
 
 // The "what's the plan?" launcher — start a trip, scan a receipt, or enter one
 // manually. Extracted out of the home page so the desktop sidebar can open it
@@ -13,10 +14,11 @@ export default function ActionMenu() {
   const close = useUiStore((s) => s.closeActionMenu);
   const openCreateTrip = useUiStore((s) => s.openCreateTrip);
 
-  if (!isOpen) return null;
+  const presence = usePresence(isOpen);
+  if (!presence.render) return null;
 
   return (
-    <div
+    <div data-closing={presence.closing || undefined}
       className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-60 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300"
       role="dialog"
       aria-modal="true"

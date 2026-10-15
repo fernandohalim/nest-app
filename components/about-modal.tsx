@@ -3,14 +3,16 @@
 import { useRouter } from "next/navigation";
 import packageJson from "../package.json";
 import { AboutModalProps } from "@/lib/types";
+import { usePresence } from "@/lib/use-presence";
 
 export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
   const router = useRouter();
 
-  if (!isOpen) return null;
+  const presence = usePresence(isOpen);
+  if (!presence.render) return null;
 
   return (
-    <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-70 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300">
+    <div data-closing={presence.closing || undefined} className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-70 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300">
       {/* backdrop */}
       <div className="fixed inset-0" onClick={onClose}></div>
 

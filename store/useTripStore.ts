@@ -35,6 +35,8 @@ interface SupabaseTripRow {
   is_collaborative: boolean;
   // only present on the home list fetch (embedded for the member count)
   members?: { id: string; name: string }[];
+  // home list only: just the bill amounts, summed into the row total
+  expenses?: { total_amount: number }[];
 }
 
 const mapExpense = (exp: SupabaseExpenseRow): Expense => ({
@@ -215,11 +217,11 @@ export const useTripStore = create<TripStore>((set, get) => ({
 
     const { data: ownedTrips } = await supabase
       .from("trips")
-      .select("*, members(id, name)")
+      .select("*, members(id, name), expenses(total_amount)")
       .eq("owner_id", currentUser.id);
     const { data: linkedData } = await supabase
       .from("user_trips")
-      .select("trips(*, members(id, name))")
+      .select("trips(*, members(id, name), expenses(total_amount))")
       .eq("user_id", currentUser.id);
 
     const allTripsMap = new Map<string, SupabaseTripRow>();
@@ -259,6 +261,10 @@ export const useTripStore = create<TripStore>((set, get) => ({
       is_kept: t.is_kept ?? false,
       members: t.members ?? [],
       expenses: [],
+      totalSpent: (t.expenses ?? []).reduce(
+        (sum, e) => sum + Number(e.total_amount || 0),
+        0,
+      ),
       is_collaborative: t.is_collaborative || false,
     }));
 

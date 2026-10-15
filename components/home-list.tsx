@@ -5,6 +5,7 @@ import { Expense, Trip } from "@/lib/types";
 import { RetentionInfo } from "@/lib/retention";
 import { formatDisplayDate } from "@/lib/datetime";
 import { formatMoney, getCurrencySymbol } from "@/lib/format";
+import { useFreshKeys } from "@/lib/use-fresh-keys";
 
 // 3.1.1 home list: compact rows grouped into one card per month, instead of
 // a tall standalone card per trip/receipt. the page still owns filtering,
@@ -64,6 +65,9 @@ export function ListSections<T>({
   renderItem: (item: T) => ReactNode;
   getKey: (item: T) => string;
 }) {
+  const fresh = useFreshKeys(
+    sections.flatMap((s) => s.items.map((item) => getKey(item))),
+  );
   return (
     <div className="flex flex-col gap-5">
       {sections.map((section) => (
@@ -78,7 +82,12 @@ export function ListSections<T>({
           )}
           <ul className="bg-white rounded-3xl border-2 border-stone-100 shadow-sm overflow-hidden divide-y-2 divide-stone-50">
             {section.items.map((item) => (
-              <li key={getKey(item)}>{renderItem(item)}</li>
+              <li
+                key={getKey(item)}
+                className={fresh.has(getKey(item)) ? "settle-row-in" : undefined}
+              >
+                {renderItem(item)}
+              </li>
             ))}
           </ul>
         </section>
@@ -240,6 +249,23 @@ const Chevron = () => (
 const rowClass =
   "w-full flex items-center gap-3 px-4 py-3 text-left transition-colors group";
 
+// trips and receipts share one row shape: name on top, "who/when · amount"
+// underneath, then the status pill and the action on the right.
+function Amount({ value, currency }: { value: number; currency: string }) {
+  return (
+    <span className="shrink-0 text-stone-500 tabular-nums whitespace-nowrap">
+      <span className="text-stone-300 mr-0.5">{getCurrencySymbol(currency)}</span>
+      {formatMoney(value, currency)}
+    </span>
+  );
+}
+
+const MetaDot = () => (
+  <span className="shrink-0 text-stone-300" aria-hidden="true">
+    ·
+  </span>
+);
+
 // ─── rows ───────────────────────────────────────────────────────────────────
 
 export function TripRow({
@@ -253,7 +279,11 @@ export function TripRow({
   retention: RetentionInfo;
   onOpen: () => void;
 }) {
-  const memberCount = trip.members?.length ?? 0;
+  // the home fetch only brings bill amounts (totalSpent); a trip already
+  // opened this session may carry its full expenses instead
+  const total =
+    trip.totalSpent ??
+    trip.expenses.reduce((sum, e) => sum + e.totalAmount, 0);
   return (
     <button
       onClick={onOpen}
@@ -264,19 +294,20 @@ export function TripRow({
         <h3 className="font-extrabold text-[15px] text-stone-800 truncate group-hover:text-emerald-700 transition-colors">
           {trip.name}
         </h3>
-        <p className="text-xs font-bold text-stone-400 truncate">
-          {isOwner ? "you" : trip.owner_name} 👑
-          {memberCount > 0 && (
-            <>
-              {" · "}
-              {memberCount} {memberCount === 1 ? "member" : "members"}
-            </>
+        <p className="flex items-center gap-1.5 min-w-0 text-xs font-bold text-stone-400">
+          <span className="truncate">
+            {isOwner ? "you" : trip.owner_name} 👑
+          </span>
+          <MetaDot />
+          {total > 0 ? (
+            <Amount value={total} currency={trip.currency || "IDR"} />
+          ) : (
+            <span className="shrink-0 whitespace-nowrap text-stone-300">
+              no bills yet
+            </span>
           )}
         </p>
       </div>
-      <span className="hidden lg:block shrink-0 w-28 text-right text-xs font-bold text-stone-400 tabular-nums">
-        {formatDisplayDate(trip.createdAt).toLowerCase()}
-      </span>
       <StatusPill isKept={trip.is_kept} retention={retention} />
       <Chevron />
     </button>
@@ -312,16 +343,6 @@ export function ReceiptRow({
     month: "short",
     day: "numeric",
   }).toLowerCase();
-  const amount = (
-    // muted on purpose: it helps tell receipts apart, but the title should
-    // stay the loudest thing in the row
-    <span className="shrink-0 text-xs font-bold text-stone-400 tabular-nums">
-      <span className="text-stone-300 mr-0.5">
-        {getCurrencySymbol(RECEIPT_CURRENCY)}
-      </span>
-      {formatMoney(expense.totalAmount, RECEIPT_CURRENCY)}
-    </span>
-  );
   return (
     <button
       onClick={isLocked ? undefined : onOpen}
@@ -383,23 +404,15 @@ export function ReceiptRow({
             </span>
           )}
         </div>
-        {/* phones: date, status and amount share the meta line so the title
-            keeps the full width. desktop: they become columns (see below). */}
-        <div className="flex items-center gap-1.5 min-w-0 lg:hidden">
-          <span className="shrink-0 text-xs font-bold text-stone-400 whitespace-nowrap">
-            {date}
-          </span>
-          <StatusPill isKept={expense.isKept} retention={retention} />
-          <span className="ml-auto pl-2">{amount}</span>
-        </div>
+        {/* same shape as a trip row: when · amount. the amount stays muted
+            so the title is still the loudest thing in the row */}
+        <p className="flex items-center gap-1.5 min-w-0 text-xs font-bold text-stone-400">
+          <span className="shrink-0 whitespace-nowrap">{date}</span>
+          <MetaDot />
+          <Amount value={expense.totalAmount} currency={RECEIPT_CURRENCY} />
+        </p>
       </div>
-      <span className="hidden lg:block shrink-0 w-20 text-right text-xs font-bold text-stone-400 tabular-nums">
-        {date}
-      </span>
-      <span className="hidden lg:block">
-        <StatusPill isKept={expense.isKept} retention={retention} />
-      </span>
-      <span className="hidden lg:block w-36 text-right">{amount}</span>
+      <StatusPill isKept={expense.isKept} retention={retention} />
       {!isSelecting && (
         <div
           onClick={onDelete}
@@ -417,7 +430,7 @@ export function ReceiptRow({
               onDelete(e as unknown as React.MouseEvent);
             }
           }}
-          className={`shrink-0 -mr-1 w-8 h-8 rounded-full flex items-center justify-center text-stone-300 hover:text-white focus:text-white transition-all lg:opacity-0 lg:group-hover:opacity-100 lg:focus:opacity-100 ${isSaved ? "hover:bg-stone-700 focus:bg-stone-700" : "hover:bg-rose-500 focus:bg-rose-500"}`}
+          className={`shrink-0 -mr-1 w-8 h-8 rounded-full flex items-center justify-center text-stone-300 hover:text-white focus:text-white transition-all ${isSaved ? "hover:bg-stone-700 focus:bg-stone-700" : "hover:bg-rose-500 focus:bg-rose-500"}`}
         >
           {isSaved ? (
             <svg

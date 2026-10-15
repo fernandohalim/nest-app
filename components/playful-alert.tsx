@@ -1,11 +1,22 @@
 "use client";
 
-import { useAlertStore } from "@/store/useAlertStore";
+import { AlertTone, useAlertStore } from "@/store/useAlertStore";
+import { usePresence } from "@/lib/use-presence";
+
+// the badge on top of an alert. used to be guessed from the title's emoji,
+// which gave "kept forever 📌" and every "how x works" explainer a 🛑.
+const TONE_EMOJI: Record<AlertTone, string> = {
+  warn: "🛑",
+  error: "💥",
+  success: "✨",
+  info: "💡",
+};
 
 function usePlayfulAlertLogic() {
   const {
     isOpen,
     type,
+    tone,
     title,
     message,
     confirmText,
@@ -16,12 +27,7 @@ function usePlayfulAlertLogic() {
   } = useAlertStore();
 
   const getEmoji = () => {
-    if (type === "alert") {
-      // success-y alerts (e.g. "saved ✨", "copied! 🔗") use the title's own emoji
-      if (title.includes("✨") || title.includes("🔗") || title.includes("📸"))
-        return "✨";
-      return "🛑";
-    }
+    if (type === "alert") return TONE_EMOJI[tone];
     // for confirms, the severity drives the affect
     if (severity === "destructive") return "🧨";
     return "🤔";
@@ -62,10 +68,11 @@ export default function PlayfulAlert() {
     confirmButtonStyles,
   } = usePlayfulAlertLogic();
 
-  if (!isOpen) return null;
+  const presence = usePresence(isOpen);
+  if (!presence.render) return null;
 
   return (
-    <div
+    <div data-closing={presence.closing || undefined}
       className="fixed inset-0 z-9999 flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"

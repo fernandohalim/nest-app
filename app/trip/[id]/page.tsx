@@ -29,6 +29,9 @@ import {
 import { formatDisplayDateTime, timeAgo } from "@/lib/datetime";
 import { getRetention, RETENTION_RULE } from "@/lib/retention";
 import { getAvatarColor, getInitials } from "@/lib/avatars";
+import { useHeld, usePresence } from "@/lib/use-presence";
+import { useCountUp } from "@/lib/use-count-up";
+import { useFreshKeys } from "@/lib/use-fresh-keys";
 import { toBlob } from "html-to-image";
 import twemoji from "@twemoji/api";
 import Emoji from "@/components/emoji";
@@ -45,6 +48,27 @@ export default function TripDetail() {
   const tripId = params.id as string;
   const shareCardRef = useRef<HTMLDivElement>(null);
   const [isSharing, setIsSharing] = useState(false);
+
+  // dev-only: /trip/[id]?snapshot pulls the off-screen export frame on screen
+  // (scaled to fit, 4:5 kept) so the share image can be designed live
+  const [snapshotPreviewZoom, setSnapshotPreviewZoom] = useState<number | null>(
+    null,
+  );
+  useEffect(() => {
+    if (process.env.NODE_ENV !== "development") return;
+    if (!new URLSearchParams(window.location.search).has("snapshot")) return;
+    const fit = () =>
+      setSnapshotPreviewZoom(
+        Math.min(
+          1,
+          (window.innerWidth - 32) / 720,
+          (window.innerHeight - 32) / 900,
+        ),
+      );
+    fit();
+    window.addEventListener("resize", fit);
+    return () => window.removeEventListener("resize", fit);
+  }, []);
 
   const showAlert = useAlertStore((s) => s.showAlert);
   const showConfirm = useAlertStore((s) => s.showConfirm);
@@ -218,6 +242,18 @@ export default function TripDetail() {
     ? trip?.expenses.find((e) => e.id === expandedExpenseId)
     : undefined;
 
+  // exit animations: keep each overlay (and what it showed) around while it
+  // animates out — see lib/use-presence.ts
+  const sheetPresence = usePresence(Boolean(sheetExpense));
+  const shownSheetExpense = useHeld(sheetExpense, Boolean(sheetExpense));
+  const payerPresence = usePresence(Boolean(payerBreakdownExpense));
+  const shownPayerExpense = useHeld(
+    payerBreakdownExpense,
+    Boolean(payerBreakdownExpense),
+  );
+  const formPresence = usePresence(isAddingExpense);
+  const shownEditingExpense = useHeld(editingExpense, isAddingExpense);
+
   useEffect(() => {
     if (!expandedExpenseId) return;
     const onKey = (e: KeyboardEvent) => {
@@ -259,7 +295,7 @@ export default function TripDetail() {
         .delete()
         .match({ user_id: user.id, trip_id: tripId });
       setIsLinked(false);
-      showAlert("removed from your dashboard.", "unlinked 🔗");
+      showAlert("removed from your dashboard.", "unlinked 🔗", "success");
     } else {
       await supabase
         .from("user_trips")
@@ -268,6 +304,7 @@ export default function TripDetail() {
       showAlert(
         "saved to your dashboard! you can now access it easily.",
         "linked ✨",
+        "success",
       );
     }
   };
@@ -326,7 +363,7 @@ export default function TripDetail() {
     } catch (err) {
       if ((err as Error).name !== "AbortError") {
         navigator.clipboard.writeText(url);
-        showAlert("link copied! send it to the group 📱", "copied! 🔗");
+        showAlert("link copied! send it to the group 📱", "copied! 🔗", "success");
       }
     } finally {
       setIsSharing(false);
@@ -461,6 +498,7 @@ export default function TripDetail() {
       showAlert(
         "couldn't read that receipt, try another one!",
         "scan failed ❌",
+        "error",
       );
     } finally {
       setScanStage("idle");
@@ -783,6 +821,13 @@ export default function TripDetail() {
     () => trip?.expenses.reduce((sum, exp) => sum + exp.totalAmount, 0) || 0,
     [trip?.expenses],
   );
+  // the hero total rolls to its new value when a bill is added/edited/removed
+  const heroTotal = useCountUp(totalTripCost, Boolean(trip));
+  // expense rows that just arrived get an enter animation (not on page load)
+  const freshExpenseIds = useFreshKeys(
+    (trip?.expenses ?? []).map((e) => e.id),
+    Boolean(trip),
+  );
 
   if (isLoading && !trip) {
     return (
@@ -964,6 +1009,7 @@ export default function TripDetail() {
                   showAlert(
                     "this trip won't be auto-deleted. stop keeping it anytime from trip settings.",
                     "kept forever 📌",
+                    "success",
                   );
                 }}
                 className="shrink-0 mr-2 px-3 h-9 rounded-full bg-stone-900 text-white text-[11px] font-black hover:bg-stone-800 active:scale-95 transition-all shadow-sm"
@@ -978,6 +1024,7 @@ export default function TripDetail() {
                     ? `${RETENTION_RULE} this trip is kept${isOwner ? " — stop keeping it from trip settings" : ""}.`
                     : RETENTION_RULE,
                   "how keeping works 📌",
+                  "info",
                 )
               }
               aria-label="retention policy info"
@@ -1001,103 +1048,125 @@ export default function TripDetail() {
           </div>
         </div>
 
-        {/* hero dashboard */}
-        <div className="bg-emerald-700 text-white rounded-[2.5rem] lg:rounded-[2rem] p-8 lg:p-6 shadow-xl shadow-emerald-900/15 mb-10 lg:mb-6 flex flex-col items-center text-center relative overflow-hidden group">
+        {/* hero dashboard — flat emerald boarding pass: a dotted travel trail
+            loops across the background, then the title, and the total on a
+            white panel. same-hue glows only, no gradients — the nest look. */}
+        <div className="bg-emerald-600 text-white rounded-[2.5rem] lg:rounded-[2rem] p-6 pt-8 shadow-[0_10px_24px_rgba(16,185,129,0.18)] mb-10 lg:mb-6 flex flex-col relative overflow-hidden">
           <div
-            className="absolute top-0 right-0 w-48 h-48 bg-emerald-500/30 rounded-full blur-3xl -mr-16 -mt-16 group-hover:scale-110 transition-transform duration-700"
+            className="hero-drift absolute top-0 right-0 w-52 h-52 bg-emerald-400/40 rounded-full blur-3xl -mr-16 -mt-16"
             aria-hidden="true"
           ></div>
           <div
-            className="absolute bottom-0 left-0 w-32 h-32 bg-emerald-400/20 rounded-full blur-2xl -ml-10 -mb-10 group-hover:translate-x-4 transition-transform duration-700"
+            className="hero-drift-alt absolute bottom-0 left-0 w-40 h-40 bg-emerald-300/25 rounded-full blur-2xl -ml-12 -mb-12"
             aria-hidden="true"
           ></div>
+          {/* travel trail — dots march slowly from bottom-left, loop once,
+              and land on a pin top-right */}
+          <svg
+            className="absolute inset-0 w-full h-full pointer-events-none"
+            viewBox="0 0 400 300"
+            preserveAspectRatio="xMidYMid slice"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              className="route-march"
+              d="M -10 260 C 25 205, 10 150, 48 118 C 88 84, 102 34, 66 28 C 30 22, 34 80, 82 74 C 170 62, 262 34, 341 58"
+              stroke="rgba(255,255,255,0.28)"
+              strokeWidth="3"
+              strokeLinecap="round"
+              strokeDasharray="1 11"
+            />
+            <circle cx="350" cy="62" r="9" stroke="rgba(255,255,255,0.35)" strokeWidth="3" />
+            <circle cx="350" cy="62" r="3" fill="rgba(255,255,255,0.5)" />
+          </svg>
 
-          <div className="flex flex-wrap justify-center gap-2 mb-4 relative z-10">
-            <div className="px-4 py-1.5 bg-white/10 backdrop-blur-md rounded-full text-xs font-bold tracking-widest uppercase border border-white/20">
-              {isKept ? "📌 kept trip" : "💸 active trip"}
+          <h1 className="text-3xl font-extrabold tracking-tight leading-tight text-center relative z-10 break-words">
+            {trip.name}
+          </h1>
+          <div className="mt-1.5 flex flex-wrap items-center justify-center gap-x-1.5 gap-y-1 text-xs font-bold text-emerald-100 relative z-10">
+            <span>{formatDisplayDateTime(trip.createdAt).toLowerCase()}</span>
+            <span className="text-emerald-300" aria-hidden="true">
+              ·
+            </span>
+            <span>
+              by{" "}
+              <span className="text-white">
+                {isOwner ? "you" : trip.owner_name || "the host"}
+              </span>{" "}
+              👑
+            </span>
+          </div>
+
+          {/* the total — the loudest thing on the card */}
+          <div className="mt-5 bg-white text-emerald-700 rounded-3xl px-5 pt-3.5 pb-4 relative z-10 overflow-hidden isolate shadow-[0_10px_24px_rgba(6,78,59,0.2)]">
+            {/* texture: a faint dot grid plus a coin-stamp peeking from the
+                corner — flat shapes, kept well under the amount */}
+            <div
+              className="amount-dots absolute inset-0 -z-10"
+              aria-hidden="true"
+            ></div>
+            <div
+              className="absolute -right-10 -bottom-12 w-36 h-36 rounded-full border-[14px] border-emerald-100 -z-10"
+              aria-hidden="true"
+            ></div>
+            <div
+              className="absolute -left-6 -top-6 w-16 h-16 rounded-full bg-emerald-100/80 -z-10"
+              aria-hidden="true"
+            ></div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-[10px] font-black tracking-widest uppercase text-emerald-500">
+                total spent
+              </span>
+              <span className="text-[10px] font-black tracking-widest uppercase text-emerald-600 bg-emerald-50 border border-emerald-100 px-2 py-0.5 rounded-md">
+                {isKept ? "📌 kept trip" : "💸 active trip"}
+              </span>
             </div>
             <div
-              className={`px-4 py-1.5 backdrop-blur-md rounded-full text-xs font-bold tracking-widest uppercase border flex items-center gap-1.5 transition-colors ${trip.is_collaborative ? "bg-emerald-400/30 border-emerald-300/50 text-white shadow-[0_0_10px_rgba(52,211,153,0.2)]" : "bg-black/20 border-white/10 text-stone-200"}`}
+              className={`mt-2 text-center ${formatMoney(totalTripCost, currencyCode).length > 9 ? "text-4xl lg:text-3xl" : "text-5xl lg:text-4xl"} font-black tracking-tighter leading-none whitespace-nowrap`}
             >
-              {trip.is_collaborative ? (
+              <span className="text-2xl text-emerald-400 align-top mr-1">
+                {currencySymbol}
+              </span>
+              {/* rolls + pops when the total changes (size is picked from
+                  the final value above, so it never jumps mid-count) */}
+              <span
+                className={`inline-block tabular-nums ${heroTotal.counting ? "settle-pop" : ""}`}
+              >
+                {formatMoney(heroTotal.value, currencyCode)}
+              </span>
+            </div>
+          </div>
+
+          {/* footer: access on the left, sync on the right */}
+          <div className="mt-4 flex items-center justify-between gap-3 relative z-10">
+            <span
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-black tracking-wider uppercase ${trip.is_collaborative ? "bg-white text-emerald-700" : "bg-black/20 text-emerald-50"}`}
+            >
+              <span aria-hidden="true">
+                {trip.is_collaborative ? "🤝" : "👀"}
+              </span>
+              {trip.is_collaborative ? "open to edit" : "view only"}
+            </span>
+            <span className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-50">
+              {isSyncing ? (
                 <>
                   <span
-                    className="text-base leading-none pb-0.5"
+                    className="w-3 h-3 border-2 border-emerald-200 border-t-transparent rounded-full animate-spin"
                     aria-hidden="true"
-                  >
-                    🤝
-                  </span>{" "}
-                  open to edit
+                  ></span>
+                  syncing magically ✨
                 </>
               ) : (
                 <>
                   <span
-                    className="text-base leading-none pb-0.5"
+                    className="w-2 h-2 bg-emerald-300 rounded-full shadow-[0_0_8px_rgba(110,231,183,0.9)] animate-pulse"
                     aria-hidden="true"
-                  >
-                    👀
-                  </span>{" "}
-                  view only
+                  ></span>
+                  safely saved in cloud
                 </>
               )}
-            </div>
-          </div>
-
-          <div className="text-[10px] sm:text-xs font-black tracking-widest text-emerald-200/80 uppercase mb-1.5 relative z-10 flex items-center justify-center gap-1.5">
-            <svg
-              className="w-3.5 h-3.5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2.5}
-                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-              />
-            </svg>
-            {/* 🔥 U10: locale-aware */}
-            {formatDisplayDateTime(trip.createdAt)}
-          </div>
-
-          <h1 className="text-3xl font-extrabold tracking-tight mb-2 relative z-10">
-            {trip.name}
-          </h1>
-
-          <div className="text-xs font-bold text-emerald-100 mb-2 relative z-10 flex items-center justify-center gap-1.5">
-            <span>created by</span>
-            <span className="text-white bg-black/20 px-2 py-0.5 rounded-md backdrop-blur-sm shadow-inner">
-              {isOwner ? "you" : trip.owner_name || "the host"} 👑
             </span>
-          </div>
-
-          <div className="text-5xl lg:text-4xl font-black tracking-tighter relative z-10 my-2 drop-shadow-md">
-            <span className="text-2xl text-emerald-200 align-top mr-1">
-              {currencySymbol}
-            </span>
-            {formatMoney(totalTripCost, currencyCode)}
-          </div>
-
-          <div className="flex items-center gap-2 mt-6 bg-black/25 px-5 py-2 rounded-full text-xs font-bold text-emerald-50 backdrop-blur-sm relative z-10 shadow-inner">
-            {isSyncing ? (
-              <>
-                <div
-                  className="w-3 h-3 border-2 border-emerald-300 border-t-transparent rounded-full animate-spin"
-                  aria-hidden="true"
-                ></div>{" "}
-                syncing magically ✨
-              </>
-            ) : (
-              <>
-                <div
-                  className="w-2 h-2 bg-emerald-400 rounded-full shadow-[0_0_8px_rgba(52,211,153,0.8)] animate-pulse"
-                  aria-hidden="true"
-                ></div>{" "}
-                safely saved in cloud
-              </>
-            )}
           </div>
         </div>
 
@@ -1150,6 +1219,7 @@ export default function TripDetail() {
                   showAlert(
                     "just type their names! anyone you add here is just a local profile for this trip.",
                     "how members work 👥",
+                    "info",
                   )
                 }
                 aria-label="how members work"
@@ -1230,6 +1300,7 @@ export default function TripDetail() {
                   showAlert(
                     "add your group receipts here! inside, you can choose to split the bill equally, type in exact amounts, or scan the receipt and assign individual items.",
                     "how expenses work 💸",
+                    "info",
                   )
                 }
                 aria-label="how expenses work"
@@ -1348,7 +1419,7 @@ export default function TripDetail() {
                           key={exp.id}
                           onClick={() => setExpandedExpenseId(exp.id)}
                           aria-haspopup="dialog"
-                          className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-stone-50/80 active:bg-stone-100 transition-colors group"
+                          className={`w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-stone-50/80 active:bg-stone-100 transition-colors group ${freshExpenseIds.has(exp.id) ? "settle-row-in" : ""}`}
                         >
                           <div
                             className="shrink-0 w-11 h-11 rounded-2xl bg-stone-50 flex items-center justify-center text-lg"
@@ -1391,9 +1462,10 @@ export default function TripDetail() {
           </div>
 
           {/* 3.2: bill details live in a sheet so the feed stays scannable */}
-          {sheetExpense &&
+          {sheetPresence.render &&
+            shownSheetExpense &&
             (() => {
-              const exp = sheetExpense;
+              const exp = shownSheetExpense;
               const payersEntries = Object.entries(exp.paidBy);
               const isMultiPayer = payersEntries.length > 1;
               const itemsSum =
@@ -1412,6 +1484,7 @@ export default function TripDetail() {
                 : 0;
               return (
                 <div
+                  data-closing={sheetPresence.closing || undefined}
                   className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300"
                   role="dialog"
                   aria-modal="true"
@@ -2787,8 +2860,9 @@ export default function TripDetail() {
       <ScanningOverlay stage={scanStage} />
 
       {/* 🔥 finding #3: payer breakdown sheet */}
-      {payerBreakdownExpense && (
+      {payerPresence.render && shownPayerExpense && (
         <div
+          data-closing={payerPresence.closing || undefined}
           className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-60 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300"
           role="dialog"
           aria-modal="true"
@@ -2821,16 +2895,16 @@ export default function TripDetail() {
             </div>
             <div className="p-6">
               <p className="text-sm font-bold text-stone-500 mb-4 truncate">
-                {payerBreakdownExpense.title}
+                {shownPayerExpense.title}
               </p>
               <div className="space-y-2">
-                {Object.entries(payerBreakdownExpense.paidBy).map(
+                {Object.entries(shownPayerExpense.paidBy).map(
                   ([id, amt]) => {
                     const name = getMemberName(id);
                     const pct =
-                      payerBreakdownExpense.totalAmount > 0
+                      shownPayerExpense.totalAmount > 0
                         ? Math.round(
-                            (amt / payerBreakdownExpense.totalAmount) * 100,
+                            (amt / shownPayerExpense.totalAmount) * 100,
                           )
                         : 0;
                     return (
@@ -2869,7 +2943,7 @@ export default function TripDetail() {
                 </span>
                 <span className="font-black text-stone-800 text-lg">
                   {currencySymbol}
-                  {formatMoney(payerBreakdownExpense.totalAmount, currencyCode)}
+                  {formatMoney(shownPayerExpense.totalAmount, currencyCode)}
                 </span>
               </div>
             </div>
@@ -2877,8 +2951,10 @@ export default function TripDetail() {
         </div>
       )}
 
-      {isAddingExpense && (
-        <div className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300">
+      {formPresence.render && (
+        <div
+          data-closing={formPresence.closing || undefined}
+          className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300">
           <div className="bg-[#fdfbf7] w-full max-w-md lg:max-w-3xl h-[92vh] sm:h-auto sm:max-h-[92vh] rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500 overflow-hidden relative">
             <div
               className="absolute top-3 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-stone-300 rounded-full sm:hidden"
@@ -2886,7 +2962,7 @@ export default function TripDetail() {
             ></div>
             <div className="px-6 py-5 pt-8 sm:pt-6 border-b-2 border-stone-100 flex justify-between items-center bg-white z-10 shadow-sm">
               <h2 className="text-2xl font-black text-stone-800">
-                {editingExpense ? "edit expense ✏️" : "new expense 💸"}
+                {shownEditingExpense ? "edit expense ✏️" : "new expense 💸"}
               </h2>
               <button
                 onClick={() => {
@@ -2902,9 +2978,9 @@ export default function TripDetail() {
             <div className="flex-1 overflow-y-auto p-6 pb-12">
               <ExpenseForm
                 members={trip.members}
-                initialExpense={editingExpense}
+                initialExpense={shownEditingExpense}
                 categoryAutoDetected={
-                  !!editingExpense && editingExpense.id === autoCategoryId
+                  !!shownEditingExpense && shownEditingExpense.id === autoCategoryId
                 }
                 onSave={handleSaveExpense}
                 onCancel={() => {
@@ -2962,7 +3038,17 @@ export default function TripDetail() {
           floats centred; "the crew" was already capped at 6, and the trip name
           is clamped below, so it can never outgrow the frame. */}
       {trip && (
-        <div className="overflow-hidden absolute -left-2499.75 top-0 pointer-events-none">
+        <div
+          className={
+            snapshotPreviewZoom
+              ? "fixed inset-0 z-9999 bg-stone-300 flex items-center justify-center"
+              : "overflow-hidden absolute -left-2499.75 top-0 pointer-events-none"
+          }
+        >
+          <div
+            style={snapshotPreviewZoom ? { zoom: snapshotPreviewZoom } : undefined}
+            className={snapshotPreviewZoom ? "shadow-2xl" : undefined}
+          >
           <div
             ref={shareCardRef}
             className="w-[720px] h-[900px] bg-emerald-50 flex items-center justify-center relative font-sans overflow-hidden"
@@ -3030,6 +3116,7 @@ export default function TripDetail() {
                 powered by nest.
               </span>
             </div>
+          </div>
           </div>
         </div>
       )}
