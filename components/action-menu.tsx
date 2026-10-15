@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useUiStore } from "@/store/useUiStore";
 import { usePresence } from "@/lib/use-presence";
+import { useSheetDismiss } from "@/lib/use-sheet-dismiss";
+import SheetHandle from "@/components/sheet-handle";
 
 // The "what's the plan?" launcher — start a trip, scan a receipt, or enter one
 // manually. Extracted out of the home page so the desktop sidebar can open it
@@ -14,6 +16,7 @@ export default function ActionMenu() {
   const close = useUiStore((s) => s.closeActionMenu);
   const openCreateTrip = useUiStore((s) => s.openCreateTrip);
 
+  const sheetRef = useSheetDismiss(close);
   const presence = usePresence(isOpen);
   if (!presence.render) return null;
 
@@ -30,7 +33,8 @@ export default function ActionMenu() {
         aria-hidden="true"
       ></div>
 
-      <div className="bg-[#fdfbf7] w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500 p-6 pt-8 pb-12 sm:pb-8 relative z-10">
+      <div ref={sheetRef} className="bg-[#fdfbf7] w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500 p-6 pt-8 pb-12 sm:pb-8 relative z-10">
+        <SheetHandle />
         <button
           onClick={close}
           aria-label="close"

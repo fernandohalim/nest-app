@@ -7,6 +7,8 @@ import { useTripStore } from "@/store/useTripStore";
 import { CreateTripModalProps } from "@/lib/types";
 import CustomSelect from "./custom-select";
 import { usePresence } from "@/lib/use-presence";
+import { useSheetDismiss } from "@/lib/use-sheet-dismiss";
+import SheetHandle from "@/components/sheet-handle";
 
 export const CURRENCIES = [
   { value: "IDR", label: "🇮🇩 IDR (Rp)" },
@@ -31,6 +33,7 @@ export default function CreateTripModal({
   const [currency, setCurrency] = useState("IDR");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const sheetRef = useSheetDismiss(onClose);
   const presence = usePresence(isOpen);
   if (!presence.render) return null;
 
@@ -65,8 +68,8 @@ export default function CreateTripModal({
     <div data-closing={presence.closing || undefined} className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-60 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300">
       <div className="fixed inset-0" onClick={onClose}></div>
 
-      <div className="bg-[#fdfbf7] w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500 overflow-visible relative pb-8 sm:pb-0">
-        <div className="absolute top-3 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-stone-300 rounded-full sm:hidden z-20"></div>
+      <div ref={sheetRef} className="bg-[#fdfbf7] w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500 overflow-visible relative pb-8 sm:pb-0">
+        <SheetHandle />
 
         <div className="px-6 py-5 pt-8 sm:pt-6 border-b-2 border-stone-100 flex justify-between items-center bg-white rounded-t-[2.5rem] sm:rounded-[2.5rem] z-10 shadow-sm">
           <h2 className="text-2xl font-black text-stone-800">

@@ -20,6 +20,8 @@ import {
 import { getRetention } from "@/lib/retention";
 import Image from "next/image";
 import { usePresence } from "@/lib/use-presence";
+import { useSheetDismiss } from "@/lib/use-sheet-dismiss";
+import SheetHandle from "@/components/sheet-handle";
 
 type SortType = "newest" | "oldest" | "a_z" | "z_a";
 
@@ -63,6 +65,7 @@ function HomeContent() {
 
   const [isInfoModalOpen, setIsInfoModalOpen] = useState(false);
   const infoPresence = usePresence(isInfoModalOpen);
+  const infoSheetRef = useSheetDismiss(() => setIsInfoModalOpen(false));
 
   const urlMode = searchParams.get("tab") === "quick" ? "quick" : "trips";
 
@@ -901,13 +904,14 @@ function HomeContent() {
             aria-labelledby="how-nest-works-title"
             onClick={() => setIsInfoModalOpen(false)}
           >
-            <div
+            <div ref={infoSheetRef}
               className="bg-[#fdfbf7] w-full max-w-md max-h-[90dvh] rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500 overflow-hidden relative"
               onClick={(e) => e.stopPropagation()}
             >
+              <SheetHandle />
               {/* header stays pinned; only the body scrolls, so the title and
                   close button can never be pushed off a short screen */}
-              <div className="shrink-0 px-6 py-5 border-b-2 border-stone-100 flex justify-between items-center bg-white z-10 shadow-sm">
+              <div className="shrink-0 px-6 py-5 pt-8 sm:pt-5 border-b-2 border-stone-100 flex justify-between items-center bg-white z-10 shadow-sm">
                 <h2
                   id="how-nest-works-title"
                   className="text-2xl font-black text-stone-800"

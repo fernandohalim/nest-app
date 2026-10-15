@@ -18,6 +18,8 @@ import { getAvatarColor, getInitials } from "@/lib/avatars";
 import { CURRENCIES } from "./create-trip-modal";
 import CustomSelect from "./custom-select";
 import { usePresence } from "@/lib/use-presence";
+import { useSheetDismiss } from "@/lib/use-sheet-dismiss";
+import SheetHandle from "@/components/sheet-handle";
 
 interface MergeModalProps {
   isOpen: boolean;
@@ -121,6 +123,7 @@ export default function MergeModal({
     return map;
   }, [splits]);
 
+  const sheetRef = useSheetDismiss(onClose);
   const presence = usePresence(isOpen);
   if (!presence.render) return null;
 
@@ -251,9 +254,10 @@ export default function MergeModal({
         aria-hidden="true"
       ></div>
 
-      <div className="relative w-full max-w-md bg-[#fdfbf7] rounded-t-[2.5rem] sm:rounded-4xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-300 border border-stone-100">
+      <div ref={sheetRef} className="relative w-full max-w-md bg-[#fdfbf7] rounded-t-[2.5rem] sm:rounded-4xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-300 border border-stone-100">
+        <SheetHandle />
         {/* header */}
-        <div className="flex items-center justify-between p-4 sm:p-5 border-b border-stone-100 bg-white">
+        <div className="flex items-center justify-between p-4 pt-7 sm:p-5 border-b border-stone-100 bg-white">
           <div className="flex items-center gap-3">
             {step === "members" && (
               <button
@@ -367,7 +371,7 @@ export default function MergeModal({
                       </p>
                     </div>
                   ) : (
-                    <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                    <div className="space-y-2 max-h-64 overflow-y-auto overscroll-contain pr-1">
                       {ownedTrips.map((t) => (
                         <button
                           key={t.id}

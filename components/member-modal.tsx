@@ -7,6 +7,7 @@ import { Trip } from "@/lib/types";
 import { v4 as uuidv4 } from "uuid";
 import { getAvatarColor, getInitials } from "@/lib/avatars";
 import { usePresence } from "@/lib/use-presence";
+import { useSheetDismiss } from "@/lib/use-sheet-dismiss";
 
 interface MemberModalProps {
   isOpen: boolean;
@@ -29,6 +30,8 @@ export default function MemberModal({
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
   const [editMemberName, setEditMemberName] = useState("");
 
+  // escape + scroll lock; it zooms in, so no swipe (lib/use-sheet-dismiss.ts)
+  const popupRef = useSheetDismiss(onClose, { swipe: false });
   const presence = usePresence(isOpen);
   if (!presence.render) return null;
 
@@ -80,7 +83,8 @@ export default function MemberModal({
   };
 
   return (
-    <div data-closing={presence.closing || undefined}
+    <div
+      data-closing={presence.closing || undefined}
       className="fixed inset-0 z-50 flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
@@ -91,7 +95,10 @@ export default function MemberModal({
         onClick={closeAndReset}
         aria-hidden="true"
       ></div>
-      <div className="relative w-full max-w-md bg-white rounded-4xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200 border border-stone-100">
+      <div
+        ref={popupRef}
+        className="relative w-full max-w-md bg-white rounded-4xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] animate-in zoom-in-95 duration-200 border border-stone-100"
+      >
         <div className="flex items-center justify-between p-4 sm:p-5 border-b border-stone-100 bg-stone-50/50">
           <div>
             <h3
@@ -219,12 +226,12 @@ export default function MemberModal({
               onChange={(e) => setNewMemberName(e.target.value)}
               placeholder="type a new name..."
               aria-label="new member name"
-              className="flex-1 bg-stone-50 border-2 border-stone-100 shadow-inner rounded-2xl px-5 py-3.5 text-sm font-bold focus:outline-none focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100 transition-all placeholder:font-medium placeholder:text-stone-300"
+              className="flex-1 min-w-0 bg-stone-50 border-2 border-stone-100 shadow-inner rounded-2xl px-4 sm:px-5 py-3.5 text-sm font-bold focus:outline-none focus:border-emerald-400 focus:bg-white focus:ring-4 focus:ring-emerald-100 transition-all placeholder:font-medium placeholder:text-stone-300"
             />
             <button
               type="submit"
               disabled={!newMemberName.trim()}
-              className="px-6 py-3.5 bg-stone-900 text-white disabled:bg-stone-300 disabled:text-stone-500 hover:bg-emerald-600 rounded-2xl text-sm font-bold transition-all shadow-md active:scale-95 disabled:active:scale-100 disabled:shadow-none"
+              className="shrink-0 whitespace-nowrap px-5 sm:px-6 py-3.5 bg-stone-900 text-white disabled:bg-stone-300 disabled:text-stone-500 hover:bg-emerald-600 rounded-2xl text-sm font-bold transition-all shadow-md active:scale-95 disabled:active:scale-100 disabled:shadow-none"
             >
               add +
             </button>

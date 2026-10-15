@@ -8,6 +8,7 @@ import { Trip } from "@/lib/types";
 import CustomSelect from "./custom-select";
 import { CURRENCIES } from "./create-trip-modal";
 import { usePresence } from "@/lib/use-presence";
+import { useSheetDismiss } from "@/lib/use-sheet-dismiss";
 
 interface TripSettingsModalProps {
   isOpen: boolean;
@@ -30,6 +31,8 @@ export default function TripSettingsModal({
   const [editTripName, setEditTripName] = useState(trip.name);
   const [editCurrency, setEditCurrency] = useState(trip.currency || "IDR");
 
+  // escape + scroll lock; it zooms in, so no swipe (lib/use-sheet-dismiss.ts)
+  const popupRef = useSheetDismiss(onClose, { swipe: false });
   const presence = usePresence(isOpen);
   if (!presence.render) return null;
 
@@ -83,7 +86,8 @@ export default function TripSettingsModal({
   };
 
   return (
-    <div data-closing={presence.closing || undefined}
+    <div
+      data-closing={presence.closing || undefined}
       className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-50 flex items-center justify-center p-4 animate-in fade-in duration-300"
       role="dialog"
       aria-modal="true"
@@ -94,7 +98,10 @@ export default function TripSettingsModal({
         onClick={onClose}
         aria-hidden="true"
       ></div>
-      <div className="relative z-10 bg-white rounded-[2.5rem] p-8 w-full max-w-sm shadow-2xl animate-in zoom-in-95 slide-in-from-bottom-8 duration-300">
+      <div
+        ref={popupRef}
+        className="relative z-10 bg-white rounded-[2.5rem] p-8 w-full max-w-sm shadow-2xl animate-in zoom-in-95 slide-in-from-bottom-8 duration-300"
+      >
         <div className="flex justify-between items-center mb-8">
           <h3
             id="trip-settings-title"

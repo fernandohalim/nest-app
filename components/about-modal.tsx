@@ -4,10 +4,13 @@ import { useRouter } from "next/navigation";
 import packageJson from "../package.json";
 import { AboutModalProps } from "@/lib/types";
 import { usePresence } from "@/lib/use-presence";
+import { useSheetDismiss } from "@/lib/use-sheet-dismiss";
+import SheetHandle from "@/components/sheet-handle";
 
 export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
   const router = useRouter();
 
+  const sheetRef = useSheetDismiss(onClose);
   const presence = usePresence(isOpen);
   if (!presence.render) return null;
 
@@ -17,7 +20,8 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
       <div className="fixed inset-0" onClick={onClose}></div>
 
       {/* modal body */}
-      <div className="bg-[#fdfbf7] w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500 overflow-hidden relative pb-8 sm:pb-0 z-10">
+      <div ref={sheetRef} className="bg-[#fdfbf7] w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500 overflow-hidden relative pb-8 sm:pb-0 z-10">
+        <SheetHandle />
         {/* close button */}
         <div className="px-6 py-5 pt-8 sm:pt-6 flex justify-end items-center absolute top-0 right-0 w-full z-20">
           <button

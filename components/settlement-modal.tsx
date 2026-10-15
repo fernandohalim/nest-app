@@ -5,6 +5,8 @@ import { Transaction, Member } from "@/lib/types";
 import { useAlertStore } from "@/store/useAlertStore";
 import { formatMoney } from "@/lib/format";
 import { usePresence } from "@/lib/use-presence";
+import { useSheetDismiss } from "@/lib/use-sheet-dismiss";
+import SheetHandle from "@/components/sheet-handle";
 
 // 🔥 1. Perfectly typed interface to replace 'any'
 export interface MemberDetail {
@@ -70,6 +72,7 @@ export default function SettlementModal({
     }
   }
 
+  const sheetRef = useSheetDismiss(onClose);
   const presence = usePresence(isOpen);
   if (!presence.render) return null;
 
@@ -84,7 +87,8 @@ export default function SettlementModal({
         className="absolute inset-0 bg-stone-900/60 backdrop-blur-sm transition-opacity"
         onClick={onClose}
       />
-      <div className="relative bg-[#fdfbf7] w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl overflow-hidden animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-300 flex flex-col max-h-[90vh]">
+      <div ref={sheetRef} className="relative bg-[#fdfbf7] w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl overflow-hidden animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-300 flex flex-col max-h-[90vh]">
+        <SheetHandle />
         {/* Header */}
         <div className="px-6 py-5 pt-8 sm:pt-6 border-b-2 border-stone-100 flex justify-between items-center bg-white shadow-sm shrink-0">
           <div className="flex items-center gap-3">
@@ -111,7 +115,7 @@ export default function SettlementModal({
         </div>
 
         {/* Content Body */}
-        <div className="p-6 overflow-y-auto flex-1">
+        <div className="p-6 overflow-y-auto overscroll-contain flex-1">
           {!selectedMember ? (
             <div className="animate-in fade-in duration-300">
               <h3 className="text-stone-500 font-bold text-sm mb-4">

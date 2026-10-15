@@ -2,6 +2,23 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
+    version: "3.4.1",
+    date: "oct 15, 2026",
+    title: "swipe it away 👋",
+    badge: "patch",
+    badgeColor: "bg-teal-100 text-teal-700 border-teal-200",
+    features: [
+      "added swipe down to close on every sheet that slides up on your phone — about, your profile, how nest works, a bill's breakdown, who paid, settle up, merge, new trip and the install prompt. pull it a little and let go to snap it back; flick it to send it away.",
+      "added a grab bar to the top of those sheets, so it's clear they can be pulled down.",
+      "refined the new / edit expense sheet to only swipe away from its title bar, so scrolling up through a half-filled bill never throws it out.",
+      "added escape to close every sheet and pop-up on desktop — when one is stacked on another (like a confirm over a bill), only the top one closes, and it never fires while you're typing.",
+      "fixed the page behind an open sheet or pop-up scrolling along when you swipe on it.",
+      "fixed the install prompt vanishing in a blink — it now slides back down like the rest.",
+      "fixed the 'add +' button in manage crew getting squeezed off the edge on narrow phones.",
+      "fixed a trip's total getting cut off on narrow phones — big amounts now shrink to fit the card instead of running off the edge.",
+    ],
+  },
+  {
     version: "3.4",
     date: "oct 15, 2026",
     title: "a livelier nest ✨",

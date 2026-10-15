@@ -2,6 +2,7 @@
 
 import { AlertTone, useAlertStore } from "@/store/useAlertStore";
 import { usePresence } from "@/lib/use-presence";
+import { useSheetDismiss } from "@/lib/use-sheet-dismiss";
 
 // the badge on top of an alert. used to be guessed from the title's emoji,
 // which gave "kept forever 📌" and every "how x works" explainer a 🛑.
@@ -68,11 +69,14 @@ export default function PlayfulAlert() {
     confirmButtonStyles,
   } = usePlayfulAlertLogic();
 
+  // escape + scroll lock; it zooms in, so no swipe (lib/use-sheet-dismiss.ts)
+  const popupRef = useSheetDismiss(close, { swipe: false });
   const presence = usePresence(isOpen);
   if (!presence.render) return null;
 
   return (
-    <div data-closing={presence.closing || undefined}
+    <div
+      data-closing={presence.closing || undefined}
       className="fixed inset-0 z-9999 flex items-center justify-center p-4"
       role="dialog"
       aria-modal="true"
@@ -85,7 +89,10 @@ export default function PlayfulAlert() {
         aria-hidden="true"
       />
 
-      <div className="bg-[#fdfbf7] rounded-[2.5rem] p-6 sm:p-8 w-full max-w-sm shadow-2xl relative z-10 animate-in zoom-in-95 slide-in-from-bottom-8 duration-300 flex flex-col items-center text-center border-4 border-white mt-8">
+      <div
+        ref={popupRef}
+        className="bg-[#fdfbf7] rounded-[2.5rem] p-6 sm:p-8 w-full max-w-sm shadow-2xl relative z-10 animate-in zoom-in-95 slide-in-from-bottom-8 duration-300 flex flex-col items-center text-center border-4 border-white mt-8"
+      >
         <div
           className="absolute -top-10 w-20 h-20 bg-white rounded-full flex items-center justify-center text-4xl border-4 border-[#fdfbf7] shadow-sm transform hover:scale-110 transition-transform duration-300"
           aria-hidden="true"

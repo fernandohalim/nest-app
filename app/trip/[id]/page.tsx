@@ -30,6 +30,8 @@ import { formatDisplayDateTime, timeAgo } from "@/lib/datetime";
 import { getRetention, RETENTION_RULE } from "@/lib/retention";
 import { getAvatarColor, getInitials } from "@/lib/avatars";
 import { useHeld, usePresence } from "@/lib/use-presence";
+import { useSheetDismiss } from "@/lib/use-sheet-dismiss";
+import SheetHandle from "@/components/sheet-handle";
 import { useCountUp } from "@/lib/use-count-up";
 import { useFreshKeys } from "@/lib/use-fresh-keys";
 import { toBlob } from "html-to-image";
@@ -253,17 +255,15 @@ export default function TripDetail() {
   );
   const formPresence = usePresence(isAddingExpense);
   const shownEditingExpense = useHeld(editingExpense, isAddingExpense);
-
-  useEffect(() => {
-    if (!expandedExpenseId) return;
-    const onKey = (e: KeyboardEvent) => {
-      // the payer breakdown can stack on top — let it close first
-      if (e.key === "Escape" && !payerBreakdownExpense)
-        setExpandedExpenseId(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [expandedExpenseId, payerBreakdownExpense]);
+  const expenseSheetRef = useSheetDismiss(() => setExpandedExpenseId(null));
+  const payerSheetRef = useSheetDismiss(() => setPayerBreakdownExpense(null));
+  const formSheetRef = useSheetDismiss(
+    () => {
+      setIsAddingExpense(false);
+      setEditingExpense(undefined);
+    },
+    { gripOnly: true },
+  );
 
   const usedCategories = useMemo(
     () =>
@@ -1099,7 +1099,7 @@ export default function TripDetail() {
           </div>
 
           {/* the total — the loudest thing on the card */}
-          <div className="mt-5 bg-white text-emerald-700 rounded-3xl px-5 pt-3.5 pb-4 relative z-10 overflow-hidden isolate shadow-[0_10px_24px_rgba(6,78,59,0.2)]">
+          <div className="mt-5 bg-white text-emerald-700 rounded-3xl px-5 pt-3.5 pb-4 @container relative z-10 overflow-hidden isolate shadow-[0_10px_24px_rgba(6,78,59,0.2)]">
             {/* texture: a faint dot grid plus a coin-stamp peeking from the
                 corner — flat shapes, kept well under the amount */}
             <div
@@ -1122,8 +1122,16 @@ export default function TripDetail() {
                 {isKept ? "📌 kept trip" : "💸 active trip"}
               </span>
             </div>
+            {/* one line, always: the size is the breakpoint's cap, shrunk
+                further when the digits wouldn't fit the panel (100cqi). each
+                glyph is ~0.52em wide (0.55 for headroom); 2.5rem leaves room for the symbol */}
             <div
-              className={`mt-2 text-center ${formatMoney(totalTripCost, currencyCode).length > 9 ? "text-4xl lg:text-3xl" : "text-5xl lg:text-4xl"} font-black tracking-tighter leading-none whitespace-nowrap`}
+              className={`mt-2 text-center ${formatMoney(totalTripCost, currencyCode).length > 9 ? "[--hero-max:2.25rem] lg:[--hero-max:1.875rem]" : "[--hero-max:3rem] lg:[--hero-max:2.25rem]"} font-black tracking-tighter leading-none whitespace-nowrap`}
+              style={{
+                fontSize: `min(var(--hero-max), calc((100cqi - 2.5rem) / ${(
+                  formatMoney(totalTripCost, currencyCode).length * 0.55
+                ).toFixed(2)}))`,
+              }}
             >
               <span className="text-2xl text-emerald-400 align-top mr-1">
                 {currencySymbol}
@@ -1492,13 +1500,11 @@ export default function TripDetail() {
                   onClick={() => setExpandedExpenseId(null)}
                 >
                   <div
+                    ref={expenseSheetRef}
                     className="bg-[#fdfbf7] w-full max-w-md lg:max-w-lg max-h-[90dvh] rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500 overflow-hidden relative"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <div
-                      className="absolute top-3 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-stone-300 rounded-full sm:hidden"
-                      aria-hidden="true"
-                    ></div>
+                    <SheetHandle />
                     {/* header: what, when, how much, who paid */}
                     <div className="px-6 pt-8 sm:pt-6 pb-5 border-b-2 border-stone-100 bg-white">
                       <div className="flex items-start gap-3">
@@ -1568,7 +1574,7 @@ export default function TripDetail() {
                       </div>
                     </div>
 
-                    <div className="flex-1 overflow-y-auto px-5 py-5">
+                    <div className="flex-1 overflow-y-auto overscroll-contain px-5 py-5">
                         {exp.splitType === "exact" &&
                           exp.items &&
                           exp.items.length > 0 && (
@@ -2087,13 +2093,14 @@ export default function TripDetail() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-2 sm:gap-4 text-right flex-1 min-w-0 justify-end">
-                        <div className="flex flex-col min-w-0 items-end">
-                          <span className="font-extrabold text-base sm:text-lg text-emerald-400 truncate max-w-full">
+                      {/* the amount never truncates — the names give way instead */}
+                      <div className="flex items-center gap-2 sm:gap-4 text-right shrink-0 justify-end">
+                        <div className="flex flex-col items-end">
+                          <span className="font-extrabold text-base sm:text-lg text-emerald-400 whitespace-nowrap tabular-nums">
                             {currencySymbol}
                             {formatMoney(settlement.amount, currencyCode)}
                           </span>
-                          <span className="text-stone-400 font-bold text-[9px] sm:text-xs tracking-widest uppercase truncate max-w-full">
+                          <span className="text-stone-400 font-bold text-[9px] sm:text-xs tracking-widest uppercase truncate max-w-28 sm:max-w-40">
                             to {settlement.to.name}
                           </span>
                         </div>
@@ -2870,13 +2877,11 @@ export default function TripDetail() {
           onClick={() => setPayerBreakdownExpense(null)}
         >
           <div
+            ref={payerSheetRef}
             className="bg-[#fdfbf7] w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500 overflow-hidden relative pb-8 sm:pb-6"
             onClick={(e) => e.stopPropagation()}
           >
-            <div
-              className="absolute top-3 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-stone-300 rounded-full sm:hidden"
-              aria-hidden="true"
-            ></div>
+            <SheetHandle />
             <div className="px-6 py-5 pt-8 sm:pt-6 border-b-2 border-stone-100 flex justify-between items-center bg-white z-10 shadow-sm">
               <h2
                 id="payer-breakdown-title"
@@ -2955,12 +2960,9 @@ export default function TripDetail() {
         <div
           data-closing={formPresence.closing || undefined}
           className="fixed inset-0 bg-stone-900/40 backdrop-blur-md z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-300">
-          <div className="bg-[#fdfbf7] w-full max-w-md lg:max-w-3xl h-[92vh] sm:h-auto sm:max-h-[92vh] rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500 overflow-hidden relative">
-            <div
-              className="absolute top-3 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-stone-300 rounded-full sm:hidden"
-              aria-hidden="true"
-            ></div>
-            <div className="px-6 py-5 pt-8 sm:pt-6 border-b-2 border-stone-100 flex justify-between items-center bg-white z-10 shadow-sm">
+          <div ref={formSheetRef} className="bg-[#fdfbf7] w-full max-w-md lg:max-w-3xl h-[92vh] sm:h-auto sm:max-h-[92vh] rounded-t-[2.5rem] sm:rounded-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full sm:zoom-in-95 duration-500 overflow-hidden relative">
+            <SheetHandle />
+            <div data-sheet-grip className="px-6 py-5 pt-8 sm:pt-6 border-b-2 border-stone-100 flex justify-between items-center bg-white z-10 shadow-sm">
               <h2 className="text-2xl font-black text-stone-800">
                 {shownEditingExpense ? "edit expense ✏️" : "new expense 💸"}
               </h2>
@@ -2975,7 +2977,7 @@ export default function TripDetail() {
                 ×
               </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-6 pb-12">
+            <div className="flex-1 overflow-y-auto overscroll-contain p-6 pb-12">
               <ExpenseForm
                 members={trip.members}
                 initialExpense={shownEditingExpense}
