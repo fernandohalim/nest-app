@@ -2,6 +2,17 @@ import { Release } from "./types";
 
 export const releases: Release[] = [
   {
+    version: "3.4.2",
+    date: "oct 15, 2026",
+    title: "flip through 📖",
+    badge: "patch",
+    badgeColor: "bg-teal-100 text-teal-700 border-teal-200",
+    features: [
+      "added swiping between trips and receipts on your phone — flick left for receipts, right for trips, and the page slides in from the side you swiped. it stays out of the way while you're picking receipts to merge or have a sheet open.",
+      "fixed merge receipts crashing when you tapped back from 'sort out who's who' to the trip step.",
+    ],
+  },
+  {
     version: "3.4.1",
     date: "oct 15, 2026",
     title: "swipe it away 👋",

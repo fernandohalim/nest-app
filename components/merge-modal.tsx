@@ -305,8 +305,11 @@ export default function MergeModal({
         </div>
 
         <div className="overflow-y-auto p-4 sm:p-5 flex-1">
+          {/* keyed per step: without keys react diffs one step's markup
+              into the other's, and trips over emoji text nodes twemoji has
+              already swapped for <img> (removeChild crash on "back") */}
           {step === "target" ? (
-            <div className="space-y-5">
+            <div key="target" className="space-y-5">
               {/* target mode toggle */}
               <div className="grid grid-cols-2 gap-2 p-1 bg-stone-100 rounded-2xl">
                 <button
@@ -416,7 +419,7 @@ export default function MergeModal({
               )}
             </div>
           ) : (
-            <div className="space-y-3">
+            <div key="members" className="space-y-3">
               <div className="bg-emerald-50/60 border border-emerald-100 rounded-2xl p-3 text-xs font-bold text-emerald-700/80 leading-relaxed">
                 everyone starts separate. if the same person shows up under
                 different names (like{" "}
@@ -545,6 +548,7 @@ export default function MergeModal({
         <div className="p-4 sm:p-5 bg-white border-t border-stone-100">
           {step === "target" ? (
             <button
+              key="next"
               onClick={goToMembers}
               disabled={
                 loadingSplits ||
@@ -562,6 +566,7 @@ export default function MergeModal({
             </button>
           ) : (
             <button
+              key="confirm"
               onClick={handleConfirm}
               disabled={submitting}
               className="w-full py-4 bg-emerald-500 text-white rounded-2xl text-base font-black hover:bg-emerald-600 transition-all shadow-lg shadow-emerald-500/20 active:scale-95 disabled:bg-stone-300 disabled:shadow-none flex justify-center items-center gap-2"

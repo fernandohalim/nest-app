@@ -21,6 +21,7 @@ import { getRetention } from "@/lib/retention";
 import Image from "next/image";
 import { usePresence } from "@/lib/use-presence";
 import { useSheetDismiss } from "@/lib/use-sheet-dismiss";
+import { useSwipeNav } from "@/lib/use-swipe-nav";
 import SheetHandle from "@/components/sheet-handle";
 
 type SortType = "newest" | "oldest" | "a_z" | "z_a";
@@ -115,6 +116,13 @@ function HomeContent() {
     router.push(newQuery ? `/?${newQuery}` : "/");
   };
 
+  // the tab a swipe switched to and the side it slides in from. only used
+  // while that tab is showing — a nav tap or back button gets the usual rise.
+  const [swipe, setSwipe] = useState<{
+    to: "trips" | "quick";
+    from: "left" | "right";
+  } | null>(null);
+
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [visibleCount, setVisibleCount] = useState(LIST_PAGE_SIZE);
   const loadMore = useCallback(
@@ -144,7 +152,16 @@ function HomeContent() {
     setVisibleCount(LIST_PAGE_SIZE);
     setIsSelecting(false);
     setSelectedIds(new Set());
+    if (swipe && swipe.to !== viewMode) setSwipe(null);
   }
+
+  // swipe left → the tab to the right (receipts), like turning a page
+  useSwipeNav((direction) => {
+    const next = direction === "left" ? "quick" : "trips";
+    if (next === viewMode) return;
+    setSwipe({ to: next, from: direction === "left" ? "right" : "left" });
+    setViewMode(next);
+  }, !isSelecting && !isMergeOpen && !isInfoModalOpen);
 
   const exitSelectMode = () => {
     setIsSelecting(false);
@@ -399,7 +416,7 @@ function HomeContent() {
 
   return (
     <main
-      className={`flex min-h-screen flex-col items-center p-6 lg:p-10 bg-[#fdfbf7] pb-48 ${isSelecting ? "lg:pb-32" : "lg:pb-12"} font-sans selection:bg-emerald-200 selection:text-emerald-900 relative`}
+      className={`flex min-h-screen flex-col items-center overflow-x-clip p-6 lg:p-10 bg-[#fdfbf7] pb-48 ${isSelecting ? "lg:pb-32" : "lg:pb-12"} font-sans selection:bg-emerald-200 selection:text-emerald-900 relative`}
     >
       <div className="w-full max-w-md lg:max-w-5xl relative">
         <div className="flex justify-between items-center mb-6 pt-4">
@@ -458,7 +475,16 @@ function HomeContent() {
           </div>
         </div>
 
-        <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+        {/* keyed per tab so the entrance replays on every switch (and react
+            swaps the subtree instead of diffing one tab into the other) */}
+        <div
+          key={viewMode}
+          className={
+            swipe?.to === viewMode
+              ? `tab-slide-from-${swipe.from}`
+              : "animate-in fade-in slide-in-from-bottom-4 duration-500"
+          }
+        >
           {viewMode === "quick" ? (
             <>
               {!isLoadingQuick && quickSplits.length > 0 && (
